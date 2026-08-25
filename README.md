@@ -258,6 +258,9 @@ Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStar
 Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
 逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 从 Work/Season 派生；RSS Task 的
 标题、资料编号和年份固定使用订阅时再次核验并持久化的所选身份，不回退成 Work 主身份。
+Work 为 TMDB 时同时把其已核验 canonical 身份密封为 Task 的二级 `metadataIdentity`；其他
+Work 保持空二级身份，后续只允许从飞牛对规范路径唯一映射出的官方身份自动发现，不能拿
+RSS/Bangumi catalog 身份冒充二级元数据身份。
 TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频映射完全一致后，
 只会绑定目标 Work 已存在的 Season/Episode；缺季、缺集、跨 Work 或 Episode 已被其他 Task
 占用时保持零目录写入。该同步不修改 Task revision、Run、来源或密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
@@ -288,6 +291,10 @@ Episode Binding 不变。RSS Task 随后自动
 多来源下载 Run 会在执行开始时一次性兑换并复核全部描述符授权，再按来源顺序处理载荷；因此长下载
 不会让后续来源授权在等待期间过期，也不需要延长或复用一次性授权。无效或已消费授权由 API 返回
 409 合同拒绝，数据库故障才返回 503，不再把授权问题伪装成可重试 500。
+下载首次 Run 或续传 Run 一旦取得任一已验证载荷，就不再因临时 peer/速率空窗触发
+`download_stalled`；只有已验证字节、`downloaded_session` 增量和 `dlspeed` 始终全为零的
+首次窗口才有界失败。旧版本首次下载已有部分载荷后失败时，API 只自动转换一次新的
+`source.resume`，复用原 staging/profile/fastresume；零载荷和续传再次失败继续停止。
 磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
 来源身份，允许重新填写来源、已有清单时重编文件映射，或在无载荷/计划/
 来源清理 Run 时删除任务。执行任务列表只提供状态、进度和执行操作，不再提供作品新建或身份编辑；删除只
@@ -301,9 +308,10 @@ Episode Binding 不变。RSS Task 随后自动
 允许按当前 revision 精确移除错误来源。执行器先清除该来源独占 staging/profile；终态回调
 再清空旧载荷和计划密封、保留已分配的 `workItemId`，把同一 Task 退回 intake 以接入正确来源。
 一旦 completedItems 大于 1，说明备份或正式事务已经开始，来源回退继续失败关闭。
-元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
-LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
-独立验收判定。
+元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据。普通治理成功后由服务端自动串联
+首次核验、一次延后身份复核、最多两次确定性 LocalNFO/海报/逐集元数据修复、修复后复核和
+独立验收；每个后继 Run 都在前一终态事务提交并递增 revision 后才预约。未知 A/C、身份冲突、
+证据漂移或次数耗尽才停到 CodexAgent/人工决策，最终闭环模式只由独立验收判定。
 Task、Unit、来源、Run、Series/Work 目录和 RSS 由 19 张 TypeORM 领域表持久化；其中旧 Agent session
 表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
 恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。

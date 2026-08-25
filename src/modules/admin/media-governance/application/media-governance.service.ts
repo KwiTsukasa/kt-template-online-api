@@ -300,6 +300,7 @@ export type MediaGovernanceTask = {
 };
 
 type MediaGovernanceTaskCreateInput = MediaGovernanceTaskCreateDto & {
+  metadataIdentity?: MediaGovernanceTask['metadataIdentity'];
   operationKind?: NonNullable<MediaGovernanceTask['operationKind']>;
   seriesId?: string;
   workId?: string;
@@ -377,11 +378,22 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ...tasks.map((task) => this.restoreStoredTask(task)),
     );
     for (const task of this.tasks) {
+      if (this.normalizeLegacyCatalogMetadataIdentity(task)) {
+        await this.persistTask(task);
+      }
+    }
+    for (const task of this.tasks) {
       if (task.llmConversationId) await this.hydrateLlmAgentProjection(task);
     }
     if (this.executionGateway?.enabled()) {
       for (const task of this.tasks) {
-        await this.continueAppliedAgentPipeline(task).catch(() => false);
+        const metadataContinued =
+          await this.continueDeterministicMetadataPipeline(task).catch(
+            () => false,
+          );
+        if (!metadataContinued) {
+          await this.continueAppliedAgentPipeline(task).catch(() => false);
+        }
         await this.continueRssIntakePipeline(task).catch(() => false);
       }
       void this.retryPendingDispatches();
@@ -423,8 +435,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     let persistenceMode: MediaGovernanceTask['persistenceMode'] =
       'process-simulator';
     if (this.databaseReady()) persistenceMode = 'database';
+    let metadataIdentity: MediaGovernanceTask['metadataIdentity'] = null;
+    if (input.metadataIdentity) {
+      metadataIdentity = structuredClone(input.metadataIdentity);
+    }
     const normalizedInput = {
       mediaType: input.mediaType,
+      metadataIdentity,
       operationKind: input.operationKind ?? null,
       providerRef,
       releaseYear: input.releaseYear ?? null,
@@ -448,7 +465,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         .digest('hex'),
       llmConversationId: null,
       mediaType: input.mediaType,
-      metadataIdentity: null,
+      metadataIdentity,
       metadataStatus: 'pending',
       nextCommandLabel: '补充并检查来源',
       operationKind: input.operationKind ?? null,
@@ -1122,12 +1139,21 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       );
     }
     this.publishTaskPatch(task, 'state-updated', input.runId, input.sequence);
+    if (input.eventType === 'run-failed') {
+      await this.continueStalledInitialDownload(task, input).catch(() => false);
+    }
     if (input.eventType === 'run-succeeded') {
-      const rssContinued = await this.continueRssIntakePipeline(task).catch(
-        () => false,
-      );
-      if (!rssContinued) {
-        await this.continueAppliedAgentPipeline(task).catch(() => false);
+      const metadataContinued =
+        await this.continueDeterministicMetadataPipeline(task).catch(
+          () => false,
+        );
+      if (!metadataContinued) {
+        const rssContinued = await this.continueRssIntakePipeline(task).catch(
+          () => false,
+        );
+        if (!rssContinued) {
+          await this.continueAppliedAgentPipeline(task).catch(() => false);
+        }
       }
     }
     return {
@@ -1539,7 +1565,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       };
       task.sealedPlanSha256 = sha256Json(task.sealedPlan);
     }
-    const identity = metadata.identity ?? task.providerRef;
+    const identity = metadata.identity;
     if (identity) {
       const observedReleaseYear = (identity as { releaseYear?: null | number })
         .releaseYear;
@@ -1742,15 +1768,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 判断当前 B 级缺项是否仍满足最多两次修复边界。
-   * @param task - 用于当前 B 级缺项是否仍满足最多两次修复边界的领域对象，包含 `units` 字段。
-   * @returns 满足当前 B 级缺项是否仍满足最多两次修复边界约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * 仅在 A/C 级缺项均为空时判断 B 级缺项是否仍满足最多两次修复边界。
+   * @param task - 用于核对 A/B/C 缺项与修复次数的媒体治理任务。
+   * @returns A/C 均为空、至少存在一个 B 级缺项且修复次数未耗尽时为 `true`。
    */
   private canRunBoundedMetadataRepair(task: MediaGovernanceTask) {
     const projections = task.units.map((unit) => unit.metadataProjection);
     return (
       this.metadataRepairAttempts(task) < 2 &&
       projections.every((projection) => projection.missingA.length === 0) &&
+      projections.every((projection) => projection.missingC.length === 0) &&
       projections.some((projection) => projection.missingB.length > 0)
     );
   }
@@ -1781,6 +1808,73 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         );
       })
     );
+  }
+
+  /**
+   * 只把旧版 catalog 身份误投影为二级元数据身份的精确状态恢复为一次性延后复核。
+   * @param task - 从持久层恢复、尚无活动 Run 且可能携带旧版身份污染的媒体任务。
+   * @returns 完整命中显式空计划身份、catalog 等值身份与延后缺项证据并完成归一化时为 `true`。
+   */
+  private normalizeLegacyCatalogMetadataIdentity(
+    task: MediaGovernanceTask,
+  ): boolean {
+    const metadataIdentity = task.metadataIdentity;
+    const providerRef = task.providerRef;
+    const planHasExplicitEmptyMetadataIdentity =
+      task.sealedPlan !== null &&
+      task.sealedPlanSha256 !== null &&
+      Object.prototype.hasOwnProperty.call(
+        task.sealedPlan,
+        'metadataIdentity',
+      ) &&
+      task.sealedPlan.metadataIdentity === null;
+    const taskBoundaryInvalid =
+      task.stage !== 'metadata' ||
+      task.runState !== 'blocked' ||
+      task.metadataStatus !== 'requires-agent' ||
+      task.activeRunId !== null;
+    if (taskBoundaryInvalid || !planHasExplicitEmptyMetadataIdentity)
+      return false;
+    if (!metadataIdentity || !providerRef) return false;
+    const identityMatchesCatalog =
+      metadataIdentity.provider === providerRef.provider &&
+      metadataIdentity.providerId === providerRef.providerId &&
+      metadataIdentity.releaseYear === task.releaseYear &&
+      metadataIdentity.providerTitle === undefined;
+    if (!identityMatchesCatalog) return false;
+    const providerIdentityFields = new Set([
+      'identity.provider',
+      'identity.providerId',
+    ]);
+    const deferredProjection =
+      task.units.length > 0 &&
+      task.units.every((unit) => {
+        const missingA = unit.metadataProjection.missingA;
+        return (
+          unit.evidenceSha256 !== null &&
+          unit.metadataProjection.repairAttempts === 0 &&
+          (unit.metadataProjection.identityRefreshAttempts ?? 0) < 1 &&
+          missingA.length === providerIdentityFields.size &&
+          new Set(missingA).size === providerIdentityFields.size &&
+          missingA.every((field) => providerIdentityFields.has(field)) &&
+          unit.metadataProjection.missingC.length === 0
+        );
+      });
+    if (!deferredProjection) return false;
+    task.metadataIdentity = null;
+    task.identityPreview = this.buildIdentityPreview({
+      mediaType: task.mediaType,
+      metadataIdentity: null,
+      providerRef: task.providerRef,
+      releaseYear: task.releaseYear,
+      seasonNumbers: task.units
+        .map((unit) => unit.seasonNumber)
+        .filter((season): season is string => Boolean(season)),
+      titleHint: task.titleHint,
+    });
+    task.nextCommandLabel = 'fnOS 身份回填尚未稳定，重新采集元数据事实';
+    this.bumpRevision(task);
+    return true;
   }
 
   /**
@@ -3098,6 +3192,37 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       return this.startDownload(taskId, input);
     }
     return this.controlDownload(taskId, input.expectedRevision, 'resume');
+  }
+
+  /**
+   * 把已有真实进度的首次停滞下载转换为唯一一个新续传 Run，并让 `source.resume` 终态承担重试上限。
+   * @param task - 已提交失败终态、清空活动 Run 且保留下载进度的媒体任务。
+   * @param input - 携带失败动作与来源原因的权威执行器终态事件。
+   * @returns 成功预约一次 `source.resume` 时为 `true`；零载荷、非停滞或已是续传动作时为 `false`。
+   */
+  private async continueStalledInitialDownload(
+    task: MediaGovernanceTask,
+    input: MediaGovernanceExecutorEventDto,
+  ): Promise<boolean> {
+    const partialPayloadAvailable =
+      task.progress.totalBytes > 0 &&
+      task.progress.completedBytes > 0 &&
+      task.progress.completedBytes < task.progress.totalBytes;
+    const initialDownloadStalled =
+      input.eventType === 'run-failed' &&
+      input.action === 'source.download' &&
+      input.sourceHealthReason === 'download_stalled' &&
+      !input.summary.includes('download_cancelled');
+    const taskCanResume =
+      task.stage === 'download' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null;
+    if (!initialDownloadStalled || !taskCanResume || !partialPayloadAvailable) {
+      return false;
+    }
+    await this.resumeDownload(task.id, { expectedRevision: task.revision });
+    this.publishTaskPatch(task, 'state-updated');
+    return true;
   }
 
   /**
@@ -4589,6 +4714,62 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       return 'acceptance.verify';
     }
     return null;
+  }
+
+  /**
+   * 从已持久化的元数据阶段边界选择唯一安全的确定性后继动作。
+   * @param task - 已清空活动 Run 且可能具备自动复核、修复或验收条件的媒体任务。
+   * @returns 可复用现有命令入口的唯一后继动作；任何身份决策、未知缺项或次数耗尽状态返回 `null`。
+   */
+  private automaticMetadataContinuationAction(
+    task: MediaGovernanceTask,
+  ): 'acceptance.verify' | 'metadata.repair' | 'metadata.verify' | null {
+    if (
+      task.activeRunId ||
+      !this.executionGateway?.enabled() ||
+      task.stage !== 'metadata'
+    ) {
+      return null;
+    }
+    if (
+      task.metadataStatus === 'requires-agent' &&
+      task.runState === 'blocked'
+    ) {
+      if (this.canRefreshDeferredMetadataIdentity(task)) {
+        return 'metadata.verify';
+      }
+      if (this.canRunBoundedMetadataRepair(task)) return 'metadata.repair';
+      return null;
+    }
+    if (task.metadataStatus === 'pending' && task.runState === 'succeeded') {
+      return 'metadata.verify';
+    }
+    if (task.metadataStatus === 'verified' && task.runState === 'succeeded') {
+      return 'acceptance.verify';
+    }
+    return null;
+  }
+
+  /**
+   * 通过现有 revision 命令入口预约一个确定性元数据后继 Run，并发布最新排队投影。
+   * @param task - 已提交当前终态、清空活动 Run 且 revision 已递增的媒体任务。
+   * @returns 成功预约一个安全后继 Run 时返回 `true`；需要人工决策或已闭环时返回 `false`。
+   */
+  private async continueDeterministicMetadataPipeline(
+    task: MediaGovernanceTask,
+  ): Promise<boolean> {
+    const action = this.automaticMetadataContinuationAction(task);
+    if (!action) return false;
+    const input = { expectedRevision: task.revision };
+    if (action === 'metadata.verify') {
+      await this.startMetadataVerification(task.id, input);
+    } else if (action === 'metadata.repair') {
+      await this.startMetadataRepair(task.id, input);
+    } else {
+      await this.startAcceptanceVerification(task.id, input);
+    }
+    this.publishTaskPatch(task, 'state-updated');
+    return true;
   }
 
   /**

@@ -427,6 +427,10 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
 staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
 状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
+首次 `source.download` 若已有部分已验证载荷后才因旧策略返回 `download_stalled`，API 会在该
+失败终态持久化后按最新 revision 自动预约唯一一次 `source.resume`；零载荷失败和
+`source.resume` 再次失败均不自动重试。新执行器对首次与恢复 Run 统一以已验证载荷事实关闭
+no-data 门，临时 peer 空窗不会重建 owner 或丢弃 fastresume。
 本地计划密封失败会生成新 revision 并保持原载荷不变；修正映射、字幕合同或内部身份
 后，可用该 revision 重试治理启动，不会重放下载。
 本地治理 Run 失败后，完整的最长 400 字符失败摘要写入事件记录，Task 的 `gateReason`
@@ -451,7 +455,17 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 
 媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 从用户已确认的 Work 派生主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但不得改写 Task 的 Work 派生 `providerRef/releaseYear`。管理端从 Series 详情进入 Task，Task 列表只展示执行语义与状态。
 
-已应用 Agent 身份修正的 Task 会进入服务端确定性自动续跑，而不是由 Admin 或 LLM 继续逐段调用阶段接口。自动续跑要求密封计划中的 `agentAmendments` 与当前 `metadataIdentity` 精确一致、没有活动 Run 且当前状态只有一个合法后继；可串联规范身份重排、元数据核验、次数受限修复、修复后复验和独立验收。每个成功终态先按原 Run 序号持久化，再预约带新 revision/replay key 的下一 Run；失败终态、身份漂移、非修复型 A/C 缺口、修复次数耗尽或人工候选状态固定停止。API 启动时会恢复这一类无活动 Run 的持久化阶段边界；`closed` Task 和已有活动 Run 不参与扫描，因此发布重启不会重复验收或并发创建 Run。
+Work canonical provider 为 TMDB 时，新 Task 在创建快照中直接携带该二级身份；RSS 仍把用户所选
+Bangumi/TMDB 篇章保存为 catalog。显式 `catalogIdentity` 且 `metadataIdentity=null` 的历史计划
+只允许从飞牛规范路径唯一映射、季集一致并经官方 TMDB 页面复核的身份自动绑定。执行器没有返回
+身份时，API 不得再用 `task.providerRef` 回填 `metadataIdentity`；升级前仅在计划显式空二级身份、
+旧 Task 身份与 catalog 完全相等且 Unit A 缺口恰为 provider/providerId 时，一次性清除污染并复核。
+
+所有后继唯一的元数据 Task 都进入服务端确定性自动续跑，而不是由 Admin 或 LLM 逐段调用阶段接口：
+普通治理成功直接核验，延后 provider 身份最多复核一次，A/C 为空且 B 可修复时执行最多两次 repair，
+随后复核并进入独立验收。Agent 身份修正仍额外要求 amendment 与当前二级身份精确一致。每个终态先
+按原 Run 序号持久化，再预约带新 revision/replay key 的下一 Run；失败、身份漂移、未知 A/C、次数
+耗尽或人工候选固定停止。API 启动只恢复无活动 Run 的精确持久化边界，`closed` Task 不重复运行。
 
 公开 Task API 不提供 `catalog-identity/restore` 或身份编辑器。历史身份折叠残留只有在 Series 下确认唯一 Work 后才能通过受控迁移补充 `seriesId/workId/operationKind`；电影与剧场版禁止标题近似自动归类。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，

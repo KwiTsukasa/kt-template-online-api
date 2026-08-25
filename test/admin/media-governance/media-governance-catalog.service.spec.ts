@@ -971,6 +971,12 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
 
     expect(createTask).toHaveBeenCalledWith({
       mediaType: 'tv',
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '95479',
+        providerTitle: '咒术回战',
+        releaseYear: 2020,
+      },
       operationKind: 'source-intake',
       providerRef: { provider: 'tmdb', providerId: '95479' },
       releaseYear: 2020,

@@ -778,6 +778,7 @@ export class MediaGovernanceCatalogService
     }
     const task = await this.mediaTasks.create({
       mediaType: work.workType as MediaGovernanceMediaType,
+      metadataIdentity: this.workMetadataIdentity(work),
       operationKind: 'source-intake',
       providerRef: {
         provider: work.canonicalProvider as MediaGovernanceProvider,
@@ -793,6 +794,23 @@ export class MediaGovernanceCatalogService
       () => undefined,
     );
     return task;
+  }
+
+  /**
+   * 从已核验 Work 提取可直接密封的 TMDB 二级元数据身份，其他资料源继续由飞牛唯一身份发现。
+   * @param work - 已通过 Series/Work 创建门禁并保存 canonical 身份的作品。
+   * @returns TMDB Work 对应的二级身份；非 TMDB Work 返回 `null`。
+   */
+  private workMetadataIdentity(
+    work: MediaGovernanceWorkEntity,
+  ): MediaGovernanceTask['metadataIdentity'] {
+    if (work.canonicalProvider !== 'tmdb') return null;
+    return {
+      provider: 'tmdb',
+      providerId: work.canonicalProviderId,
+      providerTitle: work.title,
+      releaseYear: work.releaseYear,
+    };
   }
 
   /**
@@ -3324,6 +3342,7 @@ export class MediaGovernanceCatalogService
     }
     const task = await this.mediaTasks.create({
       mediaType: 'tv',
+      metadataIdentity: this.workMetadataIdentity(work),
       operationKind,
       providerRef: {
         provider: taskProvider,

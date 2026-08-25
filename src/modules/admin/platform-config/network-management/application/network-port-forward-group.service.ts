@@ -947,28 +947,42 @@ export class NetworkPortForwardGroupService {
    * @param channels - 决定结构性编辑允许的内容、边界或目标的 `channels` 值。
    */
   private assertStructuralEditAllowed(channels: NetworkPortForward[]): void {
-    if (
-      channels.some(
-        (channel) =>
-          channel.desiredPresence !== 'present' ||
-          channel.syncStatus !== 'synced',
-      )
-    ) {
-      throwVbenError('逻辑组正在删除或协调中', HttpStatus.CONFLICT);
-    }
-    if (
-      channels.some(
-        (channel) =>
-          channel.keeperDesiredEnabled ||
-          channel.natmapDesiredEnabled ||
-          channel.keeperStatus !== 'disabled' ||
-          channel.natmapStatus !== 'disabled',
-      )
-    ) {
-      throwVbenError(
-        '请先停用 Keeper 和 NATMap 再修改端口或协议',
-        HttpStatus.BAD_REQUEST,
-      );
+    for (const channel of channels) {
+      if (channel.desiredPresence !== 'present') {
+        throwVbenError('逻辑组正在删除或协调中', HttpStatus.CONFLICT);
+      }
+      const mechanismStopped = (() => {
+        if (channel.protocol === 'tcp') {
+          return (
+            !channel.natmapDesiredEnabled &&
+            ['disabled', 'failed'].includes(channel.natmapStatus) &&
+            !channel.keeperDesiredEnabled &&
+            channel.keeperStatus === 'disabled'
+          );
+        }
+        return (
+          !channel.keeperDesiredEnabled &&
+          ['disabled', 'failed'].includes(channel.keeperStatus) &&
+          !channel.natmapDesiredEnabled &&
+          channel.natmapStatus === 'disabled'
+        );
+      })();
+      if (!mechanismStopped) {
+        throwVbenError(
+          '请先停用 Keeper 和 NATMap 再修改端口或协议',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      if (channel.syncStatus === 'synced') continue;
+      const recoverableFailure =
+        channel.syncStatus === 'failed' &&
+        channel.reportedRevision === channel.desiredRevision &&
+        !channel.currentPublicIpv4 &&
+        !channel.currentPublicPort &&
+        !channel.currentValidUntil;
+      if (!recoverableFailure) {
+        throwVbenError('逻辑组正在删除或协调中', HttpStatus.CONFLICT);
+      }
     }
   }
 

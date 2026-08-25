@@ -335,6 +335,43 @@ describe('NetworkPortForwardGroupService', () => {
     });
   });
 
+  it('repairs a quiescent failed channel but rejects failed state with a live endpoint', async () => {
+    const group = createGroup({ internalPort: 2222, protocolMode: 'tcp' });
+    const tcp = createMapping({
+      internalPort: 2222,
+      lastErrorCode: 'companion_compensation_failed',
+      natmapStatus: 'failed',
+      protocol: 'tcp',
+      syncStatus: 'failed',
+    });
+    const harness = createHarness([group], [tcp]);
+
+    await expect(
+      harness.service.update('200', { internalPort: 9000 }),
+    ).resolves.toMatchObject({
+      channels: {
+        tcp: expect.objectContaining({
+          desiredRevision: '4',
+          internalPort: 9000,
+          syncStatus: 'failed',
+        }),
+      },
+      internalPort: 9000,
+    });
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
+
+    tcp.syncStatus = 'failed';
+    tcp.natmapStatus = 'failed';
+    tcp.reportedRevision = tcp.desiredRevision;
+    tcp.currentPublicIpv4 = '8.8.8.8';
+    tcp.currentPublicPort = 45_000;
+    tcp.currentValidUntil = new KtDateTime('2026-07-26T01:00:00.000Z');
+    await harness.service
+      .update('200', { internalPort: 9001 })
+      .catch((error) => expect(errorStatus(error)).toBe(409));
+    expect(group.internalPort).toBe(9000);
+  });
+
   it('compares the expected TCP desired revision before both mutation and no-op handling', async () => {
     const group = createGroup({ protocolMode: 'tcp' });
     const tcp = createMapping({

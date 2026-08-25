@@ -146,13 +146,14 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
     expect(JSON.stringify(plan)).not.toMatch(/cloudTransport|passkey|tracker/i);
   });
 
-  it('keeps movie targets inside the canonical Movies root', () => {
+  it('keeps theatrical identity while using the canonical Movies root', () => {
     const movieTask = {
       ...task,
       governanceProfile: 'embedded',
-      id: 'media-task-movie-plan-fixture',
-      mediaType: 'movie',
-      providerRef: { provider: 'tmdb', providerId: '645440' },
+      id: 'media-task-theatrical-plan-fixture',
+      mediaType: 'theatrical',
+      providerRef: { provider: 'bangumi', providerId: '604826' },
+      releaseYear: 2026,
       sources: [
         {
           id: 'media-source-movie-fixture',
@@ -175,7 +176,7 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
           ],
         },
       ],
-      titleHint: '少女☆歌剧 Revue Starlight 剧场版',
+      titleHint: '超辉夜姬！',
       units: [
         {
           expectedEpisodeNumbers: [],
@@ -207,8 +208,16 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
     const plan = buildAdminMediaGovernancePlan(movieTask, moviePayload);
 
     expect(plan.manifests.local.forward[0]?.targetPath).toBe(
-      '/vol2/1000/Media/movie/Movies/少女☆歌剧 Revue Starlight 剧场版 (2021) [tmdbid-645440]/少女☆歌剧 Revue Starlight 剧场版.mkv',
+      '/vol2/1000/Media/movie/Movies/超辉夜姬！ (2026) [bangumiid-604826]/超辉夜姬！.mkv',
     );
+    expect(plan.catalogIdentity).toMatchObject({
+      mediaType: 'theatrical',
+      providerRef: { provider: 'bangumi', providerId: '604826' },
+    });
+    expect(plan.identity).toMatchObject({
+      mediaType: 'theatrical',
+      providerRef: { provider: 'bangumi', providerId: '604826' },
+    });
   });
 
   it('rebases an already committed movie target after a late identity amendment', () => {

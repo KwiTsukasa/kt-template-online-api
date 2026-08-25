@@ -987,6 +987,50 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
     });
   });
 
+  it('derives a seasonless theatrical Task from its Bangumi Work', async () => {
+    const createTask = jest.fn().mockResolvedValue({
+      id: 'media-task-theatrical-derived',
+    });
+    const dataSource = {
+      getRepository: jest.fn(() => {
+        throw new Error('theatrical Work must not query Season rows');
+      }),
+    } as unknown as DataSource;
+    const service = new MediaGovernanceCatalogService(dataSource, {
+      create: createTask,
+    } as unknown as MediaGovernanceService);
+    Object.assign(service, {
+      publishCatalogChanged: jest.fn().mockResolvedValue(undefined),
+      requireWork: jest.fn().mockResolvedValue({
+        canonicalProvider: 'bangumi',
+        canonicalProviderId: '604826',
+        id: 'media-work-theatrical',
+        releaseYear: 2026,
+        seriesId: 'media-series-theatrical',
+        title: '超辉夜姬！',
+        workType: 'theatrical',
+      } as MediaGovernanceWorkEntity),
+    });
+
+    await service.createWorkTask(
+      'media-series-theatrical',
+      'media-work-theatrical',
+      { seasonNumbers: [] },
+    );
+
+    expect(createTask).toHaveBeenCalledWith({
+      mediaType: 'theatrical',
+      metadataIdentity: null,
+      operationKind: 'source-intake',
+      providerRef: { provider: 'bangumi', providerId: '604826' },
+      releaseYear: 2026,
+      seasonNumbers: [],
+      seriesId: 'media-series-theatrical',
+      titleHint: '超辉夜姬！',
+      workId: 'media-work-theatrical',
+    });
+  });
+
   it('binds verified Task mappings only to Episodes inside its existing Work', async () => {
     const task = automaticTask({
       seriesId: 'media-series-auto',

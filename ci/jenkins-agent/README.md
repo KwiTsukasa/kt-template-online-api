@@ -86,6 +86,7 @@ docker run -d \
   --init \
   --restart=always \
   --network jenkins_default \
+  --add-host git.kwitsukasa.top:host-gateway \
   -u root \
   -e JENKINS_URL=http://jenkins:8080/ \
   -e JENKINS_AGENT_NAME=kt-node-agent \
@@ -105,6 +106,9 @@ docker run -d \
 Gitea 主机密钥必须存在于镜像自身，不得只在运行中容器的可写层手工追加；否则
 Agent 重建后 Jenkins SCM 检出会因 `Host key verification failed` 失效。可用
 `ssh-keygen -F '[git.kwitsukasa.top]:2222' -f /etc/ssh/ssh_known_hosts` 验证镜像契约。
+腾讯 VM 退役后，`--add-host git.kwitsukasa.top:host-gateway` 也是固定运行合同：
+它只让 Jenkins Agent 内的既有 SCM URL 直达 NAS Gitea `2222`，不改变远端仓库
+身份、凭据或主机密钥校验，也不恢复公网 `2222`。
 
 如果 Jenkins Controller 不在同一台 NAS 上，把 `JENKINS_URL` 改成 Agent 容器可访问的 Jenkins 地址，例如：
 

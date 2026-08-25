@@ -70,6 +70,77 @@ class MemoryRepository<T extends { id: string }> {
 }
 
 describe('MediaGovernanceTypeOrmStateStore', () => {
+  it('restores the descriptor revision that exactly matches the current Source object', () => {
+    const store = Object.create(
+      MediaGovernanceTypeOrmStateStore.prototype,
+    ) as MediaGovernanceTypeOrmStateStore;
+    const source = {
+      contentKind: 'embedded_subtitle_media',
+      descriptorObjectId: 'tasks/task/sources/source/revisions/2-current.torrent',
+      descriptorRevision: 1,
+      descriptorSha256: 'b'.repeat(64),
+      id: 'media-source-descriptor-drift',
+      infoHash: 'a'.repeat(40),
+      manifestProjection: [],
+      manifestSha256: null,
+      manifestState: 'inspected',
+      releaseGroup: 'LoliHouse',
+      seasonNumbers: ['S02'],
+      selectedBytes: '0',
+      selectedFileCount: 0,
+      selectedFileIndices: [],
+      selectedFileMappings: [],
+      sourceHealth: 'viable',
+      sourceHealthLabel: '来源可用',
+      sourceHealthReason: '来源已产生有效数据，可进入隔离下载',
+      sourceRole: 'primary_media',
+      taskId: 'media-task-descriptor-drift',
+      transportKind: 'torrent',
+    } as MediaGovernanceSourceEntity;
+    const revisions = [
+      {
+        active: true,
+        bytes: '60',
+        id: `${source.id}-descriptor-r1`,
+        objectId: 'tasks/task/sources/source/revisions/1-old.magnet',
+        revision: 1,
+        sha256: 'c'.repeat(64),
+        sourceId: source.id,
+        tombstonedAt: null,
+      },
+      {
+        active: true,
+        bytes: '1024',
+        id: `${source.id}-descriptor-r2`,
+        objectId: source.descriptorObjectId,
+        revision: 2,
+        sha256: source.descriptorSha256,
+        sourceId: source.id,
+        tombstonedAt: null,
+      },
+    ] as MediaGovernanceDescriptorRevisionEntity[];
+    const resolveCurrentDescriptor = Reflect.get(
+      store,
+      'resolveCurrentDescriptor',
+    ).bind(store) as (
+      current: MediaGovernanceSourceEntity,
+      candidates: MediaGovernanceDescriptorRevisionEntity[],
+    ) => MediaGovernanceDescriptorRevisionEntity | null;
+    const restoreSource = Reflect.get(store, 'restoreSource').bind(store) as (
+      current: MediaGovernanceSourceEntity,
+      descriptor: MediaGovernanceDescriptorRevisionEntity | null,
+    ) => { descriptorBytes: number; descriptorRevision: number };
+
+    const descriptor = resolveCurrentDescriptor(source, revisions);
+    const restored = restoreSource(source, descriptor);
+
+    expect(descriptor?.id).toBe(`${source.id}-descriptor-r2`);
+    expect(restored).toMatchObject({
+      descriptorBytes: 1024,
+      descriptorRevision: 2,
+    });
+  });
+
   it('writes Task, Unit, Agent session and event in one transaction projection', async () => {
     const tasks = new MemoryRepository<MediaGovernanceTaskEntity>();
     const units = new MemoryRepository<MediaGovernanceUnitEntity>();

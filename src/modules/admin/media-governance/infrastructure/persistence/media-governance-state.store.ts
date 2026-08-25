@@ -1045,11 +1045,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       sources: sources.map((source) =>
         this.restoreSource(
           source,
-          descriptors.find(
-            (descriptor) =>
-              descriptor.sourceId === source.id &&
-              descriptor.revision === source.descriptorRevision,
-          ) ?? null,
+          this.resolveCurrentDescriptor(source, descriptors),
         ),
       ),
       stage: task.stage as MediaGovernanceTask['stage'],
@@ -1058,6 +1054,33 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       workId: task.workId,
       workItemId: task.workItemId,
     };
+  }
+
+  /**
+   * 优先按 Source 当前对象摘要恢复真实描述符修订，兼容历史升级已切换对象但 revision 数字未提交的状态。
+   * @param source - 持久化的当前来源行。
+   * @param descriptors - 当前状态仓加载的全部描述符修订。
+   * @returns 与 Source 对象和摘要精确一致的修订；缺失时回退其声明 revision，仍无记录则返回 `null`。
+   */
+  private resolveCurrentDescriptor(
+    source: MediaGovernanceSourceEntity,
+    descriptors: MediaGovernanceDescriptorRevisionEntity[],
+  ): MediaGovernanceDescriptorRevisionEntity | null {
+    const exact = descriptors.find(
+      (descriptor) =>
+        descriptor.sourceId === source.id &&
+        descriptor.objectId === source.descriptorObjectId &&
+        descriptor.sha256 === source.descriptorSha256 &&
+        descriptor.tombstonedAt === null,
+    );
+    if (exact) return exact;
+    return (
+      descriptors.find(
+        (descriptor) =>
+          descriptor.sourceId === source.id &&
+          descriptor.revision === source.descriptorRevision,
+      ) ?? null
+    );
   }
 
   /**
@@ -1074,7 +1097,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       contentKind: source.contentKind as MediaGovernanceSource['contentKind'],
       descriptorBytes: Number(descriptor?.bytes ?? 0),
       descriptorObjectId: source.descriptorObjectId,
-      descriptorRevision: source.descriptorRevision,
+      descriptorRevision: descriptor?.revision ?? source.descriptorRevision,
       descriptorSha256: source.descriptorSha256,
       descriptorTombstonedAt: descriptor?.tombstonedAt?.toISOString() ?? null,
       id: source.id,

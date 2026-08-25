@@ -295,6 +295,9 @@ Episode Binding 不变。RSS Task 随后自动
 `download_stalled`；只有已验证字节、`downloaded_session` 增量和 `dlspeed` 始终全为零的
 首次窗口才有界失败。旧版本首次下载已有部分载荷后失败时，API 只自动转换一次新的
 `source.resume`，复用原 staging/profile/fastresume；零载荷和续传再次失败继续停止。
+历史 torrent 升级若已把 Source 切到新 objectId/SHA、但 revision 数字仍停在旧值，状态仓会
+只按同 Source 的 objectId+SHA 精确选择已存在修订并恢复真实 revision，避免续传保存时与唯一
+对象索引冲突；无法精确命中时仍按声明 revision 失败关闭。
 磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
 来源身份，允许重新填写来源、已有清单时重编文件映射，或在无载荷/计划/
 来源清理 Run 时删除任务。执行任务列表只提供状态、进度和执行操作，不再提供作品新建或身份编辑；删除只

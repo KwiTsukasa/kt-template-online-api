@@ -427,6 +427,9 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
 staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
 状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
+状态仓恢复历史来源时，若 Source 的当前 objectId+SHA 精确命中同 Source 的较新 descriptor
+revision，则采用该真实 revision 并在下一次原子任务保存中核平；不按 objectId 猜跨来源记录，
+也不直接修改数据库。这避免已存在 r2 对象时把 r1 更新为同一唯一对象导致续传 500。
 首次 `source.download` 若已有部分已验证载荷后才因旧策略返回 `download_stalled`，API 会在该
 失败终态持久化后按最新 revision 自动预约唯一一次 `source.resume`；零载荷失败和
 `source.resume` 再次失败均不自动重试。新执行器对首次与恢复 Run 统一以已验证载荷事实关闭

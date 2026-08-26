@@ -2098,7 +2098,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
-  it('retries failed metadata and acceptance verification with fresh run identities', async () => {
+  it('retries reconciled metadata and acceptance failures with fresh run identities', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
     const metadataTask = await service.create({
@@ -2132,7 +2132,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       observedAt: new Date().toISOString(),
       runId: firstMetadataEnvelope.runId,
       sequence: 2,
-      summary: 'NAS 执行失败：元数据核验输入不完整',
+      summary: 'NAS 执行器已退出（退出码 1），但未返回可验证终态',
       taskId: metadataTask.id,
       taskRevision: 2,
     });
@@ -2186,7 +2186,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       observedAt: new Date().toISOString(),
       runId: firstAcceptanceEnvelope.runId,
       sequence: 2,
-      summary: 'NAS 执行失败：独立验收证据暂不可用',
+      summary: 'Jenkins 调度连续失败 3 次，未启动任何 NAS 执行器',
       taskId: acceptanceTask.id,
       taskRevision: 2,
     });

@@ -1762,8 +1762,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.runState === 'blocked' &&
       task.activeRunId === null &&
       task.metadataStatus === metadataStatus &&
-      Boolean(task.sealedPlan) &&
-      task.gateReason?.startsWith('NAS 执行失败：') === true
+      Boolean(task.sealedPlan)
     );
   }
 

@@ -2511,13 +2511,18 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       sealedPreGovernanceArtifacts &&
       dryRunOnlyGovernanceProgress &&
       preGovernanceUnitsUntouched;
+    const resettableCompletedDownload =
+      task.runState === 'succeeded' &&
+      task.activeRunId === null &&
+      this.hasReplaceableCompletedDownloadPayload(task, source);
     const stageBlocksSourceRemoval =
       !['intake', 'download'].includes(task.stage) &&
       !resettableUnboundResidue &&
       !resettablePreGovernanceFailure;
     const sealedArtifactsBlockSourceRemoval =
       Boolean(task.payloadSeal || task.sealedPlan) &&
-      !resettablePreGovernanceFailure;
+      !resettablePreGovernanceFailure &&
+      !resettableCompletedDownload;
     if (
       task.activeRunId ||
       stageBlocksSourceRemoval ||
@@ -2552,6 +2557,39 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 只允许尚未进入治理的单一主来源已完成载荷回到接收阶段，避免把不完整或错误影片永久密封。
+   * @param task - 已完成下载且可能持有载荷密封的媒体任务。
+   * @param source - 操作者准备精确清理并替换的唯一主来源。
+   * @returns 载荷、来源、计划、作品编号和单元验收均满足可恢复边界时返回 true。
+   */
+  private hasReplaceableCompletedDownloadPayload(
+    task: MediaGovernanceTask,
+    source: MediaGovernanceSource,
+  ) {
+    const payloadFiles = task.payloadSeal?.files ?? [];
+    const hasOtherLiveSource = task.sources.some(
+      (candidate) =>
+        candidate.id !== source.id && candidate.descriptorTombstonedAt === null,
+    );
+    const unitsUntouched = task.units.every(
+      (unit) => unit.evidenceSha256 === null && unit.localAcceptedAt === null,
+    );
+    return (
+      source.sourceRole === 'primary_media' &&
+      ['download', 'intake'].includes(task.stage) &&
+      task.closedAt === null &&
+      task.workItemId === null &&
+      task.sealedPlan === null &&
+      task.sealedPlanSha256 === null &&
+      task.metadataStatus === 'pending' &&
+      !hasOtherLiveSource &&
+      payloadFiles.length > 0 &&
+      payloadFiles.every((file) => file.sourceId === source.id) &&
+      unitsUntouched
+    );
+  }
+
+  /**
    * 移除已清理来源，并重置相关字幕合同和可恢复任务状态。
    * @param task - 用于finalize来源Removal的领域对象，包含 `sources`、`units`、`governanceProfile`、`workItemId` 字段。
    * @param source - 用于finalize来源Removal的领域对象，包含 `id`、`sourceRole` 字段。
@@ -2560,6 +2598,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
     source: MediaGovernanceSource,
   ) {
+    const resetCompletedDownload = this.hasReplaceableCompletedDownloadPayload(
+      task,
+      source,
+    );
     const sealedPreGovernanceArtifacts =
       task.workItemId !== null &&
       task.payloadSeal !== null &&
@@ -2589,6 +2631,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.sealedPlan = null;
       task.sealedPlanSha256 = null;
     }
+    if (resetCompletedDownload) task.payloadSeal = null;
     const hasNoPersistentArtifacts =
       task.sources.length === 0 &&
       task.workItemId === null &&

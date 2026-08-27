@@ -1720,6 +1720,88 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
+  it('cleans a rejected sole-source completed download before governance', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '治理前完整性换源测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'burned_in_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    const sourceRoot = `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/${source.id}`;
+    task.stage = 'download';
+    task.runState = 'succeeded';
+    task.payloadSeal = {
+      evidenceSha256: 'a'.repeat(64),
+      files: [
+        {
+          index: 0,
+          mtimeMs: 1_787_812_762_777,
+          path: `${sourceRoot}/Movie.mkv`,
+          relativePath: 'Movie.mkv',
+          sha256: 'b'.repeat(64),
+          sizeBytes: 1_024,
+          sourceId: 'media-source-other',
+        },
+      ],
+      runId: 'media-run-download-completed-fixture',
+    };
+
+    await expect(
+      service.removeSource(task.id, source.id, { expectedRevision: 2 }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    task.payloadSeal.files[0]!.sourceId = source.id;
+    await service.removeSource(task.id, source.id, { expectedRevision: 2 });
+    const cleanup = dispatch.mock.calls[0]![0];
+    expect(cleanup).toMatchObject({
+      action: 'source.cleanup',
+      sources: [expect.objectContaining({ sourceId: source.id })],
+      taskRevision: 3,
+    });
+    const observedAt = new Date().toISOString();
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      eventType: 'run-started',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 1,
+      summary: '清理开始',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      evidenceSha256: 'c'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 2,
+      sourceId: source.id,
+      summary: '错误电影载荷已精确清理',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      agentSession: null,
+      governanceProfile: null,
+      nextCommandLabel: '添加新的主媒体来源',
+      payloadSeal: null,
+      revision: 4,
+      runState: 'draft',
+      sources: [],
+      stage: 'intake',
+      workItemId: null,
+    });
+  });
+
   it('rolls a dry-run-only governance failure back to intake while retaining its work item', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

@@ -41,6 +41,7 @@ export class SunshineReadonlyAdapter {
 
     try {
       const response = await this.http.get(this.apiUrl(), {
+        allowSelfSignedTls: true,
         headers: this.authHeaders(),
       });
       const reachable = isReadonlyHttpOk(response.status);

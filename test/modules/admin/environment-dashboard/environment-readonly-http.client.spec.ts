@@ -33,6 +33,7 @@ describe('environment readonly http client', () => {
         url: 'https://example.test/health',
       }),
     );
+    expect(requestMock.mock.calls[0][0]).not.toHaveProperty('httpsAgent');
     expect(result.bodyPreview).toBe('xxxxxxxxxxxxxxxx...');
     expect(JSON.stringify(result)).not.toContain('secret-token');
   });
@@ -61,5 +62,30 @@ describe('environment readonly http client', () => {
       client.request('POST', 'https://example.test/mutate'),
     ).rejects.toThrow('只允许 GET/HEAD');
     expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('allows an explicit self-signed agent only for HTTPS requests', async () => {
+    requestMock.mockResolvedValue({
+      data: '',
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    });
+    const client = new EnvironmentReadonlyHttpClient({ timeoutMs: 3000 });
+
+    await client.get('https://10.66.66.4:39000/api/apps', {
+      allowSelfSignedTls: true,
+    });
+
+    const httpsAgent = requestMock.mock.calls[0][0].httpsAgent as {
+      options: { rejectUnauthorized: boolean };
+    };
+    expect(httpsAgent.options.rejectUnauthorized).toBe(false);
+
+    await expect(
+      client.get('http://10.66.66.4:38999/api/apps', {
+        allowSelfSignedTls: true,
+      }),
+    ).rejects.toThrow('只允许显式 HTTPS');
   });
 });

@@ -431,6 +431,7 @@ describe('environment remote readonly adapters', () => {
     const signal = await adapter.inspect();
 
     expect(http.get).toHaveBeenCalledWith('https://sunshine.example/api/apps', {
+      allowSelfSignedTls: true,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${Buffer.from('sun-user:sun-pass').toString(

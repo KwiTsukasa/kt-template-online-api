@@ -1,3 +1,4 @@
+import { Agent as HttpsAgent } from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
 
 export interface EnvironmentReadonlyHttpClientOptions {
@@ -20,6 +21,7 @@ const SECRET_HEADER_PATTERN = /(authorization|cookie|token|secret|password)/i;
 export type EnvironmentReadonlyHttpMethod = 'GET' | 'HEAD';
 
 export interface EnvironmentReadonlyHttpRequestOptions {
+  allowSelfSignedTls?: boolean;
   headers?: Record<string, string>;
   params?: Record<string, unknown>;
 }
@@ -89,6 +91,13 @@ export class EnvironmentReadonlyHttpClient {
       timeout: this.timeoutMs,
       url,
     };
+    if (options.allowSelfSignedTls === true) {
+      const target = new URL(url);
+      if (target.protocol !== 'https:') {
+        throw new Error('自签 TLS 兼容只允许显式 HTTPS 请求');
+      }
+      config.httpsAgent = new HttpsAgent({ rejectUnauthorized: false });
+    }
     const response = await axios.request(config);
 
     return {

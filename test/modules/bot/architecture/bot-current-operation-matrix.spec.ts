@@ -17,12 +17,9 @@ const readJson = (filePath: string) =>
   JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
 
 const readManifest = (pluginDir: string) =>
-  parsePluginManifest(
-    readJson(join(pluginRoot, pluginDir, 'plugin.json')),
-    {
-      pluginRoot: join(pluginRoot, pluginDir),
-    },
-  );
+  parsePluginManifest(readJson(join(pluginRoot, pluginDir, 'plugin.json')), {
+    pluginRoot: join(pluginRoot, pluginDir),
+  });
 
 const bangdreamOperations: ExpectedOperation[] = [
   {
@@ -137,6 +134,7 @@ describe('QQBot current operation matrix', () => {
       bilibiliCard: readManifest('bilibili-card'),
       ff14: readManifest('ff14-market'),
       fflogs: readManifest('fflogs'),
+      natmapPort: readManifest('natmap-port'),
       repeater: readManifest('repeater'),
     };
 
@@ -205,6 +203,22 @@ describe('QQBot current operation matrix', () => {
       },
     ]);
 
+    expect(
+      manifests.natmapPort.operations.map((operation) => ({
+        aliases: operation.aliases,
+        handlerName: operation.handlerName,
+        key: operation.key,
+        name: operation.name,
+      })),
+    ).toEqual([
+      {
+        aliases: ['natmap', '动态端口', '公网端口'],
+        handlerName: 'queryCurrentPort',
+        key: 'natmap.port.current',
+        name: '查询 NATMap 当前端口',
+      },
+    ]);
+
     expect(manifests.repeater.operations).toEqual([]);
     expect(
       manifests.repeater.events.map((event) => ({
@@ -237,8 +251,11 @@ describe('QQBot current operation matrix', () => {
 
     expect(seedSql).toContain(`'ff14-market', 'ff14.market.price'`);
     expect(seedSql).toContain(`'fflogs', 'fflogs.character.summary'`);
+    expect(seedSql).toContain(`'natmap-port', 'natmap.port.current'`);
     expect(seedSql).toContain(`'bangdream', 'bangdream.event.stage', 'plain'`);
     expect(refactorSeedSql).toContain(`'bilibili-card'`);
     expect(refactorSeedSql).toContain(`'bilibili-card.message'`);
+    expect(refactorSeedSql).toContain(`'natmap-port'`);
+    expect(refactorSeedSql).toContain(`'natmap.port.current'`);
   });
 });

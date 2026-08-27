@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
+import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { BOT_PLUGIN_PROTOCOL } from '@/modules/plugin-platform/contract/plugin-protocol';
 import { PluginArgumentParserService } from './application/argument/plugin-argument-parser.service';
 import { PluginEventRegistryService } from './application/registry/plugin-event-registry.service';
@@ -58,7 +59,7 @@ import { PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.service';
     }),
     AdminAuthGuardModule,
     DictModule,
-    TypeOrmModule.forFeature([...PLUGIN_PLATFORM_ENTITIES]),
+    TypeOrmModule.forFeature([...PLUGIN_PLATFORM_ENTITIES, NetworkPortForward]),
   ],
   providers: [
     PluginEventRegistryService,

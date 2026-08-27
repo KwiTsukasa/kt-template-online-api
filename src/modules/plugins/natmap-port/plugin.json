@@ -1,0 +1,76 @@
+{
+  "pluginKey": "natmap-port",
+  "name": "NATMap 动态端口",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "通过受控只读宿主能力查询已配置 TCP NATMap 通道的当前动态端口。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "legacyAliases": [],
+  "permissions": ["network.endpoint.read"],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 5000,
+    "memoryMb": 128,
+    "maxConcurrency": 1,
+    "configKeys": []
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "operations": [
+    {
+      "key": "natmap.port.current",
+      "name": "查询 NATMap 当前端口",
+      "handlerName": "queryCurrentPort",
+      "description": "返回当前有效 TCP NATMap 动态端口；不返回公网 IP、内部目标或原始错误。",
+      "aliases": ["natmap", "动态端口", "公网端口"],
+      "permissions": ["network.endpoint.read"],
+      "timeoutMs": 3000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "args": { "type": "array", "items": { "type": "string" } },
+          "raw": { "type": "string", "maxLength": 80 },
+          "text": { "type": "string", "maxLength": 80 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "channel",
+          "observedAt",
+          "publicPort",
+          "replyText",
+          "status",
+          "validUntil"
+        ],
+        "properties": {
+          "channel": { "type": ["string", "null"] },
+          "observedAt": { "type": ["string", "null"] },
+          "publicPort": { "type": ["integer", "null"] },
+          "replyText": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ambiguous",
+              "current",
+              "empty",
+              "help",
+              "invalid",
+              "not-found",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "validUntil": { "type": ["string", "null"] }
+        }
+      }
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": []
+}

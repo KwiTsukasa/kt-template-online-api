@@ -344,6 +344,11 @@ FROM plugin
 WHERE plugin_key = 'bilibili-card'
   AND status = 'installed';
 
+SELECT 'seed_plugin_natmap_port' AS check_name, COUNT(*) AS matched_rows
+FROM plugin
+WHERE plugin_key = 'natmap-port'
+  AND status = 'installed';
+
 SELECT 'seed_plugin_version_bilibili_card' AS check_name, COUNT(*) AS matched_rows
 FROM plugin_version v
 JOIN plugin p ON p.id = v.plugin_id
@@ -377,6 +382,13 @@ FROM bot_command
 WHERE command_key = 'bangdream_song'
   AND operation_key = 'bangdream.song.search'
   AND plugin_key = 'bangdream'
+  AND enabled = 1;
+
+SELECT 'seed_bot_command_natmap_port' AS check_name, COUNT(*) AS matched_rows
+FROM bot_command
+WHERE command_key = 'natmap_port'
+  AND operation_key = 'natmap.port.current'
+  AND plugin_key = 'natmap-port'
   AND enabled = 1;
 
 SELECT 'seed_bot_command_bangdream_all' AS check_name, COUNT(*) AS matched_rows

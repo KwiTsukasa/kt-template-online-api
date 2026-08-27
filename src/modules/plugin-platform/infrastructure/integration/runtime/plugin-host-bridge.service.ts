@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import type { Repository } from 'typeorm';
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
+import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import type { PluginPermission } from '@/modules/plugin-platform/domain/manifest';
 import type { PluginPackageDescriptor } from '@/modules/plugin-platform/infrastructure/integration/package/plugin-package.types';
 import {
   PluginHttpClientService,
@@ -16,6 +20,10 @@ import type {
 const HOST_FILE_PATH_ERROR =
   'Plugin host file path must stay inside the package root';
 const MAX_HOST_SLEEP_MS = 60_000;
+const MAX_NATMAP_ENDPOINTS = 16;
+const MAX_NATMAP_SELECTOR_LENGTH = 80;
+const SENSITIVE_NATMAP_SELECTOR_PATTERN =
+  /(?:\b(?:\d{1,3}\.){3}\d{1,3}\b|:\d{2,5}\b|:\/\/|[\\/@]|\blocalhost\b|\.(?:internal|lan|local)\b)/iu;
 
 @Injectable()
 export class PluginHostBridgeService {
@@ -24,6 +32,9 @@ export class PluginHostBridgeService {
   constructor(
     private readonly dictService: DictService,
     private readonly httpClient: PluginHttpClientService,
+    @Optional()
+    @InjectRepository(NetworkPortForward)
+    private readonly networkPortForwardRepository?: Repository<NetworkPortForward>,
   ) {}
 
   /**
@@ -70,6 +81,9 @@ export class PluginHostBridgeService {
         return this.dictService.getDictByKey(getDictCode(args));
       case 'getDictItemsByKey':
         return this.dictService.getDictItemsByKey(getDictCode(args));
+      case 'resolveNatmapEndpoint':
+        this.assertManifestPermission(descriptor, 'network.endpoint.read');
+        return this.resolveNatmapEndpoint(args.selector);
       case 'readAssetFile':
         return this.readPackageFile(descriptor, getPathArgument(args));
       case 'readJsonFile':
@@ -102,6 +116,168 @@ export class PluginHostBridgeService {
         return this.writeJsonFile(descriptor, getPathArgument(args), args.data);
       default:
         throw new Error(`未知插件 Host 调用：${request.method}`);
+    }
+  }
+
+  /**
+   * 只读取已启用的 TCP NATMap 通道并在 Host 内完成精确名称匹配，数据库名称永不跨越 worker 边界。
+   * @param rawSelector - 用户已知的可选通道名称；为空时只接受唯一通道。
+   * @returns 空、未找到、不唯一或单个脱敏端点的固定解析结果。
+   * @throws 状态仓未接线、查询失败或候选数量超过消息查询边界时抛出安全错误。
+   */
+  private async resolveNatmapEndpoint(rawSelector: unknown) {
+    if (!this.networkPortForwardRepository) {
+      throw new Error('NATMap 只读状态源未接线');
+    }
+    const selector = this.normalizeNatmapSelector(rawSelector);
+    let mappings: NetworkPortForward[];
+    try {
+      mappings = await this.networkPortForwardRepository.find({
+        order: { name: 'ASC', id: 'ASC' },
+        select: [
+          'currentObservedAt',
+          'currentPublicIpv4',
+          'currentPublicPort',
+          'currentValidUntil',
+          'id',
+          'lastObservedAt',
+          'name',
+          'natmapStatus',
+          'syncStatus',
+        ],
+        take: MAX_NATMAP_ENDPOINTS + 1,
+        where: {
+          desiredPresence: 'present',
+          isDeleted: false,
+          natmapDesiredEnabled: true,
+          protocol: 'tcp',
+        },
+      });
+    } catch {
+      throw new Error('NATMap 只读状态查询失败');
+    }
+    if (mappings.length > MAX_NATMAP_ENDPOINTS) {
+      throw new Error('NATMap 通道数量超过只读查询上限');
+    }
+    if (mappings.length === 0) return { kind: 'empty' };
+    if (!selector) {
+      if (mappings.length !== 1) {
+        return { channelCount: mappings.length, kind: 'ambiguous' };
+      }
+      return {
+        endpoint: this.projectNatmapEndpoint(mappings[0], '默认通道'),
+        kind: 'found',
+      };
+    }
+    const matches = mappings.filter(
+      (mapping) =>
+        `${mapping.name || ''}`
+          .replaceAll(/\s+/gu, ' ')
+          .trim()
+          .toLowerCase() === selector.toLowerCase(),
+    );
+    if (matches.length === 0) {
+      return { channelCount: mappings.length, kind: 'not-found' };
+    }
+    if (matches.length !== 1) {
+      return { channelCount: mappings.length, kind: 'ambiguous' };
+    }
+    return {
+      endpoint: this.projectNatmapEndpoint(matches[0], selector),
+      kind: 'found',
+    };
+  }
+
+  /**
+   * 把一条网络映射收敛为当前、过期或不可用状态；只有同步、活动且租约有效时才保留动态端口。
+   * @param mapping - 已通过 TCP NATMap 期望态与 Host 内名称匹配的权威网络映射。
+   * @param label - “默认通道”或用户原本已知且通过安全校验的选择器。
+   * @returns 不含任何 IP、内部端口、数据库 ID 与错误文本的端点投影。
+   */
+  private projectNatmapEndpoint(mapping: NetworkPortForward, label: string) {
+    const validUntilMs = new Date(mapping.currentValidUntil || '').getTime();
+    const leaseValid =
+      mapping.syncStatus === 'synced' &&
+      mapping.natmapStatus === 'active' &&
+      typeof mapping.currentPublicIpv4 === 'string' &&
+      mapping.currentPublicIpv4.length > 0 &&
+      Number.isInteger(mapping.currentPublicPort) &&
+      Number(mapping.currentPublicPort) >= 1 &&
+      Number(mapping.currentPublicPort) <= 65_535 &&
+      Boolean(mapping.currentObservedAt) &&
+      Number.isFinite(validUntilMs) &&
+      validUntilMs > Date.now();
+    let status: 'current' | 'stale' | 'unavailable' = 'unavailable';
+    let publicPort: null | number = null;
+    let observedAt: null | string = null;
+    let validUntil: null | string = null;
+    if (leaseValid) {
+      status = 'current';
+      publicPort = Number(mapping.currentPublicPort);
+      observedAt = this.formatNatmapTimestamp(mapping.currentObservedAt);
+      validUntil = this.formatNatmapTimestamp(mapping.currentValidUntil);
+    } else if (mapping.currentObservedAt || mapping.lastObservedAt) {
+      status = 'stale';
+      observedAt = this.formatNatmapTimestamp(
+        mapping.currentObservedAt || mapping.lastObservedAt,
+      );
+    }
+    return {
+      label,
+      observedAt,
+      publicPort,
+      status,
+      validUntil,
+    };
+  }
+
+  /**
+   * 折叠用户选择器并拒绝地址、端口、路径和内部域名形态，防止其被回显为拓扑信息。
+   * @param value - worker 传入的可选通道名称。
+   * @returns 空字符串或最长八十字符的安全单行选择器。
+   * @throws 选择器类型、长度或敏感形态不符合边界时抛出安全错误。
+   */
+  private normalizeNatmapSelector(value: unknown) {
+    if (value === undefined || value === null || value === '') return '';
+    if (typeof value !== 'string') {
+      throw new Error('NATMap 通道选择器无效');
+    }
+    const normalized = value.replaceAll(/\s+/gu, ' ').trim();
+    if (
+      !normalized ||
+      normalized.length > MAX_NATMAP_SELECTOR_LENGTH ||
+      /[\u0000-\u001f\u007f]/u.test(normalized) ||
+      SENSITIVE_NATMAP_SELECTOR_PATTERN.test(normalized)
+    ) {
+      throw new Error('NATMap 通道选择器无效');
+    }
+    return normalized;
+  }
+
+  /**
+   * 把数据库时间转换为稳定 UTC 文本，非法或缺失时间一律丢弃。
+   * @param value - 可能来自当前或历史端点的时间值。
+   * @returns ISO 8601 UTC 文本；无法解析时返回 `null`。
+   */
+  private formatNatmapTimestamp(value: unknown) {
+    if (!value) return null;
+    const date = new Date(value as string | number | Date);
+    if (!Number.isFinite(date.getTime())) return null;
+    return date.toISOString();
+  }
+
+  /**
+   * 要求插件清单显式声明宿主能力，避免其他 worker 通过动态 Host 方法越权读取网络状态。
+   * @param descriptor - 当前运行插件的已校验包描述。
+   * @param permission - 本次 Host 方法要求的精确权限。
+   * @throws 清单未声明权限时拒绝调用。
+   */
+  private assertManifestPermission(
+    descriptor: PluginPackageDescriptor,
+    permission: PluginPermission,
+  ) {
+    if (!descriptor.manifest.permissions.includes(permission)) {
+      throw new Error(`插件缺少宿主权限：${permission}`);
     }
   }
 

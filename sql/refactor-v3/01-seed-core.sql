@@ -440,6 +440,13 @@ INSERT INTO plugin (
     'Bilibili Card',
     'Built-in Bilibili card event plugin metadata.',
     'installed'
+  ),
+  (
+    1000000000000000106,
+    'natmap-port',
+    'NATMap Port',
+    'Built-in read-only NATMap dynamic port command plugin metadata.',
+    'installed'
   )
 ON DUPLICATE KEY UPDATE
   plugin_name = VALUES(plugin_name),
@@ -734,6 +741,17 @@ INSERT INTO bot_command (
     'bangdream',
     1,
     3
+  ),
+  (
+    1000000000000000216,
+    'natmap.port.current',
+    'natmap_port',
+    'natmap_port',
+    'NATMap 动态端口',
+    '["natmap","动态端口","公网端口"]',
+    'natmap-port',
+    1,
+    5
   )
 ON DUPLICATE KEY UPDATE
   operation_key = VALUES(operation_key),

@@ -7,6 +7,7 @@ export const PLUGIN_ALLOWED_PERMISSIONS = [
   'bot.command.read',
   'bot.event.receive',
   'bot.reply',
+  'network.endpoint.read',
   'runtime.http',
 ] as const;
 
@@ -16,8 +17,7 @@ export const PLUGIN_WORKER_TYPES = [
   'thread',
 ] as const;
 
-export type PluginPermission =
-  (typeof PLUGIN_ALLOWED_PERMISSIONS)[number];
+export type PluginPermission = (typeof PLUGIN_ALLOWED_PERMISSIONS)[number];
 
 export type PluginWorkerType = (typeof PLUGIN_WORKER_TYPES)[number];
 

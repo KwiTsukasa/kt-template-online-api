@@ -33,6 +33,7 @@ describe('existing plugin platform migration', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ]);
 
@@ -48,6 +49,7 @@ describe('existing plugin platform migration', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ].map((pluginName) => {
       const root = join(pluginRoot, pluginName);
@@ -65,6 +67,7 @@ describe('existing plugin platform migration', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ]);
     expect(

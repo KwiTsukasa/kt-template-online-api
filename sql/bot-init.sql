@@ -929,7 +929,8 @@ VALUES
   (2041700000000300514, 'bangdream_gacha_simulate', 'BangDream 抽卡模拟', '["抽卡模拟","bd抽卡"]', '["/","!","！"]', 'bangdream', 'bangdream.gacha.simulate', 'plain', 'all', '{}', '', 'BangDream 抽卡模拟失败：{{error}}', 1, 0, 3000, '模拟抽卡；格式：/抽卡模拟 [次数] [卡池ID]'),
   (2041700000000300515, 'bangdream_cutoff_detail', 'BangDream ycx', '["ycx","预测线","查档线","bd档线"]', '["/","!","！"]', 'bangdream', 'bangdream.cutoff.detail', 'plain', 'all', '{}', '', 'BangDream ycx 失败：{{error}}', 1, 0, 3000, '查询指定档位预测线；格式：/ycx 档位 [活动ID] [服务器]'),
   (2041700000000300516, 'bangdream_cutoff_all', 'BangDream ycxall', '["ycxall","myycx","全部档线"]', '["/","!","！"]', 'bangdream', 'bangdream.cutoff.all', 'plain', 'all', '{}', '', 'BangDream ycxall 失败：{{error}}', 1, 0, 3000, '查询所有档位预测线；格式：/ycxall [活动ID] [服务器]'),
-  (2041700000000300517, 'bangdream_cutoff_recent', 'BangDream lsycx', '["lsycx","历史档线","近期档线"]', '["/","!","！"]', 'bangdream', 'bangdream.cutoff.recent', 'plain', 'all', '{}', '', 'BangDream lsycx 失败：{{error}}', 1, 0, 3000, '查询同类型活动档线；格式：/lsycx 档位 [活动ID] [服务器]')
+  (2041700000000300517, 'bangdream_cutoff_recent', 'BangDream lsycx', '["lsycx","历史档线","近期档线"]', '["/","!","！"]', 'bangdream', 'bangdream.cutoff.recent', 'plain', 'all', '{}', '', 'BangDream lsycx 失败：{{error}}', 1, 0, 3000, '查询同类型活动档线；格式：/lsycx 档位 [活动ID] [服务器]'),
+  (2041700000000300518, 'natmap_port', 'NATMap 动态端口', '["natmap","动态端口","公网端口"]', '["/","!","！"]', 'natmap-port', 'natmap.port.current', 'plain', 'all', '{}', '', 'NATMap 实时状态暂不可用，请稍后再试。', 1, 0, 5000, '只读查询已授权 TCP NATMap 通道；格式：/natmap [通道名称]')
 ON DUPLICATE KEY UPDATE
   `code` = VALUES(`code`),
   `name` = VALUES(`name`),

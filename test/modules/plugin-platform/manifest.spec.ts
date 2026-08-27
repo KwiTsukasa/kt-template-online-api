@@ -141,6 +141,7 @@ describe('QQBot plugin manifest contract', () => {
         'plugin.storage.write',
         'bot.event.receive',
         'bot.reply',
+        'network.endpoint.read',
         'runtime.http',
       ]),
     );
@@ -152,12 +153,7 @@ describe('QQBot plugin manifest contract', () => {
       ...validManifest,
       runtime: {
         ...validManifest.runtime,
-        configKeys: [
-          'SAMPLE_TOKEN',
-          ' SAMPLE_TIMEOUT_MS ',
-          '',
-          'SAMPLE_TOKEN',
-        ],
+        configKeys: ['SAMPLE_TOKEN', ' SAMPLE_TIMEOUT_MS ', '', 'SAMPLE_TOKEN'],
       },
     });
 

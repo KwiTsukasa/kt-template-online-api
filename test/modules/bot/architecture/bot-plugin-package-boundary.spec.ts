@@ -86,6 +86,7 @@ describe('QQBot plugin package boundary', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ]);
   });
@@ -96,6 +97,7 @@ describe('QQBot plugin package boundary', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ].flatMap((pluginKey) => {
       const manifest = JSON.parse(
@@ -122,6 +124,7 @@ describe('QQBot plugin package boundary', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ].flatMap((pluginKey) => {
       const manifest = JSON.parse(
@@ -237,6 +240,7 @@ describe('QQBot plugin package boundary', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'natmap-port',
       'repeater',
     ].flatMap((pluginKey) => {
       const entryPath = join(pluginRoot, pluginKey, 'src/index.ts');

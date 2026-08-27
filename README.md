@@ -23,7 +23,7 @@
 | `modules/bot`             | 无状态 Bot 协议、标准入站/投递信封和 adapter registry；禁止账号、会话、连接与持久化依赖                       |
 | `modules/bot-adapter`     | 有状态 Bot Core，以及 NapCat/OneBot、Tencent WebSocket/Webhook 和消息投递适配器                               |
 | `modules/plugin-platform` | 无账号身份的插件 manifest、版本安装、运行事件、定时任务、受控 SDK 和 CLI                                      |
-| `modules/plugins/*`       | BangDream、Bilibili Card、FF14 Market、FFLogs、Repeater 等独立协议插件包                                      |
+| `modules/plugins/*`       | BangDream、Bilibili Card、FF14 Market、FFLogs、Repeater、NATMap Port 等独立协议插件包                         |
 | `minio`                   | Bucket 检查、上传、列表、临时 URL、代理下载、删除，以及 Blog Live2D 运行包受控读取入口                        |
 | `common`                  | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                                       |
 
@@ -465,6 +465,7 @@ Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精�
 - Plugin Platform 使用 `plugin.json` 描述 key、版本、操作、事件、权限、运行预算和包入口；CLI 负责 create/validate/pack/install-local。平台只保存插件生命周期与运行状态，不保存账号身份或 adapter 绑定。
 - NapCat 与 Tencent 各自保存插件绑定并自行把入站事件适配为无状态插件协议；在线命令仍保留 adapter core 的账号能力精确绑定。
 - Bilibili Card 是事件型内置插件：`bilibili-card.message` 只在账号绑定后监听 QQ/NapCat `share/json/xml/lightapp` 卡片或文本里的 Bilibili 链接。BotAdapter 通用事件投影会在 64 KiB、十层和 500 节点预算内展开协议段中的字符串化 JSON，使 QQ 小程序卡片的 `qqdocurl` 进入平台无关 `links[]`，插件无需重新依赖 OneBot 原始结构；`b23.tv` 短链再通过平台 `resolveRedirect` 受控 host 能力解析，视频信息从 Bilibili `x/web-interface/view` 获取后回复首行封面图和文本摘要。
+- NATMap Port 是命令型内置插件：`natmap.port.current` 对应 `/natmap [通道名称]`，同时要求账号命令能力和插件绑定。worker 只经 `network.endpoint.read` 读取精确名称命中的 TCP NATMap 通道；仅 `synced + active + present + IPv4 + 未过期租约 + 1..65535 端口` 返回端口，其他状态按过期、空、歧义或不可用返回脱敏中文结果，绝不暴露公网 IP、内部目标、数据库 ID 或原始异常。
 - 同一账号只允许一个有效 NapCat 主容器；账号列表拆开展示 OneBot、容器、WebUI 和 QQ 登录态，心跳只代表 OneBot/容器通信，不能推导 QQ 登录态。
 - NapCat 托管容器必须显式配置 `NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。`desktop-cn-v20` 镜像从 KT `NapCatQQ` fork 的 source-built `NapCat.Shell` 构建，不再在镜像内对上游 bundle 做字符串 patch，并修复非自动重试 QR failure 后下次 WebUI 登录动作不重置、QQCore 通过进程级 mountinfo 探针看到 Docker/宿主路径、扫码登录成功后 API 立即读不到 QQ 号、生产 native reset 缺少 `offline()` 时半登录态无法清理、runtime view native maps 取证假阴性、WebUI `RestartNapCat` 重启 worker 丢失快速登录账号参数，以及首次解包覆盖 API 预写 NapCat config 导致 bypass 开关回落默认关闭的问题。踢下线后的半登录态不能只靠旧 native reset 兜底；源 Docker 容器在线时 API 会先同容器 `RestartNapCat` 重建 NapCat worker，再继续登录流程，同一个更新登录 session 不能反复重启 worker。
 - NapCat 账号新增/编辑支持可选请求字段 `loginPassword`：只允许经 TLS 提交，后端使用 `BOT_ACCOUNT_SECRET_KEY`（或非默认 `ADMIN_TOKEN_SECRET`）包装为 AES-GCM `ktv1` secret 并保存到 `bot_account.napcat_login_password_secret`；空白编辑不更新，任何响应均不回显。

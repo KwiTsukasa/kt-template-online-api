@@ -617,6 +617,185 @@ export class MediaGovernanceCatalogService
   }
 
   /**
+   * 在事务锁内删除仅含 Work 与资料引用的 Series 空壳，任何季、集、Task、绑定或 RSS 事实都会失败关闭。
+   *
+   * @param seriesId - 待删除的 canonical Series 标识。
+   * @param expectedRevision - 调用方读取到的 Series revision，用于拒绝过期删除。
+   * @returns 被删除 Series 的稳定身份与递增 revision。
+   */
+  async deleteEmptySeries(seriesId: string, expectedRevision: number) {
+    if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
+      throwVbenError('Series revision 无效', HttpStatus.BAD_REQUEST);
+    }
+    const result = await this.dataSource.transaction(async (manager) => {
+      const seriesRows = (await manager.query(
+        `
+          SELECT id, revision
+          FROM media_governance_series
+          WHERE id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string; revision: number }>;
+      if (seriesRows.length === 0) {
+        throwVbenError('canonical Series 不存在', HttpStatus.NOT_FOUND);
+      }
+      const series = seriesRows[0];
+      if (Number(series.revision) !== expectedRevision) {
+        throwVbenError('Series 已更新，请刷新后重试', HttpStatus.CONFLICT);
+      }
+
+      const works = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_work
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      const workIds = works.map((work) => work.id);
+      const directTasks = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_task
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      let workTasks: Array<{ id: string }> = [];
+      let workReferences: Array<{ id: string }> = [];
+      let workSeasons: Array<{ id: string }> = [];
+      if (workIds.length > 0) {
+        const placeholders = workIds.map(() => '?').join(', ');
+        workTasks = (await manager.query(
+          `
+            SELECT id
+            FROM media_governance_task
+            WHERE work_id IN (${placeholders})
+            FOR UPDATE
+          `,
+          workIds,
+        )) as Array<{ id: string }>;
+        workReferences = (await manager.query(
+          `
+            SELECT id
+            FROM media_governance_work_external_ref
+            WHERE work_id IN (${placeholders})
+            FOR UPDATE
+          `,
+          workIds,
+        )) as Array<{ id: string }>;
+        workSeasons = (await manager.query(
+          `
+            SELECT id
+            FROM media_governance_season
+            WHERE work_id IN (${placeholders})
+            FOR UPDATE
+          `,
+          workIds,
+        )) as Array<{ id: string }>;
+      }
+      const seriesReferences = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_series_external_ref
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      const seasons = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_season
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      const episodes = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_episode
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      const bindings = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_task_episode_binding
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+      const subscriptions = (await manager.query(
+        `
+          SELECT id
+          FROM media_governance_rss_subscription
+          WHERE series_id = ?
+          FOR UPDATE
+        `,
+        [seriesId],
+      )) as Array<{ id: string }>;
+
+      const blockers: string[] = [];
+      if (directTasks.length > 0 || workTasks.length > 0) {
+        blockers.push('Task');
+      }
+      if (
+        seasons.length > 0 ||
+        workSeasons.length > 0 ||
+        episodes.length > 0 ||
+        bindings.length > 0
+      ) {
+        blockers.push('Season/Episode');
+      }
+      if (subscriptions.length > 0) blockers.push('RSS');
+      if (blockers.length > 0) {
+        throwVbenError(
+          `Series 不是空壳，仍有关联 ${blockers.join('、')}`,
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      if (workReferences.length > 0) {
+        await manager.query(
+          `DELETE FROM media_governance_work_external_ref WHERE id IN (${workReferences.map(() => '?').join(', ')})`,
+          workReferences.map((reference) => reference.id),
+        );
+      }
+      if (seriesReferences.length > 0) {
+        await manager.query(
+          `DELETE FROM media_governance_series_external_ref WHERE id IN (${seriesReferences.map(() => '?').join(', ')})`,
+          seriesReferences.map((reference) => reference.id),
+        );
+      }
+      if (workIds.length > 0) {
+        await manager.query(
+          `DELETE FROM media_governance_work WHERE id IN (${workIds.map(() => '?').join(', ')})`,
+          workIds,
+        );
+      }
+      await manager.query(
+        'DELETE FROM media_governance_series WHERE id = ? AND revision = ?',
+        [seriesId, expectedRevision],
+      );
+      return {
+        deleted: true as const,
+        revision: expectedRevision + 1,
+        seriesId,
+      };
+    });
+    this.publishCatalogDeleted(result.seriesId, result.revision);
+    return result;
+  }
+
+  /**
    * 在既有 Series 下创建一个独立已核验 Work，并绑定精确同身份的遗留 Task。
    *
    * @param seriesId - 作品族 Series 标识。
@@ -2329,6 +2508,24 @@ export class MediaGovernanceCatalogService
       seriesId,
       taskId,
       taskIds: [...taskIds],
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * 广播已提交的 Series 删除墓碑，让列表原位移除卡片并让详情页退出失效身份。
+   *
+   * @param seriesId - 已删除的 canonical Series 标识。
+   * @param revision - 删除事务递增后的事件 revision。
+   */
+  private publishCatalogDeleted(seriesId: string, revision: number) {
+    this.eventStream?.publishCatalogChanged({
+      changeType: 'deleted',
+      revision,
+      series: null,
+      seriesId,
+      taskId: null,
+      taskIds: [],
       updatedAt: new Date().toISOString(),
     });
   }

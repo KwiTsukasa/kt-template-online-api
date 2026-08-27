@@ -315,6 +315,7 @@ Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一�
 | `GET`  | `/media-governance/series/page`                                                                                           | 分页查询 Series/Work/季集/执行聚合           |
 | `GET`  | `/media-governance/series/identity-candidates`                                                                            | 按关键词和 Work 类型搜索官方身份候选         |
 | `POST` | `/media-governance/series`                                                                                                | 原子创建 Series 与唯一主 Work                |
+| `DELETE` | `/media-governance/series/:seriesId?expectedRevision=`                                                                  | 仅删除无 Season/Episode/Task/绑定/RSS 的空壳 |
 | `POST` | `/media-governance/series/:seriesId/works`                                                                                | 向既有 Series 添加已核验 Work                |
 | `POST` | `/media-governance/series/:seriesId/works/:workId/seasons`                                                                | 为 TV Work 创建连续 Season/Episode           |
 | `POST` | `/media-governance/series/:seriesId/works/:workId/tasks`                                                                  | 从 Work 派生一次 source-intake Task          |
@@ -330,6 +331,8 @@ Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一�
 | `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                                                        | 按 revision 启停 RSS                         |
 | `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                                                         | 立即轮询、去重并按集创建 Work-bound Task     |
 | `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                                                        | 分页查询 RSS 条目处理历史                    |
+
+Series 删除使用独立 `Media:Governance:Delete` 权限和客户端已读取的 revision。服务端在同一事务中锁定 Series、Work、Task、Season/Episode、绑定、RSS 与资料引用范围；只允许级联删除 Work/Series 资料引用和空 Work，任一执行或订阅事实存在时固定返回 `409`。权限由 `media-governance-series-delete-v1.sql` 幂等注册并只授予活动 `super`，对应 verify 脚本检查身份唯一、无冲突、无重复和无非 super 授权。
 
 RSS 来源发现严格分为身份候选与来源聚合两个阶段：用户必须先从 Bangumi/TMDB 候选中选择身份，
 服务端再次核验该身份后才并行查询 Mikan、Bangumi.moe、Nyaa、ACG.RIP、动漫花园、AniBT、

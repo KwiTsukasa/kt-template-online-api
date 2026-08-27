@@ -264,6 +264,7 @@ Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStar
 Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
 逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 从 Work/Season 派生；RSS Task 的
 标题、资料编号和年份固定使用订阅时再次核验并持久化的所选身份，不回退成 Work 主身份。
+误建目录只能通过 revision-bound Series 删除入口清理：独立 `Media:Governance:Delete` 权限只对空壳卡片可见，API 在事务锁内确认 Season、Episode、Task、绑定和 RSS 全部为零后，才级联删除 Work/Series 资料引用及空 Work；任一事实存在时返回 `409`，不提供绕过保护的强制删除。
 Work 为 TMDB 时同时把其已核验 canonical 身份密封为 Task 的二级 `metadataIdentity`；其他
 Work 保持空二级身份，后续只允许从飞牛对规范路径唯一映射出的官方身份自动发现，不能拿
 RSS/Bangumi catalog 身份冒充二级元数据身份。
@@ -336,7 +337,7 @@ Series/Work/Season 所有权、RSS 所选身份、旧资料引用和 Task 上下
 出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
 tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE 游标超出 API 有界内存
 回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。目录事务提交后在同一 SSE 发布
-携完整 SeriesCard 的 `catalog-changed`；当前页卡片原位替换，新 Series、筛选边界或游标失效静默重载系列分页。
+携完整 SeriesCard 的 `catalog-changed`；删除后发布 `series=null` 的删除墓碑。当前页卡片原位替换或移除，新 Series、筛选边界或游标失效静默重载系列分页。
 Redis Stream 当前承担
 执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。媒体 SSE 响应同时返回
 `Cache-Control: no-store` 和 `X-Accel-Buffering: no`，防止反向代理积攒进度事件。

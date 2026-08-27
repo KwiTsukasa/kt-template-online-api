@@ -39,10 +39,10 @@ export interface MediaGovernanceTaskChangedData {
 }
 
 export interface MediaGovernanceCatalogChangedData {
-  changeType: 'created' | 'updated';
+  changeType: 'created' | 'deleted' | 'updated';
   observedAt: string;
   revision: number;
-  series: {
+  series: null | {
     bindingCount: number;
     boundEpisodeCount: number;
     canonicalProvider: string;

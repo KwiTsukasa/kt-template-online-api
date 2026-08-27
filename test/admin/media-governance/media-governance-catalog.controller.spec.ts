@@ -20,6 +20,7 @@ describe('MediaGovernanceCatalogController', () => {
     createSeries: jest.fn(),
     createWork: jest.fn(),
     createWorkTask: jest.fn(),
+    deleteEmptySeries: jest.fn(),
     detail: jest.fn(),
     discoverRssSources: jest.fn(),
     episodePage: jest.fn(),
@@ -121,6 +122,30 @@ describe('MediaGovernanceCatalogController', () => {
     expect(catalog.createWork).toHaveBeenCalledWith(
       'media-series-jjk',
       expect.objectContaining({ workType: 'movie' }),
+    );
+  });
+
+  it('deletes an empty Series only through revision-bound DELETE', async () => {
+    catalog.deleteEmptySeries.mockResolvedValueOnce({
+      deleted: true,
+      revision: 2,
+      seriesId: 'media-series-empty',
+    });
+
+    const response = await request(apiUrl)
+      .delete('/media-governance/series/media-series-empty')
+      .query({ expectedRevision: 1 })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+
+    expect(response.body.data).toEqual({
+      deleted: true,
+      revision: 2,
+      seriesId: 'media-series-empty',
+    });
+    expect(catalog.deleteEmptySeries).toHaveBeenCalledWith(
+      'media-series-empty',
+      1,
     );
   });
 

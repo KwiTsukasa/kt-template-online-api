@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -112,6 +113,28 @@ export class MediaGovernanceCatalogController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.catalog.createSeries(body));
+  }
+
+  /**
+   * 按客户端已读取的 revision 删除不含季、集、任务或 RSS 的 Series 空壳。
+   *
+   * @param seriesId - 待删除的 canonical Series 标识。
+   * @param expectedRevision - 客户端卡片读取到的 Series revision。
+   * @param response - 当前 HTTP 响应。
+   * @returns 删除后的 Series 身份与新 revision。
+   */
+  @Delete(':seriesId')
+  @MediaGovernancePermission('Media:Governance:Delete')
+  @ApiOperation({ summary: '删除空壳 canonical Series' })
+  async deleteSeries(
+    @Param('seriesId') seriesId: string,
+    @Query('expectedRevision', ParseIntPipe) expectedRevision: number,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.deleteEmptySeries(seriesId, expectedRevision),
+    );
   }
 
   /**

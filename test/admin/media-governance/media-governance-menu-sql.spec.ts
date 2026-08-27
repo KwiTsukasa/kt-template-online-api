@@ -18,6 +18,7 @@ describe('media governance intake menu seed', () => {
     expect(sql).toContain("'/media/governance/tasks/list'");
     expect(sql).toContain("'Media:Governance:List'");
     expect(sql).toContain("'Media:Governance:Create'");
+    expect(sql).toContain("'Media:Governance:Delete'");
     expect(sql).toContain("'/media/governance/agent-queue'");
     expect(sql).toContain("'MediaGovernanceAgentSession'");
     expect(sql).toContain("'/media/governance/tasks/:taskId/agent'");

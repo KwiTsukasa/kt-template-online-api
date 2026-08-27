@@ -20,7 +20,8 @@ VALUES
   (2041700000000120606, 2041700000000100604, 'MediaGovernanceAgentStart', NULL, NULL, NULL, 'Media:Governance:AgentStart', 'button', '{"title":"启动 Agent"}', 1, 5),
   (2041700000000120607, 2041700000000100604, 'MediaGovernanceAgentOperate', NULL, NULL, NULL, 'Media:Governance:AgentOperate', 'button', '{"title":"Agent 操作"}', 1, 6),
   (2041700000000120608, 2041700000000100604, 'MediaGovernanceOperatorDecision', NULL, NULL, NULL, 'Media:Governance:OperatorDecision', 'button', '{"title":"人工放行"}', 1, 7),
-  (2041700000000120609, 2041700000000100604, 'MediaGovernanceEvidence', NULL, NULL, NULL, 'Media:Governance:Evidence', 'button', '{"title":"查看证据"}', 1, 8)
+  (2041700000000120609, 2041700000000100604, 'MediaGovernanceEvidence', NULL, NULL, NULL, 'Media:Governance:Evidence', 'button', '{"title":"查看证据"}', 1, 8),
+  (2041700000000120610, 2041700000000100604, 'MediaGovernanceSeriesDelete', NULL, NULL, NULL, 'Media:Governance:Delete', 'button', '{"title":"删除空系列"}', 1, 9)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `pid` = VALUES(`pid`),
@@ -54,7 +55,8 @@ WHERE role.`role_code` <> 'super'
     'MediaGovernanceAgentStart',
     'MediaGovernanceAgentOperate',
     'MediaGovernanceOperatorDecision',
-    'MediaGovernanceEvidence'
+    'MediaGovernanceEvidence',
+    'MediaGovernanceSeriesDelete'
   );
 
 INSERT IGNORE INTO `admin_role_menu` (`role_id`, `menu_id`)
@@ -75,7 +77,8 @@ JOIN `admin_menu` menu ON menu.`name` IN (
   'MediaGovernanceAgentStart',
   'MediaGovernanceAgentOperate',
   'MediaGovernanceOperatorDecision',
-  'MediaGovernanceEvidence'
+  'MediaGovernanceEvidence',
+  'MediaGovernanceSeriesDelete'
 )
 WHERE role.`role_code` = 'super'
   AND role.`status` = 1

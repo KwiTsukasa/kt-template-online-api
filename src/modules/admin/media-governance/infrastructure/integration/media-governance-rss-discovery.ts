@@ -151,6 +151,11 @@ interface ProviderSearchResult {
   subscriptions?: RawDiscoverySubscription[];
 }
 
+interface BangumiIdentitySearchContract {
+  platform: 'TV' | '剧场版' | '电影';
+  subjectType: 2 | 6;
+}
+
 interface RawDiscoverySubscription {
   feedUrl: string;
   provider: MediaGovernanceRssDiscoveryProvider;
@@ -196,20 +201,22 @@ export async function searchMediaGovernanceRssIdentityCandidates(
  *
  * @param keyword - 用户输入的作品名称或别名。
  * @param mediaType - 待创建 Work 的 TV、电影或剧场版类型。
+ * @param options - 测试可替换的网络读取和 TMDB 查询实现。
  * @returns 有界身份候选及两个资料源的可用状态。
  */
 export async function searchMediaGovernanceCatalogIdentityCandidates(
   keyword: string,
   mediaType: MediaGovernanceMediaType,
+  options: MediaGovernanceRssDiscoveryOptions = {},
 ): Promise<MediaGovernanceRssIdentitySearchResult> {
-  return searchMediaGovernanceIdentityCandidates(keyword, mediaType, {});
+  return searchMediaGovernanceIdentityCandidates(keyword, mediaType, options);
 }
 
 /**
  * 将身份关键词与 Work 类型投影到两个固定资料源，并隔离单个上游失败。
  *
  * @param keyword - 用户输入的作品名称或别名。
- * @param mediaType - TMDB 搜索使用的作品命名空间。
+ * @param mediaType - Bangumi 与 TMDB 共用的作品类型合同。
  * @param options - 测试可替换的网络读取和 TMDB 查询实现。
  * @returns 有界身份候选及两个资料源的可用状态。
  */
@@ -223,6 +230,7 @@ async function searchMediaGovernanceIdentityCandidates(
   const searchTmdb = options.searchTmdb ?? searchTmdbMediaCandidates;
   const bangumiPromise = searchBangumiIdentityCandidates(
     normalizedKeyword,
+    mediaType,
     fetchImpl,
   );
   const tmdbPromise = searchTmdb({
@@ -343,12 +351,14 @@ export async function discoverMediaGovernanceRssSources(
  * 通过固定官方详情重新核验订阅携带的资料身份，并只返回可持久化的公开证据字段。
  *
  * @param context - Series/Season 上下文与用户明确选择的资料身份。
+ * @param options - 测试可替换的网络与 TMDB 核验实现。
  * @returns 已核验的来源、编号、标题、年份、海报和集数证据。
  */
 export async function verifyMediaGovernanceRssIdentity(
   context: MediaGovernanceRssDiscoveryContext,
+  options: MediaGovernanceRssDiscoveryOptions = {},
 ): Promise<MediaGovernanceRssIdentityCandidate> {
-  const identity = await resolveDiscoveryIdentity(context, {});
+  const identity = await resolveDiscoveryIdentity(context, options);
   return {
     candidateId: identity.candidateId,
     episodeCount: identity.episodeCount,
@@ -365,30 +375,54 @@ export async function verifyMediaGovernanceRssIdentity(
  * 通过固定官方详情核验 Series/Work 创建身份，并按请求类型校验 TMDB 命名空间。
  *
  * @param context - 待创建 Work 的类型、Series 上下文与用户选择身份。
+ * @param options - 测试可替换的网络与 TMDB 核验实现。
  * @returns 已核验的公开身份字段。
  */
 export async function verifyMediaGovernanceCatalogIdentity(
   context: MediaGovernanceRssDiscoveryContext,
+  options: MediaGovernanceRssDiscoveryOptions = {},
 ): Promise<MediaGovernanceRssIdentityCandidate> {
-  return verifyMediaGovernanceRssIdentity(context);
+  return verifyMediaGovernanceRssIdentity(context, options);
 }
 
 /**
- * 查询 Bangumi 官方 subject 搜索并投影动画身份候选。
+ * 将 Work 类型映射到 Bangumi 官方 subject 类型与 platform，避免动画、三次元和不同发行形态互相污染候选。
+ *
+ * @param mediaType - 用户在 Series/Work 创建器中选择的作品类型。
+ * @returns Bangumi 搜索和详情二次核验共用的 subject 类型与 platform。
+ */
+function bangumiIdentitySearchContract(
+  mediaType: MediaGovernanceMediaType,
+): BangumiIdentitySearchContract {
+  if (mediaType === 'tv') return { platform: 'TV', subjectType: 2 };
+  if (mediaType === 'theatrical') {
+    return { platform: '剧场版', subjectType: 2 };
+  }
+  return { platform: '电影', subjectType: 6 };
+}
+
+/**
+ * 查询 Bangumi 官方 subject 搜索并投影与 Work 类型一致的身份候选。
  *
  * @param keyword - 已清理的用户搜索词。
+ * @param mediaType - 待创建 Work 的 TV、电影或剧场版类型。
  * @param fetchImpl - 有界网络读取实现。
- * @returns 最多十二个动画 subject 候选。
+ * @returns 最多十二个 subject 类型与 platform 均匹配的候选。
  */
 async function searchBangumiIdentityCandidates(
   keyword: string,
+  mediaType: MediaGovernanceMediaType,
   fetchImpl: typeof fetch,
 ): Promise<MediaGovernanceRssIdentityCandidate[]> {
+  const contract = bangumiIdentitySearchContract(mediaType);
   const payload = await requestJson(
     'https://api.bgm.tv/v0/search/subjects',
     {
       body: JSON.stringify({
-        filter: { type: [2] },
+        filter: {
+          meta_tags: [contract.platform],
+          type: [contract.subjectType],
+        },
         keyword,
         sort: 'match',
       }),
@@ -406,6 +440,8 @@ async function searchBangumiIdentityCandidates(
   const candidates: MediaGovernanceRssIdentityCandidate[] = [];
   for (const value of values) {
     const item = objectValue(value);
+    if (positiveInteger(item.type) !== contract.subjectType) continue;
+    if (stringValue(item.platform, 32) !== contract.platform) continue;
     const providerId = positiveIntegerText(item.id);
     const originalTitle = stringValue(item.name, 200);
     const chineseTitle = stringValue(item.name_cn, 200);
@@ -437,7 +473,7 @@ async function searchBangumiIdentityCandidates(
  * @param context - 用户选择和当前 Series 上下文。
  * @param options - 测试可替换的网络与 TMDB 核验实现。
  * @returns 经过官方详情核验的唯一身份。
- * @throws 当 provider ID 非法、核验对象不是 TV 或官方详情缺少标题时抛出稳定身份错误。
+ * @throws 当 provider ID 非法、核验对象不匹配请求作品类型或官方详情缺少标题时抛出稳定身份错误。
  */
 async function resolveDiscoveryIdentity(
   context: MediaGovernanceRssDiscoveryContext,
@@ -449,6 +485,7 @@ async function resolveDiscoveryIdentity(
     throw new Error('rss-discovery-identity-invalid');
   }
   if (context.identity.provider === 'bangumi') {
+    const contract = bangumiIdentitySearchContract(context.mediaType ?? 'tv');
     const payload = await requestJson(
       `https://api.bgm.tv/v0/subjects/${providerId}`,
       {
@@ -461,8 +498,11 @@ async function resolveDiscoveryIdentity(
       fetchImpl,
     );
     const item = objectValue(payload);
-    if (positiveInteger(item.type) !== 2) {
-      throw new Error('rss-discovery-identity-not-tv');
+    if (
+      positiveInteger(item.type) !== contract.subjectType ||
+      stringValue(item.platform, 32) !== contract.platform
+    ) {
+      throw new Error('rss-discovery-identity-media-type-mismatch');
     }
     const originalTitle = stringValue(item.name, 200);
     const chineseTitle = stringValue(item.name_cn, 200);

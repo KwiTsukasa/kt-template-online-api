@@ -307,7 +307,7 @@ Work 派生不可变的 `seriesId/workId/operationKind` 与 catalog 身份。
 | `GET`    | `/media-governance/events/stream`                                  | 订阅 task-changed/catalog-changed 与 replay/snapshot-required SSE |
 
 Series-first 目录接口先创建系列及主 Work，再在同一 Series 下增加 TV、电影或剧场版 Work。
-Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。
+Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。`workType` 同时约束两个资料源：TV 使用 Bangumi `type=2/platform=TV` 与 TMDB TV，电影使用 Bangumi `type=6/platform=电影` 与 TMDB Movie，剧场版使用 Bangumi `type=2/platform=剧场版` 与 TMDB Movie。Bangumi 搜索的 `meta_tags` 只作上游缩小，API 仍逐项核对 `type + platform`，选中后详情核验再次执行同一合同。
 电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
 
 | 方法   | 路径                                                                                                                      | 说明                                         |

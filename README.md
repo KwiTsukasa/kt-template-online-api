@@ -256,7 +256,7 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
 人工放行、聚合和可续接 SSE。
 作品目录与执行任务采用 Series-first 层级：`Series → Work → Season/Episode → Task`。
-Series 必须先从 Bangumi/TMDB 官方候选中确认主身份，创建事务会同时建立唯一主 Work；
+Series 必须先从 Bangumi/TMDB 官方候选中确认主身份，创建事务会同时建立唯一主 Work。身份搜索与创建前核验使用同一作品类型合同：TV 对应 Bangumi `type=2/platform=TV` 与 TMDB TV，电影对应 Bangumi `type=6/platform=电影` 与 TMDB Movie，剧场版对应 Bangumi `type=2/platform=剧场版` 与 TMDB Movie；Bangumi 请求同时使用正向 `meta_tags`，响应仍按官方 `platform` 本地复核，不能让动画 TV、动画剧场版和三次元电影互相混入候选。
 后续 TV、电影和剧场版都作为同一 Series 下的独立 Work 管理。Work 身份使用
 `provider + namespace + providerId` 唯一键区分 TMDB TV/Movie；只有 TV Work 可以创建
 Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStart + episodeCount`

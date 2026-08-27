@@ -1,6 +1,8 @@
 import {
   discoverMediaGovernanceRssSources,
+  searchMediaGovernanceCatalogIdentityCandidates,
   searchMediaGovernanceRssIdentityCandidates,
+  verifyMediaGovernanceCatalogIdentity,
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-rss-discovery';
 
 describe('media governance RSS discovery', () => {
@@ -15,6 +17,8 @@ describe('media governance RSS discovery', () => {
             images: { grid: 'https://lain.bgm.tv/r/100/test.jpg' },
             name: 'BLEACH 千年血戦篇',
             name_cn: '死神 千年血战篇',
+            platform: 'TV',
+            type: 2,
           },
         ],
       }),
@@ -54,6 +58,116 @@ describe('media governance RSS discovery', () => {
         expect.objectContaining({ provider: 'tmdb', status: 'available' }),
       ]),
     );
+  });
+
+  it.each([
+    ['tv', 2, 'TV'],
+    ['movie', 6, '电影'],
+    ['theatrical', 2, '剧场版'],
+  ] as const)(
+    'filters Bangumi %s candidates at both request and response boundaries',
+    async (mediaType, subjectType, platform) => {
+      const fetchImpl = jest.fn(async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          filter: { meta_tags: string[]; type: number[] };
+        };
+        expect(body.filter).toEqual({
+          meta_tags: [platform],
+          type: [subjectType],
+        });
+        return jsonResponse({
+          data: [
+            {
+              date: '2002-05-03',
+              eps: 1,
+              id: 36150,
+              name: 'Spider-Man',
+              name_cn: '蜘蛛侠',
+              platform,
+              type: subjectType,
+            },
+            {
+              date: '1995-09-09',
+              eps: 14,
+              id: 287125,
+              name: 'Spider-Man Season 2',
+              name_cn: '蜘蛛侠 第二季',
+              platform: 'WEB',
+              type: 2,
+            },
+          ],
+        });
+      }) as unknown as typeof fetch;
+      const searchTmdb = jest.fn().mockResolvedValue([]);
+
+      const result = await searchMediaGovernanceCatalogIdentityCandidates(
+        '蜘蛛侠',
+        mediaType,
+        { fetchImpl, searchTmdb },
+      );
+
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          provider: 'bangumi',
+          providerId: '36150',
+          title: '蜘蛛侠',
+        }),
+      ]);
+      expect(searchTmdb).toHaveBeenCalledWith({
+        mediaType,
+        releaseYear: null,
+        title: '蜘蛛侠',
+      });
+    },
+  );
+
+  it('revalidates a selected Bangumi movie against the same type contract', async () => {
+    const movieFetch = jest.fn(async () =>
+      jsonResponse({
+        date: '2002-05-03',
+        eps: 1,
+        id: 36150,
+        name: 'Spider-Man',
+        name_cn: '蜘蛛侠',
+        platform: '电影',
+        type: 6,
+      }),
+    ) as unknown as typeof fetch;
+    const context = {
+      identity: {
+        provider: 'bangumi' as const,
+        providerId: '36150',
+        releaseYear: 2002,
+      },
+      mediaType: 'movie' as const,
+      originalTitle: null,
+      releaseYear: 2002,
+      seasonNumber: 0,
+      seriesTitle: '蜘蛛侠',
+    };
+
+    await expect(
+      verifyMediaGovernanceCatalogIdentity(context, { fetchImpl: movieFetch }),
+    ).resolves.toMatchObject({
+      provider: 'bangumi',
+      providerId: '36150',
+      title: '蜘蛛侠',
+    });
+
+    const tvFetch = jest.fn(async () =>
+      jsonResponse({
+        date: '1995-09-09',
+        eps: 14,
+        id: 287125,
+        name: 'Spider-Man Season 2',
+        name_cn: '蜘蛛侠 第二季',
+        platform: 'TV',
+        type: 2,
+      }),
+    ) as unknown as typeof fetch;
+    await expect(
+      verifyMediaGovernanceCatalogIdentity(context, { fetchImpl: tvFetch }),
+    ).rejects.toThrow('rss-discovery-identity-media-type-mismatch');
   });
 
   it('isolates one identity provider failure instead of discarding valid candidates', async () => {
@@ -98,6 +212,7 @@ describe('media governance RSS discovery', () => {
           images: { grid: 'https://lain.bgm.tv/r/100/test.jpg' },
           name: 'BLEACH TYBW',
           name_cn: '死神 千年血战篇-诀别谭-',
+          platform: 'TV',
           type: 2,
         });
       }

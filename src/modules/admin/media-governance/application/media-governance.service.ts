@@ -3143,6 +3143,27 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         );
       }
       if (task.governanceProfile !== 'sidecar-linked') continue;
+      if (task.mediaType !== 'tv') {
+        const sourceIds = new Set(
+          subtitleMappings
+            .filter(
+              ({ mapping, source }) =>
+                mapping.unitId === unit.id &&
+                mapping.episodeNumber === null &&
+                mapping.language === 'zh-CN' &&
+                source.sourceRole === 'supplemental_subtitle' &&
+                Boolean(source.releaseGroup),
+            )
+            .map(({ source }) => source.id),
+        );
+        if (sourceIds.size !== 1) {
+          throwVbenError(
+            '电影外挂简体中文字幕必须由唯一补充来源提供',
+            HttpStatus.CONFLICT,
+          );
+        }
+        continue;
+      }
       const contract = unit.subtitleContract;
       if (
         !contract ||

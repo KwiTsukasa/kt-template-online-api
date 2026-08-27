@@ -693,6 +693,110 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
+  it('downloads a movie with one mapped Simplified-Chinese supplemental source', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '电影外挂字幕下载测试',
+    });
+    const primary = await service.addMagnetSource(task.id, {
+      contentKind: 'subtitleless_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    const subtitle = await service.addMagnetSource(task.id, {
+      contentKind: 'sidecar_subtitle_package',
+      expectedRevision: 2,
+      magnetUri:
+        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      releaseGroup: 'Assrt-Original',
+      sourceRole: 'supplemental_subtitle',
+    });
+    primary.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Movie.mkv',
+        sizeBytes: 8,
+      },
+    ];
+    primary.manifestSha256 = 'a'.repeat(64);
+    primary.manifestState = 'inspected';
+    subtitle.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Movie.zh-CN.ass',
+        sizeBytes: 2,
+      },
+    ];
+    subtitle.manifestSha256 = 'b'.repeat(64);
+    subtitle.manifestState = 'inspected';
+    await service.updateSourceSelection(task.id, primary.id, {
+      expectedRevision: 3,
+      fileMappings: [
+        {
+          fileRole: 'video',
+          index: 0,
+          unitId: task.units[0]!.id,
+        },
+      ],
+      selectedFileIndices: [0],
+    });
+    await service.updateSourceSelection(task.id, subtitle.id, {
+      expectedRevision: 4,
+      fileMappings: [
+        {
+          fileRole: 'subtitle',
+          index: 0,
+          language: 'zh-CN',
+          unitId: task.units[0]!.id,
+        },
+      ],
+      selectedFileIndices: [0],
+    });
+    primary.sourceHealth = 'viable';
+    subtitle.sourceHealth = 'viable';
+
+    await service.startDownload(task.id, { expectedRevision: 5 });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({
+      action: 'source.download',
+      sources: [
+        expect.objectContaining({
+          selectedFileIndices: [0],
+          sourceId: primary.id,
+        }),
+        expect.objectContaining({
+          selectedFileIndices: [0],
+          sourceId: subtitle.id,
+        }),
+      ],
+      taskId: task.id,
+      taskRevision: 6,
+    });
+    expect(task).toMatchObject({
+      governanceProfile: 'sidecar-linked',
+      revision: 6,
+      runState: 'queued',
+      stage: 'download',
+    });
+    expect(primary.selectedFileMappings).toEqual([
+      expect.objectContaining({ fileRole: 'video' }),
+    ]);
+    expect(subtitle.selectedFileMappings).toEqual([
+      expect.objectContaining({
+        fileRole: 'subtitle',
+        language: 'zh-CN',
+      }),
+    ]);
+    expect(task.units[0]!.subtitleContract).toBeNull();
+  });
+
   it('publishes every hot progress callback before the queued MySQL snapshot', async () => {
     let hotSequence: number | undefined;
     const progressHotStore: MediaGovernanceProgressHotStore = {

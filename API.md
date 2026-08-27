@@ -1030,7 +1030,7 @@ Admin 入口为 `/plugin-platform/plugins` 与 `/plugin-platform/tasks`。BangDr
 
 插件 key：`natmap-port`，operation key：`natmap.port.current`，默认命令为 `/natmap [通道名称]`。真实命令必须同时通过账号命令能力和插件账号绑定；插件 worker 只拥有 `network.endpoint.read`，不能直接访问数据库目录或网络管理写能力。
 
-Host 只接受已知安全通道名称，并精确匹配 `network_port_forward` 中 `protocol=tcp`、NATMap 已启用的通道。只有 `syncStatus=synced`、`natmapStatus=active`、当前端点存在、IPv4 合法、端口在 `1..65535` 且租约未过期时返回 `publicPort`；过期状态归零，多通道只返回数量并要求显式名称，地址、端口或路径形态选择器直接拒绝。输出不包含公网 IP、内部目标、记录 ID、数据库名称或原始异常。当前源码和 SQL 已在本地验证，尚未提交、发布或启用线上命令。
+Host 只接受已知安全通道名称，并精确匹配 `network_port_forward` 中 `protocol=tcp`、NATMap 已启用的通道。只有 `syncStatus=synced`、`natmapStatus=active`、当前端点存在、IPv4 合法、端口在 `1..65535` 且租约未过期时返回 `publicPort`；过期状态归零，多通道只返回数量并要求显式名称，地址、端口或路径形态选择器直接拒绝。输出不包含公网 IP、内部目标、记录 ID、数据库名称或原始异常。既有生产库使用 `sql/natmap-port-command-v1.sql` 与对应 verify 脚本补齐唯一命令身份；该入口只插入完全缺失的命令，身份冲突会失败关闭，重复发布不会覆盖管理员的启停或删除状态。
 
 ### Bilibili Card
 

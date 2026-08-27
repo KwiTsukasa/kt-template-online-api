@@ -10,6 +10,8 @@ describe('Bot Adapter migration deployment contract', () => {
     expect(dockerfile).toContain('sql/bot-adapter-protocol-v1.sql');
     expect(dockerfile).toContain('sql/bot-adapter-menu-v1.sql');
     expect(dockerfile).toContain('sql/bot-adapter-protocol-v1-verify.sql');
+    expect(dockerfile).toContain('sql/natmap-port-command-v1.sql');
+    expect(dockerfile).toContain('sql/natmap-port-command-v1-verify.sql');
     expect(manifest).toContain('strategy:\n    type: Recreate');
     expect(manifest).toContain('name: bot-adapter-migration');
     expect(manifest).toContain('dist/commands/migrate-bot-adapter-protocol.js');

@@ -11,6 +11,8 @@ import {
 import { EnvironmentDashboardConfigService } from '../environment-dashboard-config.service';
 import { JenkinsReadonlyAdapter } from '../adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from '../adapters/kubernetes-readonly.adapter';
+import { HomeAssistantReadonlyAdapter } from '../adapters/home-assistant-readonly.adapter';
+import { SunshineReadonlyAdapter } from '../adapters/sunshine-readonly.adapter';
 import {
   mapSiteStatus,
   pickWorstHealthStatus,
@@ -49,6 +51,10 @@ export class NasProdSignalCollector {
     private readonly kubernetesAdapter?: KubernetesReadonlyAdapter,
     @Optional()
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
+    @Optional()
+    private readonly homeAssistantAdapter?: HomeAssistantReadonlyAdapter,
+    @Optional()
+    private readonly sunshineAdapter?: SunshineReadonlyAdapter,
   ) {}
 
   /**
@@ -87,6 +93,29 @@ export class NasProdSignalCollector {
       this.createNapcatService(botSummary, observedAt),
       this.createPluginPlatformService(observedAt),
       await this.createPluginTaskService(observedAt),
+      await this.createAdapterService(
+        'home-assistant',
+        'Home Assistant',
+        'home-assistant-api',
+        'Home Assistant API',
+        [
+          'ENV_DASHBOARD_HOME_ASSISTANT_URL',
+          'ENV_DASHBOARD_HOME_ASSISTANT_TOKEN',
+        ],
+        this.homeAssistantAdapter,
+      ),
+      await this.createAdapterService(
+        'sunshine',
+        'Sunshine Game Streaming',
+        'sunshine-api',
+        'Sunshine API',
+        [
+          'ENV_DASHBOARD_SUNSHINE_URL',
+          'ENV_DASHBOARD_SUNSHINE_USERNAME',
+          'ENV_DASHBOARD_SUNSHINE_PASSWORD',
+        ],
+        this.sunshineAdapter,
+      ),
       await this.createAdapterService(
         'jenkins',
         'Jenkins',

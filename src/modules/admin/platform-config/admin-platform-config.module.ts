@@ -42,10 +42,12 @@ import { EnvironmentEventMaterializer } from './environment-dashboard/applicatio
 import { EnvironmentEventStreamService } from './environment-dashboard/application/environment-event-stream.service';
 import { EnvironmentDashboardController } from './environment-dashboard/presentation/environment-dashboard.controller';
 import { CaddyReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/caddy-readonly.adapter';
+import { HomeAssistantReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { EnvironmentReadonlyHttpClient } from './environment-dashboard/infrastructure/adapters/environment-readonly-http.client';
 import { JenkinsReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/kubernetes-readonly.adapter';
 import { MihomoReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
+import { SunshineReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
 import { TencentCloudReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/tencent-cloud-readonly.adapter';
 import { WireguardReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/wireguard-readonly.adapter';
 import { LocalDevSignalCollector } from './environment-dashboard/infrastructure/collectors/local-dev-signal.collector';
@@ -53,12 +55,15 @@ import { NasProdSignalCollector } from './environment-dashboard/infrastructure/c
 import { EnvironmentDashboardCacheService } from './environment-dashboard/infrastructure/environment-dashboard-cache.service';
 import { EnvironmentDashboardConfigService } from './environment-dashboard/infrastructure/environment-dashboard-config.service';
 import { EnvironmentEventBusService } from './environment-dashboard/infrastructure/event/environment-event-bus.service';
+import { MobileHomeService } from './mobile-home/application/mobile-home.service';
+import { MobileHomeController } from './mobile-home/presentation/mobile-home.controller';
 
 export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   ComponentController,
   SystemLogController,
   AdminTimezoneController,
   EnvironmentDashboardController,
+  MobileHomeController,
   NetworkManagementController,
   NetworkPortForwardGroupController,
   NetworkOpenRedirectController,
@@ -79,6 +84,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   SystemLogService,
   AdminTimezoneService,
   EnvironmentDashboardService,
+  MobileHomeService,
   EnvironmentDashboardSelfCheckService,
   EnvironmentDashboardCacheService,
   EnvironmentDashboardConfigService,
@@ -89,8 +95,10 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   KubernetesReadonlyAdapter,
   TencentCloudReadonlyAdapter,
   CaddyReadonlyAdapter,
+  HomeAssistantReadonlyAdapter,
   WireguardReadonlyAdapter,
   MihomoReadonlyAdapter,
+  SunshineReadonlyAdapter,
   EnvironmentEventBusService,
   EnvironmentEventMaterializer,
   EnvironmentEventStreamService,

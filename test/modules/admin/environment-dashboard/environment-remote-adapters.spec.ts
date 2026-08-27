@@ -1,7 +1,9 @@
 import { CaddyReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/caddy-readonly.adapter';
+import { HomeAssistantReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { JenkinsReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/kubernetes-readonly.adapter';
 import { MihomoReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
+import { SunshineReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
 import { TencentCloudReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/tencent-cloud-readonly.adapter';
 import { WireguardReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/wireguard-readonly.adapter';
 import type {
@@ -43,6 +45,8 @@ describe('environment remote readonly adapters', () => {
     ['Caddy', new CaddyReadonlyAdapter(config)],
     ['WireGuard', new WireguardReadonlyAdapter(config)],
     ['Mihomo', new MihomoReadonlyAdapter(config)],
+    ['Home Assistant', new HomeAssistantReadonlyAdapter(config)],
+    ['Sunshine', new SunshineReadonlyAdapter(config)],
   ])(
     '%s returns unwired evidence when config is missing',
     async (_, adapter) => {
@@ -59,12 +63,25 @@ describe('environment remote readonly adapters', () => {
       config,
     ).inspect();
     const mihomoSignal = await new MihomoReadonlyAdapter(config).inspect();
+    const homeAssistantSignal = await new HomeAssistantReadonlyAdapter(
+      config,
+    ).inspect();
+    const sunshineSignal = await new SunshineReadonlyAdapter(config).inspect();
 
     expect(tencentSignal.evidence[0].metadata?.missingConfigKeys).toContain(
       'ENV_DASHBOARD_TENCENT_SECRET_KEY',
     );
     expect(mihomoSignal.evidence[0].metadata?.missingConfigKeys).toContain(
       'ENV_DASHBOARD_R4SE_MIHOMO_SECRET',
+    );
+    expect(
+      homeAssistantSignal.evidence[0].metadata?.missingConfigKeys,
+    ).toContain('ENV_DASHBOARD_HOME_ASSISTANT_TOKEN');
+    expect(sunshineSignal.evidence[0].metadata?.missingConfigKeys).toEqual(
+      expect.arrayContaining([
+        'ENV_DASHBOARD_SUNSHINE_USERNAME',
+        'ENV_DASHBOARD_SUNSHINE_PASSWORD',
+      ]),
     );
   });
 
@@ -248,9 +265,7 @@ describe('environment remote readonly adapters', () => {
     const signal = await adapter.inspect();
 
     expect(http.head).toHaveBeenCalledWith('https://kt.example');
-    expect(http.get).toHaveBeenCalledWith(
-      'http://caddy-admin.example/config/',
-    );
+    expect(http.get).toHaveBeenCalledWith('http://caddy-admin.example/config/');
     expect(signal.status).toBe('ok');
     expect(signal.evidence[0].metadata).toEqual(
       expect.objectContaining({
@@ -343,6 +358,150 @@ describe('environment remote readonly adapters', () => {
       }),
     );
     expect(JSON.stringify(signal)).not.toContain('mihomo-secret');
+  });
+
+  it('Home Assistant reads only the authenticated API root and verifies the official ready message', async () => {
+    const http = createHttpMock();
+    http.get.mockResolvedValue(httpResponse({ message: 'API running.' }));
+    const adapter = new HomeAssistantReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_HOME_ASSISTANT_TOKEN: 'ha-secret',
+        ENV_DASHBOARD_HOME_ASSISTANT_URL: 'http://home-assistant.example',
+      }),
+      http,
+    );
+
+    const signal = await adapter.inspect();
+
+    expect(http.get).toHaveBeenCalledWith(
+      'http://home-assistant.example/api/',
+      {
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer ha-secret',
+        },
+      },
+    );
+    expect(http.head).not.toHaveBeenCalled();
+    expect(http.request).not.toHaveBeenCalled();
+    expect(signal).toMatchObject({
+      id: 'home-assistant-api',
+      sourceKind: 'live',
+      status: 'ok',
+    });
+    expect(signal.evidence[0].metadata).toEqual({
+      apiReady: true,
+      httpStatus: 200,
+    });
+    expect(JSON.stringify(signal)).not.toContain('ha-secret');
+    expect(JSON.stringify(signal)).not.toContain('API running.');
+  });
+
+  it('Home Assistant degrades a successful response that is not the official API root contract', async () => {
+    const http = createHttpMock();
+    http.get.mockResolvedValue(httpResponse({ message: 'frontend page' }));
+    const adapter = new HomeAssistantReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_HOME_ASSISTANT_TOKEN: 'ha-secret',
+        ENV_DASHBOARD_HOME_ASSISTANT_URL: 'http://home-assistant.example',
+      }),
+      http,
+    );
+
+    const signal = await adapter.inspect();
+
+    expect(signal.status).toBe('degraded');
+    expect(signal.summary).toBe('Home Assistant API 返回了非预期健康响应');
+  });
+
+  it('Sunshine reads only the authenticated application list without exposing its body', async () => {
+    const http = createHttpMock();
+    http.get.mockResolvedValue(
+      httpResponse([{ cmd: 'private-command', name: 'Desktop' }]),
+    );
+    const adapter = new SunshineReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_SUNSHINE_PASSWORD: 'sun-pass',
+        ENV_DASHBOARD_SUNSHINE_URL: 'https://sunshine.example',
+        ENV_DASHBOARD_SUNSHINE_USERNAME: 'sun-user',
+      }),
+      http,
+    );
+
+    const signal = await adapter.inspect();
+
+    expect(http.get).toHaveBeenCalledWith('https://sunshine.example/api/apps', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${Buffer.from('sun-user:sun-pass').toString(
+          'base64',
+        )}`,
+      },
+    });
+    expect(http.head).not.toHaveBeenCalled();
+    expect(http.request).not.toHaveBeenCalled();
+    expect(signal).toMatchObject({
+      id: 'sunshine-api',
+      sourceKind: 'live',
+      status: 'ok',
+    });
+    expect(signal.evidence[0].metadata).toEqual({ httpStatus: 200 });
+    expect(JSON.stringify(signal)).not.toContain('sun-pass');
+    expect(JSON.stringify(signal)).not.toContain('private-command');
+  });
+
+  it.each([401, 403])(
+    'returns stable degraded evidence for Home Assistant HTTP %s without leaking auth',
+    async (status) => {
+      const http = createHttpMock();
+      http.get.mockRejectedValue({
+        isAxiosError: true,
+        message: `Request failed with status code ${status}`,
+        response: { status },
+      });
+      const adapter = new HomeAssistantReadonlyAdapter(
+        new EnvironmentDashboardConfigService({
+          ENV_DASHBOARD_HOME_ASSISTANT_TOKEN: 'ha-secret',
+          ENV_DASHBOARD_HOME_ASSISTANT_URL: 'http://home-assistant.example',
+        }),
+        http,
+      );
+
+      const signal = await adapter.inspect();
+
+      expect(signal).toMatchObject({
+        sourceKind: 'derived',
+        status: 'degraded',
+        summary: `只读认证失败 (HTTP ${status})`,
+      });
+      expect(JSON.stringify(signal)).not.toContain('ha-secret');
+    },
+  );
+
+  it('returns stable degraded evidence for Sunshine timeouts without leaking credentials', async () => {
+    const http = createHttpMock();
+    http.get.mockRejectedValue({
+      code: 'ECONNABORTED',
+      isAxiosError: true,
+      message: 'timeout of 5000ms exceeded',
+    });
+    const adapter = new SunshineReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_SUNSHINE_PASSWORD: 'sun-pass',
+        ENV_DASHBOARD_SUNSHINE_URL: 'https://sunshine.example',
+        ENV_DASHBOARD_SUNSHINE_USERNAME: 'sun-user',
+      }),
+      http,
+    );
+
+    const signal = await adapter.inspect();
+
+    expect(signal).toMatchObject({
+      sourceKind: 'derived',
+      status: 'degraded',
+      summary: '只读观测请求超时',
+    });
+    expect(JSON.stringify(signal)).not.toContain('sun-pass');
   });
 
   it('returns degraded error evidence when a configured readonly probe fails', async () => {

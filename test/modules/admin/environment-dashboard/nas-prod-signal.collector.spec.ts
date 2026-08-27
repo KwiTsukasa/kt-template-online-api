@@ -21,6 +21,24 @@ describe('NasProdSignalCollector', () => {
         summary: 'K8s deployment is healthy',
       })),
     };
+    const homeAssistantAdapter = {
+      inspect: jest.fn(async () => ({
+        id: 'home-assistant-api',
+        label: 'Home Assistant API',
+        sourceKind: 'live',
+        status: 'ok',
+        summary: 'Home Assistant API 可用',
+      })),
+    };
+    const sunshineAdapter = {
+      inspect: jest.fn(async () => ({
+        id: 'sunshine-api',
+        label: 'Sunshine API',
+        sourceKind: 'live',
+        status: 'ok',
+        summary: 'Sunshine API 可用',
+      })),
+    };
     const collector = new NasProdSignalCollector(
       {
         getRuntimeHealth: jest.fn(() => ({
@@ -64,7 +82,14 @@ describe('NasProdSignalCollector', () => {
         ENV_DASHBOARD_K8S_API_SERVER: 'https://kubernetes.example.test',
         ENV_DASHBOARD_K8S_DEPLOYMENT: 'kt-template-online-api',
         ENV_DASHBOARD_K8S_NAMESPACE: 'kt-prod',
+        ENV_DASHBOARD_HOME_ASSISTANT_TOKEN: 'ha-secret',
+        ENV_DASHBOARD_HOME_ASSISTANT_URL: 'http://home-assistant.example',
+        ENV_DASHBOARD_SUNSHINE_PASSWORD: 'sun-pass',
+        ENV_DASHBOARD_SUNSHINE_URL: 'https://sunshine.example',
+        ENV_DASHBOARD_SUNSHINE_USERNAME: 'sun-user',
       }),
+      homeAssistantAdapter as any,
+      sunshineAdapter as any,
     );
 
     const site = await collector.collect({
@@ -93,7 +118,15 @@ describe('NasProdSignalCollector', () => {
       services.find((service) => service.id === 'kubernetes')?.signals[0]
         .sourceKind,
     ).toBe('live');
+    expect(
+      services.find((service) => service.id === 'home-assistant'),
+    ).toMatchObject({ status: 'ok' });
+    expect(services.find((service) => service.id === 'sunshine')).toMatchObject(
+      { status: 'ok' },
+    );
     expect(jenkinsAdapter.inspect).toHaveBeenCalledTimes(1);
     expect(kubernetesAdapter.inspect).toHaveBeenCalledTimes(1);
+    expect(homeAssistantAdapter.inspect).toHaveBeenCalledTimes(1);
+    expect(sunshineAdapter.inspect).toHaveBeenCalledTimes(1);
   });
 });

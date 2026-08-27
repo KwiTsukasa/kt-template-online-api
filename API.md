@@ -89,15 +89,20 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 
 ## Admin Environment Dashboard
 
-| 方法   | 路径                                | 认证 | 说明                                              |
-| ------ | ----------------------------------- | ---- | ------------------------------------------------- |
-| `GET`  | `/system/environment/dashboard`     | 是   | 返回 local-dev、NAS 线上、腾讯云、r4se 环境快照   |
-| `POST` | `/system/environment/self-check`    | 是   | 触发只读自检并返回最新环境快照                    |
-| `GET`  | `/system/environment/events/stream` | 是   | SSE 推送后端环境事件，支持 `lastEventId` 查询参数 |
+| 方法   | 路径                                | 认证  | 说明                                              |
+| ------ | ----------------------------------- | ----- | ------------------------------------------------- |
+| `GET`  | `/system/environment/dashboard`     | 是    | 返回 local-dev、NAS 线上、腾讯云、r4se 环境快照   |
+| `POST` | `/system/environment/self-check`    | 是    | 触发只读自检并返回最新环境快照                    |
+| `GET`  | `/system/environment/events/stream` | 是    | SSE 推送后端环境事件，支持 `lastEventId` 查询参数 |
+| `GET`  | `/system/mobile-home/bootstrap`     | super | 返回 KwiCore 环境与站内信只读聚合快照             |
 
 环境总览接口使用 `Site -> Node -> Service -> Signal` 模型聚合状态，`unwired` 表示只读观测尚未配置，`unknown` 表示已知入口但缺少新鲜证据。Admin 首次加载通过 HTTP 获取快照，后续通过 API SSE 接收 local/MQTT 事件；前端不直接连接 MQTT，也不使用定时轮询。
 
 当前版本只提供观测和只读自检。重启 Pod、触发 Jenkins 部署、执行迁移、重建 NapCat 容器、启停插件、立即执行插件任务、修改 Caddy/OpenClash/WireGuard/Tencent Cloud 等高风险能力只会以禁用动作展示，后端不提供通用写动作入口。
+
+KwiCore Mobile Home 聚合接口返回 `data.environment` 与 `data.notices.items/total/unreadCount`，响应带 `Cache-Control: no-store`。通知仅投影移动端展示白名单并用 `KtDateTimeField` 格式化 `createTime/lastSeenAt`；环境与站内信权威读取并行执行，任一失败时接口整体失败。Remote 节点、短期 session、relay 和设置本机状态不进入该聚合合同。
+
+NAS 环境快照额外保留两个稳定只读服务：`home-assistant` 固定 Bearer `GET /api/` 并只在 HTTP 成功且返回 `message="API running."` 时为 `ok`；`sunshine` 固定 Basic `GET /api/apps` 并只投影 HTTP 状态，不返回应用列表。两者缺配置为 `unwired`，HTTP 401/403 或请求超时为脱敏 `degraded`。所需私有键仅为 `ENV_DASHBOARD_HOME_ASSISTANT_URL`、`ENV_DASHBOARD_HOME_ASSISTANT_TOKEN`、`ENV_DASHBOARD_SUNSHINE_URL`、`ENV_DASHBOARD_SUNSHINE_USERNAME`、`ENV_DASHBOARD_SUNSHINE_PASSWORD`；接口不接受任何控制动作。
 
 ## System 网络管理
 

@@ -4,6 +4,8 @@ import { validateDescriptorManifestEntry } from './media-governance-domain';
 const MAX_DESCRIPTOR_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 10_000;
 const MAX_NESTING_DEPTH = 64;
+const DIRECT_SUBTITLE_SUFFIX = /\.(?:ass|ssa|srt|vtt)$/iu;
+const ASSRT_WEB_SEED_PATH = /^\/download\/\d{1,12}\/-\/\d{1,6}\/[^/]+\.(?:ass|ssa|srt|vtt)$/iu;
 
 type BencodeValue =
   | Buffer
@@ -285,6 +287,90 @@ function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
 }
 
 /**
+ * 仅接受单文件 Assrt HTTPS 字幕 web-seed，并把 torrent piece 摘要保留给执行器复核载荷。
+ * @param root - 已解析的 torrent 根字典。
+ * @param info - 参与 info-hash 的 torrent 字典。
+ * @param manifest - 已通过路径和文件类型校验的清单。
+ * @returns 唯一安全 web-seed 的地址、分片长度和逐片 SHA-1；没有 web-seed 时返回 `null`。
+ * @throws 当 web-seed 不是唯一 Assrt HTTPS 单字幕文件，或 piece 合同与文件大小不一致时抛出。
+ */
+function parseDirectSubtitleWebSeed(
+  root: Map<string, BencodeValue>,
+  info: Map<string, BencodeValue>,
+  manifest: ManifestEntry[],
+) {
+  const raw = root.get('url-list');
+  if (raw === undefined) return null;
+  let values: BencodeValue[] = [];
+  if (Buffer.isBuffer(raw)) {
+    values = [raw];
+  } else if (Array.isArray(raw)) {
+    values = raw;
+  } else {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  if (values.length !== 1 || manifest.length !== 1) {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  const webSeedText = requireBytes(
+    values[0],
+    'torrent-descriptor-web-seed-invalid',
+  ).toString('utf8');
+  let webSeed: URL;
+  try {
+    webSeed = new URL(webSeedText);
+  } catch {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  const entry = manifest[0]!;
+  if (webSeed.protocol !== 'https:' || webSeed.hostname !== '2.assrt.net') {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  if (webSeed.port || webSeed.username || webSeed.password) {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  if (webSeed.search || webSeed.hash) {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  if (
+    !ASSRT_WEB_SEED_PATH.test(webSeed.pathname) ||
+    !DIRECT_SUBTITLE_SUFFIX.test(entry.relativePath)
+  ) {
+    throw new Error('torrent-descriptor-web-seed-invalid');
+  }
+  const pieceLength = info.get('piece length');
+  const pieces = requireBytes(
+    info.get('pieces'),
+    'torrent-descriptor-piece-contract-invalid',
+  );
+  const expectedPieceCount = Math.ceil(entry.sizeBytes / Number(pieceLength));
+  if (!Number.isSafeInteger(pieceLength)) {
+    throw new Error('torrent-descriptor-piece-contract-invalid');
+  }
+  if (
+    Number(pieceLength) < 16 * 1024 ||
+    Number(pieceLength) > 16 * 1024 * 1024
+  ) {
+    throw new Error('torrent-descriptor-piece-contract-invalid');
+  }
+  if (
+    pieces.length % 20 !== 0 ||
+    pieces.length / 20 !== expectedPieceCount
+  ) {
+    throw new Error('torrent-descriptor-piece-contract-invalid');
+  }
+  const pieceSha1: string[] = [];
+  for (let offset = 0; offset < pieces.length; offset += 20) {
+    pieceSha1.push(pieces.subarray(offset, offset + 20).toString('hex'));
+  }
+  return {
+    pieceLength: Number(pieceLength),
+    pieceSha1,
+    urls: [webSeed.toString()],
+  };
+}
+
+/**
  * 解析并校验种子描述符，返回 info hash、文件清单及稳定摘要。
  * @param bytes - 用于并校验种子描述符，返回 info hash、文件清单及稳定摘要的领域对象，包含 `length`、`subarray` 字段。
  * @returns 包含 `descriptorSha256`、`infoHash`、`manifest`、`manifestSha256` 字段的并校验种子描述符，返回 info hash、文件清单及稳定摘要。
@@ -308,6 +394,7 @@ export function parseTorrentDescriptor(bytes: Buffer) {
   );
   return {
     descriptorSha256: createHash('sha256').update(bytes).digest('hex'),
+    directSubtitleWebSeed: parseDirectSubtitleWebSeed(root, info, manifest),
     infoHash: createHash('sha1').update(infoBytes).digest('hex'),
     manifest,
     manifestSha256: createHash('sha256')

@@ -241,7 +241,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
@@ -648,7 +649,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      magnetUri:
+        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
       sourceRole: 'primary_media',
     });
     source.manifest = [
@@ -703,15 +705,13 @@ describe('MediaGovernanceService production execution adapter', () => {
     const primary = await service.addMagnetSource(task.id, {
       contentKind: 'subtitleless_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       sourceRole: 'primary_media',
     });
     const subtitle = await service.addMagnetSource(task.id, {
       contentKind: 'sidecar_subtitle_package',
       expectedRevision: 2,
-      magnetUri:
-        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
       releaseGroup: 'Assrt-Original',
       sourceRole: 'supplemental_subtitle',
     });
@@ -2528,6 +2528,113 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(task.units[0]!.metadataProjection).toEqual(projectionBefore);
     expect(task.units[0]!.evidenceSha256).toBeNull();
     expect(task.activeRunId).toBe(envelope.runId);
+  });
+
+  it('continues a sealed identity absence through deterministic metadata repair', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2004,
+      seasonNumbers: ['S01'],
+      titleHint: '死神BLEACH',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '30984',
+      providerTitle: 'BLEACH',
+      releaseYear: 2004,
+    };
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.stage = 'metadata';
+    sealCanonicalPlan(task);
+    task.sealedPlan = {
+      ...task.sealedPlan!,
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: task.providerRef,
+        releaseYear: 2004,
+        title: task.titleHint,
+      },
+      metadataIdentity: { ...task.metadataIdentity },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+
+    await service.startMetadataVerification(task.id, { expectedRevision: 1 });
+    const verifyEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: verifyEnvelope.runId,
+      sequence: 1,
+      summary: '元数据核验开始',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'd'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: false,
+        repairAttempts: 0,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: false,
+            missingA: ['identity.provider', 'identity.providerId'],
+            missingB: [
+              'metadata.local-nfo',
+              'artwork.poster',
+              'title.episode',
+              'summary.episode',
+              'date.episode',
+            ],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: verifyEnvelope.runId,
+      sequence: 2,
+      summary: '密封身份尚未被飞牛观察到',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+
+    const repairEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(task.metadataIdentity).toEqual({
+      provider: 'tmdb',
+      providerId: '30984',
+      providerTitle: 'BLEACH',
+      releaseYear: 2004,
+    });
+    expect(task).toMatchObject({
+      activeRunId: repairEnvelope.runId,
+      metadataStatus: 'requires-agent',
+      revision: 4,
+      runState: 'queued',
+      stage: 'metadata',
+    });
+    expect(repairEnvelope).toMatchObject({
+      action: 'metadata.repair',
+      metadataRepairAttempt: 1,
+      replayKey: `${task.id}:metadata.repair:r4`,
+      taskRevision: 4,
+    });
+    expect(repairEnvelope.runId).not.toBe(verifyEnvelope.runId);
+    expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
   it('rechecks deferred fnOS identity through the deterministic metadata path', async () => {

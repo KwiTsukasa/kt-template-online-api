@@ -1525,20 +1525,23 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (sealedMetadataIdentity) {
       const observedIdentity = metadata.identity;
       if (!observedIdentity) {
-        throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
-      }
-      const providerChanged =
-        sealedMetadataIdentity.provider !== observedIdentity.provider ||
-        sealedMetadataIdentity.providerId !== observedIdentity.providerId;
-      const releaseYearChanged =
-        sealedMetadataIdentity.releaseYear !== observedIdentity.releaseYear;
-      const sealedProviderTitle = sealedMetadataIdentity.providerTitle;
-      const providerTitleChanged =
-        typeof sealedProviderTitle === 'string' &&
-        sealedProviderTitle.trim().length > 0 &&
-        sealedProviderTitle !== observedIdentity.providerTitle;
-      if (providerChanged || releaseYearChanged || providerTitleChanged) {
-        throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
+        if (!this.isSealedMetadataIdentityGap(task, metadata.units)) {
+          throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
+        }
+      } else {
+        const providerChanged =
+          sealedMetadataIdentity.provider !== observedIdentity.provider ||
+          sealedMetadataIdentity.providerId !== observedIdentity.providerId;
+        const releaseYearChanged =
+          sealedMetadataIdentity.releaseYear !== observedIdentity.releaseYear;
+        const sealedProviderTitle = sealedMetadataIdentity.providerTitle;
+        const providerTitleChanged =
+          typeof sealedProviderTitle === 'string' &&
+          sealedProviderTitle.trim().length > 0 &&
+          sealedProviderTitle !== observedIdentity.providerTitle;
+        if (providerChanged || releaseYearChanged || providerTitleChanged) {
+          throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
+        }
       }
     }
     const planHasEmptyMetadataIdentity =
@@ -1767,15 +1770,41 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 仅把已密封二级身份尚未被飞牛观察到的精确双字段缺口判为可确定修复，不放宽其他 A 级缺项。
+   * @param task - 必须已在密封计划中声明非空二级元数据身份的当前任务。
+   * @param units - 本轮执行器证据或任务投影中的逐单元 A 级缺项。
+   * @returns 所有单元都只缺 `identity.provider` 与 `identity.providerId` 时为 `true`。
+   */
+  private isSealedMetadataIdentityGap(
+    task: MediaGovernanceTask,
+    units: Array<{ missingA: string[] }>,
+  ) {
+    if (!mediaGovernancePlanMetadataIdentity(task.sealedPlan)) return false;
+    if (units.length === 0) return false;
+    const identityFields = new Set([
+      'identity.provider',
+      'identity.providerId',
+    ]);
+    return units.every(
+      (unit) =>
+        unit.missingA.length === identityFields.size &&
+        unit.missingA.every((field) => identityFields.has(field)),
+    );
+  }
+
+  /**
    * 仅在 A/C 级缺项均为空时判断 B 级缺项是否仍满足最多两次修复边界。
    * @param task - 用于核对 A/B/C 缺项与修复次数的媒体治理任务。
-   * @returns A/C 均为空、至少存在一个 B 级缺项且修复次数未耗尽时为 `true`。
+   * @returns A/C 均为空或 A 仅为密封身份尚未观察到、至少存在一个 B 缺项且次数未耗尽时为 `true`。
    */
   private canRunBoundedMetadataRepair(task: MediaGovernanceTask) {
     const projections = task.units.map((unit) => unit.metadataProjection);
+    const missingAClosed = projections.every(
+      (projection) => projection.missingA.length === 0,
+    );
     return (
       this.metadataRepairAttempts(task) < 2 &&
-      projections.every((projection) => projection.missingA.length === 0) &&
+      (missingAClosed || this.isSealedMetadataIdentityGap(task, projections)) &&
       projections.every((projection) => projection.missingC.length === 0) &&
       projections.some((projection) => projection.missingB.length > 0)
     );

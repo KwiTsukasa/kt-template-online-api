@@ -62,6 +62,7 @@ export class CodexRemoteService {
       jti: randomUUID(),
       nbf: issuedAt - 5,
       nodeId: node.id,
+      projectCwd: project.cwd,
       projectId: project.id,
       sub: user.id,
       username: user.username,

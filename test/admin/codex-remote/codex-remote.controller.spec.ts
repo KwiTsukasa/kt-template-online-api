@@ -79,6 +79,7 @@ describe('CodexRemoteController', () => {
     ).toEqual(
       expect.objectContaining({
         aud: 'kt-codex-remote-nas',
+        projectCwd: '/srv/kt',
         projectId: 'kt',
         sub: '2041700000000000002',
       }),

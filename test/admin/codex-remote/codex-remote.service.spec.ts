@@ -70,6 +70,7 @@ describe('CodexRemoteService', () => {
         aud: 'kt-codex-remote-nas',
         iss: 'kt-admin-sso',
         nodeId: 'nas',
+        projectCwd: '/home/kt/workspace',
         projectId: 'kt',
         sub: '2041700000000000002',
         username: 'kwitsukasa',

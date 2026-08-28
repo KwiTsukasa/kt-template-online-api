@@ -44,10 +44,10 @@ describe('EnvironmentEventStreamService', () => {
       eventId: 'evt-current',
       observedAt: '2026-06-18T08:00:00.000Z',
       severity: 'ok',
-      siteId: 'local-dev',
+      siteId: 'nas-prod',
       sourceKind: 'local',
       summary: 'current event',
-      topic: 'kt/env/local-dev/api/event',
+      topic: 'kt/env/nas-prod/api/event',
     });
 
     const first = await stream.stream('evt-missing').pipe(take(1)).toPromise();

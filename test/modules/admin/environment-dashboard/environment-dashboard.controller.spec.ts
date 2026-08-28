@@ -132,13 +132,13 @@ describe('EnvironmentDashboardController readonly HTTP smoke', () => {
 
     expect(
       snapshotResponse.body.data.sites.map((site: { id: string }) => site.id),
-    ).toEqual(['local-dev', 'nas-prod', 'tencent-cloud', 'r4se']);
+    ).toEqual(['windows-pc', 'nas-prod', 'r4se']);
     expect(JSON.stringify(snapshotResponse.body.data)).toContain('unwired');
 
     const selfCheckResponse = await request(app.getHttpServer())
       .post('/system/environment/self-check')
       .expect(200);
 
-    expect(selfCheckResponse.body.data.sites).toHaveLength(4);
+    expect(selfCheckResponse.body.data.sites).toHaveLength(3);
   });
 });

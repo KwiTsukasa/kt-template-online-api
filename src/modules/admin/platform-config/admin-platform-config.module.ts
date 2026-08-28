@@ -41,17 +41,16 @@ import { EnvironmentDashboardSelfCheckService } from './environment-dashboard/ap
 import { EnvironmentEventMaterializer } from './environment-dashboard/application/environment-event.materializer';
 import { EnvironmentEventStreamService } from './environment-dashboard/application/environment-event-stream.service';
 import { EnvironmentDashboardController } from './environment-dashboard/presentation/environment-dashboard.controller';
-import { CaddyReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/caddy-readonly.adapter';
+import { CodexAppServerReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { EnvironmentReadonlyHttpClient } from './environment-dashboard/infrastructure/adapters/environment-readonly-http.client';
 import { JenkinsReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/kubernetes-readonly.adapter';
 import { MihomoReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
 import { SunshineReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
-import { TencentCloudReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/tencent-cloud-readonly.adapter';
 import { WireguardReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/wireguard-readonly.adapter';
-import { LocalDevSignalCollector } from './environment-dashboard/infrastructure/collectors/local-dev-signal.collector';
 import { NasProdSignalCollector } from './environment-dashboard/infrastructure/collectors/nas-prod-signal.collector';
+import { WindowsPcSignalCollector } from './environment-dashboard/infrastructure/collectors/windows-pc-signal.collector';
 import { EnvironmentDashboardCacheService } from './environment-dashboard/infrastructure/environment-dashboard-cache.service';
 import { EnvironmentDashboardConfigService } from './environment-dashboard/infrastructure/environment-dashboard-config.service';
 import { EnvironmentEventBusService } from './environment-dashboard/infrastructure/event/environment-event-bus.service';
@@ -88,13 +87,12 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentDashboardSelfCheckService,
   EnvironmentDashboardCacheService,
   EnvironmentDashboardConfigService,
-  LocalDevSignalCollector,
+  WindowsPcSignalCollector,
   NasProdSignalCollector,
   EnvironmentReadonlyHttpClient,
   JenkinsReadonlyAdapter,
   KubernetesReadonlyAdapter,
-  TencentCloudReadonlyAdapter,
-  CaddyReadonlyAdapter,
+  CodexAppServerReadonlyAdapter,
   HomeAssistantReadonlyAdapter,
   WireguardReadonlyAdapter,
   MihomoReadonlyAdapter,

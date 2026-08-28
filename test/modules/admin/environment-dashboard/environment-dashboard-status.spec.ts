@@ -22,17 +22,17 @@ describe('environment dashboard status mapper', () => {
     expect(
       countSignals([
         {
-          id: 'local-dev',
-          label: 'Local Dev',
+          id: 'windows-pc',
+          label: 'Windows PC',
           status: 'online',
           nodes: [
             {
-              id: 'local-dev-api',
-              label: 'API',
+              id: 'windows-pc-node',
+              label: 'Windows PC',
               services: [
                 {
-                  id: 'local-dev-api-service',
-                  label: 'API Service',
+                  id: 'sunshine',
+                  label: 'Sunshine',
                   status: 'ok',
                   signals: [
                     {

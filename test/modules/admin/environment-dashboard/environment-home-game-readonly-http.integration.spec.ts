@@ -1,8 +1,11 @@
 import { createServer, type Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import type { AddressInfo } from 'node:net';
+import { CodexAppServerReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
+import { MihomoReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
 import { SunshineReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
+import { WireguardReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/wireguard-readonly.adapter';
 import { EnvironmentReadonlyHttpClient } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/environment-readonly-http.client';
 import { EnvironmentDashboardConfigService } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/environment-dashboard-config.service';
 
@@ -90,6 +93,33 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
       ) {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(JSON.stringify([{ name: 'Desktop' }]));
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/codex/readyz') {
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('private readiness detail');
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/r4se/') {
+        response.writeHead(200, { 'content-type': 'text/html' });
+        response.end('private router page');
+        return;
+      }
+      if (
+        request.method === 'GET' &&
+        request.url?.startsWith('/mihomo/') &&
+        request.headers.authorization === 'Bearer mihomo-local-secret'
+      ) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        if (request.url === '/mihomo/version') {
+          response.end(JSON.stringify({ version: '1.19.0' }));
+          return;
+        }
+        if (request.url === '/mihomo/configs') {
+          response.end(JSON.stringify({ mode: 'rule' }));
+          return;
+        }
+        response.end(JSON.stringify({ proxies: { DIRECT: {}, Proxy: {} } }));
         return;
       }
       response.writeHead(401, { 'content-type': 'application/json' });
@@ -226,5 +256,56 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
     expect(homeAssistantSignal.summary).toContain('self-signed certificate');
     expect(JSON.stringify(sunshineSignal)).not.toContain('Desktop');
     expect(JSON.stringify(sunshineSignal)).not.toContain('sun-local-secret');
+  });
+
+  it('uses fixed read-only paths for Codex App Server, R4SE WireGuard, and Mihomo', async () => {
+    const http = new EnvironmentReadonlyHttpClient({ timeoutMs: 1000 });
+    const codex = new CodexAppServerReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_CODEX_APP_SERVER_URL: `${baseUrl}/codex/`,
+      }),
+      http,
+    );
+    const wireguard = new WireguardReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL: `${baseUrl}/r4se/`,
+      }),
+      http,
+    );
+    const mihomo = new MihomoReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_R4SE_MIHOMO_SECRET: 'mihomo-local-secret',
+        ENV_DASHBOARD_R4SE_MIHOMO_URL: `${baseUrl}/mihomo/`,
+      }),
+      http,
+    );
+
+    const [codexSignal, wireguardSignal, mihomoSignal] = await Promise.all([
+      codex.inspect(),
+      wireguard.inspect(),
+      mihomo.inspect(),
+    ]);
+
+    expect([
+      codexSignal.status,
+      wireguardSignal.status,
+      mihomoSignal.status,
+    ]).toEqual(['ok', 'ok', 'ok']);
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: 'GET', url: '/codex/readyz' }),
+        expect.objectContaining({ method: 'GET', url: '/r4se/' }),
+        expect.objectContaining({ method: 'GET', url: '/mihomo/version' }),
+        expect.objectContaining({ method: 'GET', url: '/mihomo/configs' }),
+        expect.objectContaining({ method: 'GET', url: '/mihomo/proxies' }),
+      ]),
+    );
+    expect(JSON.stringify(codexSignal)).not.toContain(
+      'private readiness detail',
+    );
+    expect(JSON.stringify(wireguardSignal)).not.toContain(
+      'private router page',
+    );
+    expect(JSON.stringify(mihomoSignal)).not.toContain('mihomo-local-secret');
   });
 });

@@ -17,10 +17,10 @@ describe('environment event bus service', () => {
       eventId: 'evt-local-1',
       observedAt: '2026-06-18T01:00:00.000Z',
       severity: 'ok',
-      siteId: 'local-dev',
+      siteId: 'nas-prod',
       sourceKind: 'local',
       summary: 'local ready',
-      topic: 'kt/env/event/local-dev/api/runtime',
+      topic: 'kt/env/event/nas-prod/api/runtime',
     });
 
     unsubscribe();

@@ -2,7 +2,7 @@ import { EnvironmentDashboardService } from '../../../../src/modules/admin/platf
 import { EnvironmentEventMaterializer } from '../../../../src/modules/admin/platform-config/environment-dashboard/application/environment-event.materializer';
 
 describe('EnvironmentDashboardService', () => {
-  it('returns four sites with explicit unwired remote evidence and full NAS topology', async () => {
+  it('returns the exact three-device and seven-service authoritative topology', async () => {
     const service = new EnvironmentDashboardService(
       new EnvironmentEventMaterializer(),
     );
@@ -10,43 +10,47 @@ describe('EnvironmentDashboardService', () => {
     const dashboard = await service.getDashboard();
 
     expect(dashboard.sites.map((site) => site.id)).toEqual([
-      'local-dev',
+      'windows-pc',
       'nas-prod',
-      'tencent-cloud',
       'r4se',
+    ]);
+    expect(dashboard.sites.map((site) => site.label)).toEqual([
+      'Windows PC',
+      'NAS',
+      'R4SE',
     ]);
     expect(dashboard.summary.totalSignals).toBeGreaterThan(0);
     const topologyNodeIds = dashboard.topology.nodes.map((node) => node.id);
     expect(topologyNodeIds).toEqual(
       expect.arrayContaining([
-        'local-dev',
+        'windows-pc',
         'nas-prod',
-        'tencent-cloud',
         'r4se',
+        'sunshine',
+        'codex-app-server',
         'nas-api',
-        'nas-admin',
-        'mysql',
-        'redis',
-        'loki',
-        'minio',
+        'home-assistant',
         'bot-core',
-        'napcat-runtime',
-        'plugin-platform',
-        'plugin-tasks',
+        'r4se-wireguard',
+        'r4se-mihomo',
       ]),
     );
-    expect(topologyNodeIds).not.toContain('wordpress');
-    expect(
-      dashboard.sites
-        .flatMap((site) => site.nodes)
-        .flatMap((node) => node.services)
-        .flatMap((serviceItem) => serviceItem.signals)
-        .some(
-          (signal) =>
-            signal.sourceKind === 'unwired' &&
-            /Jenkins|K8s|Tencent|r4se|WireGuard|Mihomo/.test(signal.label),
-        ),
-    ).toBe(true);
+    const serviceIds = dashboard.sites
+      .flatMap((site) => site.nodes)
+      .flatMap((node) => node.services)
+      .map((serviceItem) => serviceItem.id);
+    expect(serviceIds).toEqual([
+      'sunshine',
+      'codex-app-server',
+      'nas-api',
+      'home-assistant',
+      'bot-core',
+      'r4se-wireguard',
+      'r4se-mihomo',
+    ]);
+    expect(JSON.stringify(dashboard)).not.toMatch(
+      /local-dev|tencent-cloud|Tencent Cloud|Caddy/,
+    );
   });
 
   it('keeps high-risk actions visible but disabled', async () => {
@@ -66,6 +70,12 @@ describe('EnvironmentDashboardService', () => {
     expect(deployAction?.disabledReason).toContain('只读');
     expect(
       dashboard.actions.some((action) => action.id === 'wordpress-import'),
+    ).toBe(false);
+    expect(
+      dashboard.actions.some((action) => action.id === 'reload-caddy'),
+    ).toBe(false);
+    expect(
+      dashboard.actions.some((action) => action.id === 'restart-tencent-cvm'),
     ).toBe(false);
   });
 });

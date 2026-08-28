@@ -127,14 +127,12 @@ export class EnvironmentEventBusService
       } as EnvironmentEventEnvelope);
     } catch (err) {
       this.logger.warn(
-        `Environment MQTT payload ignored: ${
-          (() => {
-            if (err instanceof Error) {
-              return err.message;
-            }
-            return 'invalid json';
-          })()
-        }`,
+        `Environment MQTT payload ignored: ${(() => {
+          if (err instanceof Error) {
+            return err.message;
+          }
+          return 'invalid json';
+        })()}`,
       );
     }
   }
@@ -174,10 +172,10 @@ export class EnvironmentEventBusService
       eventId: `env-bus-${Date.now()}`,
       observedAt: new Date().toISOString(),
       severity: 'unknown',
-      siteId: 'local-dev',
+      siteId: 'nas-prod',
       sourceKind: 'local',
       summary,
-      topic: `${this.options.topicPrefix}/event/local-dev/environment-event-bus/status`,
+      topic: `${this.options.topicPrefix}/event/nas-prod/environment-event-bus/status`,
     };
   }
 }

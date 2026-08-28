@@ -25,7 +25,7 @@ describe('EnvironmentDashboardSelfCheckService', () => {
 
     expect(eventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
-        siteId: 'local-dev',
+        siteId: 'nas-prod',
         sourceKind: 'local',
       }),
     );

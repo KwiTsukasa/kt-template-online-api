@@ -8,12 +8,12 @@ const dashboard: EnvironmentDashboardResponse = {
   refreshedAt: '2026-06-18T08:00:00.000Z',
   sites: [
     {
-      id: 'local-dev',
-      label: 'Local Dev',
+      id: 'windows-pc',
+      label: 'Windows PC',
       nodes: [
         {
-          id: 'local-dev-api',
-          label: 'Local API',
+          id: 'windows-pc-node',
+          label: 'Windows PC',
           services: [
             {
               id: 'local-api',
@@ -62,9 +62,9 @@ describe('EnvironmentDashboardCacheService', () => {
     const cached = await cache.getOrCreate(factory);
 
     expect(factory).toHaveBeenCalledTimes(1);
-    expect(
-      cached.sites[0].nodes[0].services[0].signals[0].sourceKind,
-    ).toBe('cached');
+    expect(cached.sites[0].nodes[0].services[0].signals[0].sourceKind).toBe(
+      'cached',
+    );
     expect(cached.generatedAt).toBe(dashboard.generatedAt);
   });
 

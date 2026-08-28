@@ -1,9 +1,10 @@
 import { Injectable, Optional } from '@nestjs/common';
+import type { EnvironmentHealthStatus } from '../../domain/environment-dashboard.types';
 import { EnvironmentDashboardConfigService } from '../environment-dashboard-config.service';
 import { EnvironmentReadonlyHttpClient } from './environment-readonly-http.client';
 import {
-  createErrorAdapterSignal,
   createLiveAdapterSignal,
+  createReadonlyHttpFailureSignal,
   createUnwiredAdapterSignal,
   isReadonlyHttpOk,
 } from './environment-readonly-adapter.helpers';
@@ -20,55 +21,47 @@ export class WireguardReadonlyAdapter {
   }
 
   /**
-   * 根据当前运行态处理WireGuard只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal('wireguard', 'Wi…`。
-   * @returns WireGuard只读的记录。
+   * 只读请求 R4SE 的固定 WireGuard 地址，仅以该隧道地址的 HTTP 状态判断可达性。
+   * @returns 不含网络配置、Peer 或响应正文的 R4SE WireGuard 信号。
    */
   async inspect() {
     const missing = this.config.missing([
-      'ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL',
       'ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL',
     ]);
     if (missing.length > 0) {
-      return createUnwiredAdapterSignal('wireguard', 'WireGuard', missing);
+      return createUnwiredAdapterSignal('r4se-wireguard', 'WireGuard', missing);
     }
 
     try {
-      const tencentResponse = await this.http.get(
-        this.config.get('ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL'),
-      );
-      const r4seResponse = await this.http.get(
+      const response = await this.http.get(
         this.config.get('ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL'),
       );
-      const endpointStatuses = [
-        { label: 'tencent-cloud', status: tencentResponse.status },
-        { label: 'r4se', status: r4seResponse.status },
-      ];
-      const reachableCount = endpointStatuses.filter((endpoint) =>
-        isReadonlyHttpOk(endpoint.status),
-      ).length;
-      const status =
-        (() => {
-          if (reachableCount === endpointStatuses.length) {
-            return 'ok';
-          }
-          return 'degraded';
-        })();
-      const summary = `WireGuard health endpoints reachable ${reachableCount}/${endpointStatuses.length}`;
+      const reachable = isReadonlyHttpOk(response.status);
+      let status: EnvironmentHealthStatus = 'degraded';
+      let summary = `R4SE WireGuard 地址返回 HTTP ${response.status}`;
+      if (reachable) {
+        status = 'ok';
+        summary = 'R4SE WireGuard 地址可达';
+      }
 
       return createLiveAdapterSignal(
-        'wireguard',
+        'r4se-wireguard',
         'WireGuard',
         summary,
         {
-          endpointCount: endpointStatuses.length,
-          endpointStatuses,
-          reachableCount,
+          endpointCount: 1,
+          httpStatus: response.status,
+          reachable,
         },
         status,
-        tencentResponse.observedAt,
+        response.observedAt,
       );
     } catch (error) {
-      return createErrorAdapterSignal('wireguard', 'WireGuard', error);
+      return createReadonlyHttpFailureSignal(
+        'r4se-wireguard',
+        'WireGuard',
+        error,
+      );
     }
   }
 }

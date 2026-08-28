@@ -1,10 +1,9 @@
-import { CaddyReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/caddy-readonly.adapter';
+import { CodexAppServerReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { JenkinsReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/kubernetes-readonly.adapter';
 import { MihomoReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
 import { SunshineReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
-import { TencentCloudReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/tencent-cloud-readonly.adapter';
 import { WireguardReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/wireguard-readonly.adapter';
 import type {
   EnvironmentReadonlyHttpClient,
@@ -41,8 +40,7 @@ describe('environment remote readonly adapters', () => {
   it.each([
     ['Jenkins', new JenkinsReadonlyAdapter(config)],
     ['K8s', new KubernetesReadonlyAdapter(config)],
-    ['Tencent Cloud', new TencentCloudReadonlyAdapter(config)],
-    ['Caddy', new CaddyReadonlyAdapter(config)],
+    ['Codex App Server', new CodexAppServerReadonlyAdapter(config)],
     ['WireGuard', new WireguardReadonlyAdapter(config)],
     ['Mihomo', new MihomoReadonlyAdapter(config)],
     ['Home Assistant', new HomeAssistantReadonlyAdapter(config)],
@@ -59,7 +57,7 @@ describe('environment remote readonly adapters', () => {
   );
 
   it('keeps credential keys visible as missing config without exposing values', async () => {
-    const tencentSignal = await new TencentCloudReadonlyAdapter(
+    const codexSignal = await new CodexAppServerReadonlyAdapter(
       config,
     ).inspect();
     const mihomoSignal = await new MihomoReadonlyAdapter(config).inspect();
@@ -68,8 +66,8 @@ describe('environment remote readonly adapters', () => {
     ).inspect();
     const sunshineSignal = await new SunshineReadonlyAdapter(config).inspect();
 
-    expect(tencentSignal.evidence[0].metadata?.missingConfigKeys).toContain(
-      'ENV_DASHBOARD_TENCENT_SECRET_KEY',
+    expect(codexSignal.evidence[0].metadata?.missingConfigKeys).toContain(
+      'ENV_DASHBOARD_CODEX_APP_SERVER_URL',
     );
     expect(mihomoSignal.evidence[0].metadata?.missingConfigKeys).toContain(
       'ENV_DASHBOARD_R4SE_MIHOMO_SECRET',
@@ -197,114 +195,56 @@ describe('environment remote readonly adapters', () => {
     expect(JSON.stringify(signal)).not.toContain('k8s-token');
   });
 
-  it('Tencent Cloud reads CVM DescribeInstances through the official SDK', async () => {
-    const describeInstances = jest.fn().mockResolvedValue({
-      InstanceSet: [
-        {
-          CPU: 2,
-          InstanceId: 'ins-test',
-          InstanceName: 'api-prod',
-          InstanceState: 'RUNNING',
-          Memory: 4096,
-        },
-      ],
-      RequestId: 'req-1',
-      TotalCount: 1,
-    });
-    const createClient = jest.fn(() => ({
-      DescribeInstances: describeInstances,
-    }));
-    const adapter = new TencentCloudReadonlyAdapter(
-      new EnvironmentDashboardConfigService({
-        ENV_DASHBOARD_TENCENT_CLOUD_ENABLED: 'true',
-        ENV_DASHBOARD_TENCENT_INSTANCE_ID: 'ins-test',
-        ENV_DASHBOARD_TENCENT_REGION: 'ap-guangzhou',
-        ENV_DASHBOARD_TENCENT_SECRET_ID: 'secret-id',
-        ENV_DASHBOARD_TENCENT_SECRET_KEY: 'secret-key',
-      }),
-      createClient,
-    );
-
-    const signal = await adapter.inspect();
-
-    expect(createClient).toHaveBeenCalledWith(
-      expect.objectContaining({
-        credential: {
-          secretId: 'secret-id',
-          secretKey: 'secret-key',
-        },
-        region: 'ap-guangzhou',
-      }),
-    );
-    expect(describeInstances).toHaveBeenCalledWith({
-      InstanceIds: ['ins-test'],
-      Limit: 1,
-    });
-    expect(signal.status).toBe('ok');
-    expect(signal.evidence[0].metadata).toEqual(
-      expect.objectContaining({
-        instanceState: 'RUNNING',
-        totalCount: 1,
-      }),
-    );
-    expect(JSON.stringify(signal)).not.toContain('secret-key');
-  });
-
-  it('Caddy checks public HEAD and admin GET without unsafe methods', async () => {
+  it('Codex App Server reads only the fixed readiness path and drops its body', async () => {
     const http = createHttpMock();
-    http.head.mockResolvedValue(httpResponse('', 200));
-    http.get.mockResolvedValue(httpResponse({ apps: { http: {} } }, 200));
-    const adapter = new CaddyReadonlyAdapter(
+    http.get.mockResolvedValue(httpResponse('private readiness detail', 200));
+    const adapter = new CodexAppServerReadonlyAdapter(
       new EnvironmentDashboardConfigService({
-        ENV_DASHBOARD_CADDY_ADMIN_URL: 'http://caddy-admin.example',
-        ENV_DASHBOARD_CADDY_PUBLIC_URL: 'https://kt.example',
+        ENV_DASHBOARD_CODEX_APP_SERVER_URL: 'http://windows.example:48093',
       }),
       http,
     );
 
     const signal = await adapter.inspect();
 
-    expect(http.head).toHaveBeenCalledWith('https://kt.example');
-    expect(http.get).toHaveBeenCalledWith('http://caddy-admin.example/config/');
-    expect(signal.status).toBe('ok');
-    expect(signal.evidence[0].metadata).toEqual(
-      expect.objectContaining({
-        adminConfigured: true,
-        publicStatus: 200,
-      }),
+    expect(http.get).toHaveBeenCalledWith(
+      'http://windows.example:48093/readyz',
     );
+    expect(http.head).not.toHaveBeenCalled();
+    expect(http.request).not.toHaveBeenCalled();
+    expect(signal).toMatchObject({
+      id: 'codex-app-server-ready',
+      sourceKind: 'live',
+      status: 'ok',
+    });
+    expect(signal.evidence[0].metadata).toEqual({
+      httpStatus: 200,
+      ready: true,
+    });
+    expect(JSON.stringify(signal)).not.toContain('private readiness detail');
   });
 
   it('WireGuard checks only configured readonly health endpoints', async () => {
     const http = createHttpMock();
-    http.get
-      .mockResolvedValueOnce(httpResponse({ status: 'ok' }, 200))
-      .mockResolvedValueOnce(httpResponse({ status: 'ok' }, 200));
+    http.get.mockResolvedValueOnce(httpResponse({ status: 'ok' }, 200));
     const adapter = new WireguardReadonlyAdapter(
       new EnvironmentDashboardConfigService({
         ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL:
           'https://r4se.example/wg/health',
-        ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL:
-          'https://tencent.example/wg/health',
       }),
       http,
     );
 
     const signal = await adapter.inspect();
 
-    expect(http.get).toHaveBeenNthCalledWith(
-      1,
-      'https://tencent.example/wg/health',
-    );
-    expect(http.get).toHaveBeenNthCalledWith(
-      2,
-      'https://r4se.example/wg/health',
-    );
+    expect(http.get).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledWith('https://r4se.example/wg/health');
     expect(signal.status).toBe('ok');
     expect(signal.evidence[0].metadata).toEqual(
       expect.objectContaining({
-        endpointCount: 2,
-        reachableCount: 2,
+        endpointCount: 1,
+        httpStatus: 200,
+        reachable: true,
       }),
     );
   });

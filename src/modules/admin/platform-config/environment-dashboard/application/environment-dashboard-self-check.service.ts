@@ -20,10 +20,10 @@ export class EnvironmentDashboardSelfCheckService {
       eventId: `self-check-${Date.now()}`,
       observedAt,
       severity: 'ok',
-      siteId: 'local-dev',
+      siteId: 'nas-prod',
       sourceKind: 'local',
       summary: '环境总览只读自检已触发',
-      topic: 'kt/env/local-dev/self-check/result',
+      topic: 'kt/env/nas-prod/self-check/result',
     });
     return this.dashboardService.getDashboard({ forceRefresh: true });
   }

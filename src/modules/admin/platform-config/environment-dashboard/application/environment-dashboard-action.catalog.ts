@@ -8,9 +8,7 @@ export const HIGH_RISK_ENVIRONMENT_ACTION_IDS = [
   'toggle-plugin',
   'run-plugin-task-now',
   'create-minio-bucket',
-  'reload-caddy',
   'switch-openclash',
-  'restart-tencent-cvm',
   'modify-wireguard-peer',
 ] as const;
 
@@ -52,9 +50,7 @@ const highRiskLabels: Record<
   'create-minio-bucket': '创建 MinIO Bucket',
   'modify-wireguard-peer': '修改 WireGuard Peer',
   'recreate-napcat-container': '重建 NapCat 容器',
-  'reload-caddy': '重载 Caddy',
   'restart-api-pod': '重启 API Pod',
-  'restart-tencent-cvm': '重启腾讯云 CVM',
   'run-db-migration': '执行数据库迁移',
   'run-plugin-task-now': '立即运行插件任务',
   'switch-openclash': '切换 OpenClash 策略',

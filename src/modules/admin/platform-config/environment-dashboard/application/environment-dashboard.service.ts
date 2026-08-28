@@ -12,11 +12,9 @@ import {
   errorEvidence,
   unwiredEvidence,
 } from '../infrastructure/environment-dashboard-evidence.mapper';
-import { LocalDevSignalCollector } from '../infrastructure/collectors/local-dev-signal.collector';
 import { NasProdSignalCollector } from '../infrastructure/collectors/nas-prod-signal.collector';
-import { CaddyReadonlyAdapter } from '../infrastructure/adapters/caddy-readonly.adapter';
+import { WindowsPcSignalCollector } from '../infrastructure/collectors/windows-pc-signal.collector';
 import { MihomoReadonlyAdapter } from '../infrastructure/adapters/mihomo-readonly.adapter';
-import { TencentCloudReadonlyAdapter } from '../infrastructure/adapters/tencent-cloud-readonly.adapter';
 import { WireguardReadonlyAdapter } from '../infrastructure/adapters/wireguard-readonly.adapter';
 import type {
   EnvironmentDashboardResponse,
@@ -39,13 +37,9 @@ export class EnvironmentDashboardService {
     @Optional()
     private readonly cache: EnvironmentDashboardCacheService = new EnvironmentDashboardCacheService(),
     @Optional()
-    private readonly localDevCollector: LocalDevSignalCollector = new LocalDevSignalCollector(),
+    private readonly windowsPcCollector: WindowsPcSignalCollector = new WindowsPcSignalCollector(),
     @Optional()
     private readonly nasProdCollector: NasProdSignalCollector = new NasProdSignalCollector(),
-    @Optional()
-    private readonly tencentAdapter?: TencentCloudReadonlyAdapter,
-    @Optional()
-    private readonly caddyAdapter?: CaddyReadonlyAdapter,
     @Optional()
     private readonly wireguardAdapter?: WireguardReadonlyAdapter,
     @Optional()
@@ -84,61 +78,16 @@ export class EnvironmentDashboardService {
   }
 
   /**
-   * 并行采集本机、NAS、腾讯云与 R4SE 环境，将四个来源组装为固定顺序的站点列表。
+   * 并行采集 Windows PC、NAS 与 R4SE，将三个权威设备组装为固定顺序的站点列表。
    * @param observedAt - 用于过期、排序或租约判定的时间基准。
    * @returns 按输入顺序得到的站点列表；没有匹配项时为空数组。
    */
   private async createSites(observedAt: string): Promise<EnvironmentSite[]> {
     return [
-      await this.localDevCollector.collect({ observedAt }),
+      await this.windowsPcCollector.collect({ observedAt }),
       await this.nasProdCollector.collect({ observedAt }),
-      await this.createTencentCloudSite(),
       await this.createR4seSite(),
     ];
-  }
-
-  /**
-   * 根据当前领域状态，汇总腾讯云 CVM、WireGuard 与代理等远程服务信号，构建腾讯云站点健康视图。
-   * @returns 返回包含腾讯云远程服务信号与汇总状态的站点视图。
-   */
-  private async createTencentCloudSite(): Promise<EnvironmentSite> {
-    const services = [
-      await this.createRemoteAdapterService(
-        'tencent-cvm',
-        'Tencent Cloud CVM',
-        'tencent-cvm',
-        'Tencent Cloud CVM',
-        [
-          'ENV_DASHBOARD_TENCENT_SECRET_ID',
-          'ENV_DASHBOARD_TENCENT_SECRET_KEY',
-          'ENV_DASHBOARD_TENCENT_REGION',
-          'ENV_DASHBOARD_TENCENT_INSTANCE_ID',
-        ],
-        this.tencentAdapter,
-      ),
-      await this.createRemoteAdapterService(
-        'caddy-public',
-        'Caddy Public Route',
-        'caddy-public',
-        'Caddy Public Route',
-        ['ENV_DASHBOARD_CADDY_PUBLIC_URL'],
-        this.caddyAdapter,
-      ),
-      await this.createRemoteAdapterService(
-        'tencent-wireguard',
-        'WireGuard',
-        'tencent-wireguard',
-        'Tencent WireGuard',
-        ['ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL'],
-        this.wireguardAdapter,
-      ),
-    ];
-    return this.createSiteFromServices(
-      'tencent-cloud',
-      'Tencent Cloud',
-      'Tencent Cloud Node',
-      services,
-    );
   }
 
   /**
@@ -151,7 +100,7 @@ export class EnvironmentDashboardService {
         'r4se-wireguard',
         'WireGuard',
         'r4se-wireguard',
-        'r4se WireGuard',
+        'R4SE WireGuard',
         ['ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL'],
         this.wireguardAdapter,
       ),
@@ -164,7 +113,7 @@ export class EnvironmentDashboardService {
         this.mihomoAdapter,
       ),
     ];
-    return this.createSiteFromServices('r4se', 'r4se', 'r4se Node', services);
+    return this.createSiteFromServices('r4se', 'R4SE', 'R4SE', services);
   }
 
   /**

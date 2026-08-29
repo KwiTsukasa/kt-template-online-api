@@ -268,6 +268,12 @@ Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStar
 Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
 逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 从 Work/Season 派生；RSS Task 的
 标题、资料编号和年份固定使用订阅时再次核验并持久化的所选身份，不回退成 Work 主身份。
+电影与剧场版 Work 同时只允许一个未闭环 Task；已有闭环规范版本时，新建 Task 表示一次显式
+升级候选。治理开始会把同 Work 唯一闭环 Task 的计划摘要、revision、work item 和当前规范视频
+证据密封为 `canonicalReplacement`，不会按文件大小或标题自行判断画质。执行器先为候选和旧规范
+视频分别创建同设备 hardlink，并在 trim.media 停服窗口原子替换；任一后续操作失败时先把候选
+退回 staging，再恢复旧规范目标。只有候选通过独立验收，旧 Task 才与验收终态在同一数据库事务
+删除，因此进程中断或验收失败不会留下空规范路径，也不会提前丢失可回滚版本。
 误建目录只能通过 revision-bound Series 删除入口清理：独立 `Media:Governance:Delete` 权限只对空壳卡片可见，API 在事务锁内确认 Season、Episode、Task、绑定和 RSS 全部为零后，才级联删除 Work/Series 资料引用及空 Work；任一事实存在时返回 `409`，不提供绕过保护的强制删除。
 Work 为 TMDB 时同时把其已核验 canonical 身份密封为 Task 的二级 `metadataIdentity`；其他
 Work 保持空二级身份，后续只允许从飞牛对规范路径唯一映射出的官方身份自动发现，不能拿
@@ -318,10 +324,11 @@ Episode Binding 不变。RSS Task 随后自动
 `clearedWorkItemId`；已有活动 Run、载荷/计划密封、元数据成果或验收证据的任务仍返回冲突。
 迁移前遗留 Task 只有在操作者为 Series 新增完全相同官方身份的 Work 后才会补充绑定；
 电影与剧场版不会按标题相似度自动合并，Series/Work 上下文缺失或歧义固定保持待确认。
-治理执行若只完成 5 阶段中的第 1 阶段 dry-run、随后阻塞，且尚无 Unit 验收或元数据成果，
-允许按当前 revision 精确移除错误来源。执行器先清除该来源独占 staging/profile；终态回调
-再清空旧载荷和计划密封、保留已分配的 `workItemId`，把同一 Task 退回 intake 以接入正确来源。
-一旦 completedItems 大于 1，说明备份或正式事务已经开始，来源回退继续失败关闭。
+治理执行若只完成 dry-run，或以 `governance-local-move-state-invalid` / `Target already exists`
+明确证明尚未进入事务，即使失败回调已把进度重置为 0，也允许按当前 revision 精确移除错误来源。
+执行器先清除该来源独占 staging/profile；终态回调再清空载荷、计划和已分配 `workItemId`，把同一
+Task 退回 intake，使空来源 Task 可继续走正式删除合同。其他治理失败、已有 Unit 验收或元数据成果
+仍失败关闭，不能用进度归零冒充事务未开始。
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据。普通治理成功后由服务端自动串联
 首次核验、一次延后身份复核、最多两次确定性 LocalNFO/海报/逐集元数据修复、修复后复核和
 独立验收；每个后继 Run 都在前一终态事务提交并递增 revision 后才预约。未知 A/C、身份冲突、

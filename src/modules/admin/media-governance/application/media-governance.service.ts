@@ -66,6 +66,7 @@ import {
   buildMediaGovernanceExecutionEnvelope,
   type MediaGovernanceExecutorAction,
 } from '@/modules/admin/media-governance/contract/media-governance-executor.contract';
+import { readMediaGovernanceCanonicalReplacement } from '@/modules/admin/media-governance/contract/media-governance-plan.contract';
 import {
   MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
   type MediaGovernanceExecutionEnvelope,
@@ -76,6 +77,7 @@ import {
   buildAdminMediaGovernancePlan,
   buildCatalogIdentityRestorationPlan,
   buildCanonicalIdentityRebasePlan,
+  buildMovieCanonicalReplacementPlan,
   isCanonicalIdentityRebasePlan,
   mediaGovernancePlanMetadataIdentity,
   mediaGovernanceTitleRoot,
@@ -1138,6 +1140,27 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
+    let replacedTaskId: null | string = null;
+    if (
+      input.action === 'acceptance.verify' &&
+      input.eventType === 'run-succeeded' &&
+      task.stage === 'closed'
+    ) {
+      const replacement = readMediaGovernanceCanonicalReplacement(
+        task.sealedPlan,
+      );
+      if (replacement) replacedTaskId = replacement.replacedTaskId;
+    }
+    if (replacedTaskId) {
+      const replacedIndex = this.tasks.findIndex(
+        (candidate) => candidate.id === replacedTaskId,
+      );
+      if (replacedIndex >= 0) {
+        const replaced = this.tasks[replacedIndex];
+        this.tasks.splice(replacedIndex, 1);
+        this.publishTaskPatch(replaced, 'deleted', null, null, true);
+      }
+    }
     this.publishTaskPatch(task, 'state-updated', input.runId, input.sequence);
     if (input.eventType === 'run-failed') {
       await this.continueStalledInitialDownload(task, input).catch(() => false);
@@ -2194,10 +2217,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           parsed.infoHash,
         )
       ) {
-        throwVbenError(
-          'RSS torrent 描述符升级身份不匹配',
-          HttpStatus.CONFLICT,
-        );
+        throwVbenError('RSS torrent 描述符升级身份不匹配', HttpStatus.CONFLICT);
       }
       return { ...upgrade, parsed, source };
     });
@@ -2528,6 +2548,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.payloadSeal !== null &&
       task.sealedPlan !== null &&
       task.sealedPlanSha256 !== null;
+    const knownPreTransactionGovernanceFailure = [
+      'governance-local-move-state-invalid',
+      'Target already exists:',
+    ].some((reason) => task.gateReason?.includes(reason) === true);
     const dryRunOnlyGovernanceProgress =
       task.progress.totalItems === 5 &&
       task.progress.completedItems >= 0 &&
@@ -2538,7 +2562,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const resettablePreGovernanceFailure =
       stoppedPreGovernanceFailure &&
       sealedPreGovernanceArtifacts &&
-      dryRunOnlyGovernanceProgress &&
+      (knownPreTransactionGovernanceFailure || dryRunOnlyGovernanceProgress) &&
       preGovernanceUnitsUntouched;
     const resettableCompletedDownload =
       task.runState === 'succeeded' &&
@@ -2659,6 +2683,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.payloadSeal = null;
       task.sealedPlan = null;
       task.sealedPlanSha256 = null;
+      task.workItemId = null;
     }
     if (resetCompletedDownload) task.payloadSeal = null;
     const hasNoPersistentArtifacts =
@@ -3438,27 +3463,28 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.gateReason = null;
         task.nextCommandLabel = '开始本地治理';
       }
-      if (!task.sealedPlan) {
-        try {
+      try {
+        if (!task.sealedPlan) {
           task.sealedPlan = buildAdminMediaGovernancePlan(
             task,
             task.payloadSeal,
           );
           task.sealedPlanSha256 = sha256Json(task.sealedPlan);
-        } catch (error) {
-          task.runState = 'blocked';
-          task.gateReason = '本地计划无法安全密封';
-          if (error instanceof Error) {
-            task.gateReason = `本地计划无法安全密封：${error.message}`.slice(
-              0,
-              160,
-            );
-          }
-          task.nextCommandLabel = '修正作品编号、来源映射或字幕合同后重试';
-          this.bumpRevision(task);
-          await this.commitTask(task, 'state-updated');
-          throwVbenError(task.gateReason, HttpStatus.CONFLICT);
         }
+        this.bindMovieCanonicalReplacement(task);
+      } catch (error) {
+        task.runState = 'blocked';
+        task.gateReason = '本地计划无法安全密封';
+        if (error instanceof Error) {
+          task.gateReason = `本地计划无法安全密封：${error.message}`.slice(
+            0,
+            160,
+          );
+        }
+        task.nextCommandLabel = '修正作品编号、来源映射或替换目标后重试';
+        this.bumpRevision(task);
+        await this.commitTask(task, 'state-updated');
+        throwVbenError(task.gateReason, HttpStatus.CONFLICT);
       }
       await this.reserveExecution(task, 'governance.execute');
       return task;
@@ -3493,6 +3519,42 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }, 500);
     timer.unref?.();
     return task;
+  }
+
+  /**
+   * 当电影 Work 已有唯一闭环规范 Task 时，把该 Task 的目标证据密封进当前候选计划。
+   * @param task - 已持有下载载荷与本地计划、准备进入治理执行的 Work Task。
+   * @returns 新增替换合同或已存在替换合同时为 `true`，首个电影与 TV Task 返回 `false`。
+   * @throws 当同 Work 存在多个闭环规范 Task 或替换身份无法精确匹配时抛出。
+   */
+  private bindMovieCanonicalReplacement(task: MediaGovernanceTask) {
+    if (!task.workId || task.mediaType === 'tv' || !task.sealedPlan) {
+      return false;
+    }
+    if (readMediaGovernanceCanonicalReplacement(task.sealedPlan)) {
+      return true;
+    }
+    const replacedCandidates = this.tasks.filter(
+      (candidate) =>
+        candidate.id !== task.id &&
+        candidate.workId === task.workId &&
+        candidate.stage === 'closed' &&
+        candidate.runState === 'succeeded' &&
+        candidate.metadataStatus === 'verified' &&
+        candidate.activeRunId === null &&
+        candidate.closedAt !== null &&
+        candidate.closedMode !== null,
+    );
+    if (replacedCandidates.length === 0) return false;
+    if (replacedCandidates.length !== 1) {
+      throw new Error('canonical-replacement-current-task-ambiguous');
+    }
+    const replaced = replacedCandidates[0];
+    this.assertCanonicalSealedPlan(task);
+    this.assertCanonicalSealedPlan(replaced);
+    task.sealedPlan = buildMovieCanonicalReplacementPlan(task, replaced);
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    return true;
   }
 
   /**

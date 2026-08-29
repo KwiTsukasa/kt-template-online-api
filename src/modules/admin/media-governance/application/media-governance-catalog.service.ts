@@ -955,24 +955,88 @@ export class MediaGovernanceCatalogService
         throwVbenError('Task 选择了不存在的 Work Season', HttpStatus.CONFLICT);
       }
     }
-    const task = await this.mediaTasks.create({
-      mediaType: work.workType as MediaGovernanceMediaType,
-      metadataIdentity: this.workMetadataIdentity(work),
-      operationKind: 'source-intake',
-      providerRef: {
-        provider: work.canonicalProvider as MediaGovernanceProvider,
-        providerId: work.canonicalProviderId,
-      },
-      releaseYear: work.releaseYear,
-      seasonNumbers: seasonNumbers.map((season) => seasonToken(season)),
-      seriesId,
-      titleHint: work.title,
-      workId,
-    });
+    const createTask = () =>
+      this.mediaTasks.create({
+        mediaType: work.workType as MediaGovernanceMediaType,
+        metadataIdentity: this.workMetadataIdentity(work),
+        operationKind: 'source-intake',
+        providerRef: {
+          provider: work.canonicalProvider as MediaGovernanceProvider,
+          providerId: work.canonicalProviderId,
+        },
+        releaseYear: work.releaseYear,
+        seasonNumbers: seasonNumbers.map((season) => seasonToken(season)),
+        seriesId,
+        titleHint: work.title,
+        workId,
+      });
+    let task: MediaGovernanceTask;
+    if (work.workType === 'tv') {
+      task = await createTask();
+    } else {
+      task = await this.createMovieWorkTaskWithSlotLock(
+        seriesId,
+        work,
+        createTask,
+      );
+    }
     await this.publishCatalogChanged(seriesId, [task.id], 'updated').catch(
       () => undefined,
     );
     return task;
+  }
+
+  /**
+   * 锁定非 TV Work 并拒绝第二个未闭环 Task，使一个闭环规范版本最多对应一个在途升级候选。
+   * @param seriesId - 当前 Work 必须所属的 Series 标识。
+   * @param work - 已完成外层身份核验的电影或剧场版 Work。
+   * @param createTask - 在 Work 行锁持有期间创建唯一候选 Task 的回调。
+   * @returns 首个 Task 或唯一升级候选 Task。
+   * @throws 当 Work 身份漂移、已有未闭环候选或闭环规范 Task 不唯一时拒绝创建。
+   */
+  private async createMovieWorkTaskWithSlotLock<T extends { id: string }>(
+    seriesId: string,
+    work: MediaGovernanceWorkEntity,
+    createTask: () => Promise<T>,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const lockedWork = await manager
+        .getRepository(MediaGovernanceWorkEntity)
+        .findOne({
+          lock: { mode: 'pessimistic_write' },
+          where: { id: work.id },
+        });
+      if (
+        !lockedWork ||
+        lockedWork.seriesId !== seriesId ||
+        lockedWork.workType !== work.workType ||
+        lockedWork.workType === 'tv'
+      ) {
+        throwVbenError('Work 身份已变化，请刷新后重试', HttpStatus.CONFLICT);
+      }
+      const existingTasks = await manager
+        .getRepository(MediaGovernanceTaskEntity)
+        .find({ where: { workId: work.id } });
+      const openTasks = existingTasks.filter(
+        (candidate) => candidate.closedAt === null,
+      );
+      const closedTasks = existingTasks.filter(
+        (candidate) => candidate.closedAt !== null,
+      );
+      if (openTasks.length > 0) {
+        throwVbenError(
+          '当前 Work 已有未闭环 Task，请先完成或清理后再升级',
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (closedTasks.length > 1) {
+        throwVbenError(
+          '当前 Work 存在多个历史规范 Task，需先完成变体恢复',
+          HttpStatus.CONFLICT,
+        );
+      }
+      return createTask();
+    });
   }
 
   /**

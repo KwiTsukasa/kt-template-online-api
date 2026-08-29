@@ -14,6 +14,7 @@ import {
   MediaGovernanceWorkEntity,
   MediaGovernanceWorkExternalRefEntity,
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
+import { MediaGovernanceTaskEntity } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
 
 type EntityToken = abstract new (...args: never[]) => unknown;
 
@@ -991,25 +992,39 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
     const createTask = jest.fn().mockResolvedValue({
       id: 'media-task-theatrical-derived',
     });
+    const work = {
+      canonicalProvider: 'bangumi',
+      canonicalProviderId: '604826',
+      id: 'media-work-theatrical',
+      releaseYear: 2026,
+      seriesId: 'media-series-theatrical',
+      title: '超辉夜姬！',
+      workType: 'theatrical',
+    } as MediaGovernanceWorkEntity;
     const dataSource = {
       getRepository: jest.fn(() => {
         throw new Error('theatrical Work must not query Season rows');
       }),
+      transaction: jest.fn(async (operation) =>
+        operation({
+          getRepository: (entity: EntityToken) => {
+            if (entity === MediaGovernanceWorkEntity) {
+              return { findOne: jest.fn().mockResolvedValue(work) };
+            }
+            if (entity === MediaGovernanceTaskEntity) {
+              return { find: jest.fn().mockResolvedValue([]) };
+            }
+            throw new Error(`unexpected locked repository ${String(entity)}`);
+          },
+        }),
+      ),
     } as unknown as DataSource;
     const service = new MediaGovernanceCatalogService(dataSource, {
       create: createTask,
     } as unknown as MediaGovernanceService);
     Object.assign(service, {
       publishCatalogChanged: jest.fn().mockResolvedValue(undefined),
-      requireWork: jest.fn().mockResolvedValue({
-        canonicalProvider: 'bangumi',
-        canonicalProviderId: '604826',
-        id: 'media-work-theatrical',
-        releaseYear: 2026,
-        seriesId: 'media-series-theatrical',
-        title: '超辉夜姬！',
-        workType: 'theatrical',
-      } as MediaGovernanceWorkEntity),
+      requireWork: jest.fn().mockResolvedValue(work),
     });
 
     await service.createWorkTask(
@@ -1029,6 +1044,56 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       titleHint: '超辉夜姬！',
       workId: 'media-work-theatrical',
     });
+  });
+
+  it('rejects a second open movie Task while holding the Work slot lock', async () => {
+    const createTask = jest.fn();
+    const work = {
+      canonicalProvider: 'bangumi',
+      canonicalProviderId: '178607',
+      id: 'media-work-homecoming',
+      releaseYear: 2017,
+      seriesId: 'media-series-homecoming',
+      title: '蜘蛛侠：英雄归来',
+      workType: 'movie',
+    } as MediaGovernanceWorkEntity;
+    const dataSource = {
+      getRepository: jest.fn(() => {
+        throw new Error('movie Work must not query Season rows');
+      }),
+      transaction: jest.fn(async (operation) =>
+        operation({
+          getRepository: (entity: EntityToken) => {
+            if (entity === MediaGovernanceWorkEntity) {
+              return { findOne: jest.fn().mockResolvedValue(work) };
+            }
+            if (entity === MediaGovernanceTaskEntity) {
+              return {
+                find: jest.fn().mockResolvedValue([
+                  {
+                    closedAt: null,
+                    id: 'media-task-homecoming-in-progress',
+                    workId: work.id,
+                  },
+                ]),
+              };
+            }
+            throw new Error(`unexpected locked repository ${String(entity)}`);
+          },
+        }),
+      ),
+    } as unknown as DataSource;
+    const service = new MediaGovernanceCatalogService(dataSource, {
+      create: createTask,
+    } as unknown as MediaGovernanceService);
+    Object.assign(service, {
+      requireWork: jest.fn().mockResolvedValue(work),
+    });
+
+    await expect(
+      service.createWorkTask(work.seriesId, work.id, { seasonNumbers: [] }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(createTask).not.toHaveBeenCalled();
   });
 
   it('binds verified Task mappings only to Episodes inside its existing Work', async () => {

@@ -12,7 +12,10 @@ import {
   MediaGovernanceUnitEntity,
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
-import { MediaGovernanceTaskEpisodeBindingEntity } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
+import {
+  MediaGovernanceTaskEpisodeBindingEntity,
+  MediaGovernanceWorkEntity,
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
 import { MediaGovernanceTypeOrmStateStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
 import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
@@ -76,7 +79,8 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     ) as MediaGovernanceTypeOrmStateStore;
     const source = {
       contentKind: 'embedded_subtitle_media',
-      descriptorObjectId: 'tasks/task/sources/source/revisions/2-current.torrent',
+      descriptorObjectId:
+        'tasks/task/sources/source/revisions/2-current.torrent',
       descriptorRevision: 1,
       descriptorSha256: 'b'.repeat(64),
       id: 'media-source-descriptor-drift',
@@ -535,5 +539,142 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     expect(units.rows.has('media-unit-replacement-persistence-test')).toBe(
       true,
     );
+  });
+
+  it('deletes the replaced movie ledger only inside a successful acceptance transaction', async () => {
+    const tasks = new MemoryRepository<MediaGovernanceTaskEntity>();
+    const units = new MemoryRepository<MediaGovernanceUnitEntity>();
+    const sources = new MemoryRepository<MediaGovernanceSourceEntity>();
+    const sessions = new MemoryRepository<MediaGovernanceAgentSessionEntity>();
+    const events = new MemoryRepository<MediaGovernanceEventEntity>();
+    const outbox = new MemoryRepository<MediaGovernanceOutboxEntity>();
+    const runs = new MemoryRepository<MediaGovernanceRunEntity>();
+    const descriptors =
+      new MemoryRepository<MediaGovernanceDescriptorRevisionEntity>();
+    const metadataExceptions =
+      new MemoryRepository<MediaGovernanceMetadataExceptionEntity>();
+    const operatorDecisions =
+      new MemoryRepository<MediaGovernanceOperatorDecisionEntity>();
+    const taskEpisodeBindings =
+      new MemoryRepository<MediaGovernanceTaskEpisodeBindingEntity>();
+    const works = new MemoryRepository<MediaGovernanceWorkEntity>();
+    const repositories = new Map<unknown, MemoryRepository<{ id: string }>>([
+      [MediaGovernanceTaskEntity, tasks],
+      [MediaGovernanceUnitEntity, units],
+      [MediaGovernanceSourceEntity, sources],
+      [MediaGovernanceAgentSessionEntity, sessions],
+      [MediaGovernanceEventEntity, events],
+      [MediaGovernanceOutboxEntity, outbox],
+      [MediaGovernanceRunEntity, runs],
+      [MediaGovernanceDescriptorRevisionEntity, descriptors],
+      [MediaGovernanceMetadataExceptionEntity, metadataExceptions],
+      [MediaGovernanceOperatorDecisionEntity, operatorDecisions],
+      [MediaGovernanceTaskEpisodeBindingEntity, taskEpisodeBindings],
+      [MediaGovernanceWorkEntity, works],
+    ]);
+    const manager = {
+      getRepository: (entity: unknown) => repositories.get(entity),
+    };
+    const store = Object.create(
+      MediaGovernanceTypeOrmStateStore.prototype,
+    ) as MediaGovernanceTypeOrmStateStore;
+    const replacedPlanSha256 = 'b'.repeat(64);
+    await works.save({
+      id: 'media-work-homecoming',
+      seriesId: 'media-series-homecoming',
+    } as unknown as MediaGovernanceWorkEntity);
+    const replacedTask = {
+      activeRunId: null,
+      closedAt: new Date('2026-08-27T00:00:00.000Z'),
+      closedMode: 'bounded_repair',
+      id: 'media-task-homecoming-current',
+      mediaType: 'movie',
+      metadataStatus: 'verified',
+      providerRef: { provider: 'bangumi', providerId: '178607' },
+      releaseYear: 2017,
+      revision: 24,
+      runState: 'succeeded',
+      sealedPlanSha256: replacedPlanSha256,
+      seriesId: 'media-series-homecoming',
+      stage: 'closed',
+      workId: 'media-work-homecoming',
+      workItemId: 'media-082',
+    } as unknown as MediaGovernanceTaskEntity;
+    await tasks.save(replacedTask);
+    await units.save({
+      id: 'media-unit-homecoming-current',
+      taskId: replacedTask.id,
+    } as MediaGovernanceUnitEntity);
+    await sources.save({
+      id: 'media-source-homecoming-current',
+      taskId: replacedTask.id,
+    } as MediaGovernanceSourceEntity);
+    await runs.save({
+      id: 'media-run-homecoming-current',
+      taskId: replacedTask.id,
+    } as MediaGovernanceRunEntity);
+    const candidate = {
+      activeRunId: null,
+      closedAt: '2026-08-30T01:00:00.000Z',
+      closedMode: 'automatic',
+      id: 'media-task-homecoming-remux',
+      mediaType: 'movie',
+      metadataStatus: 'verified',
+      providerRef: { provider: 'bangumi', providerId: '178607' },
+      releaseYear: 2017,
+      runState: 'succeeded',
+      sealedPlan: {
+        canonicalReplacement: {
+          replacedPlanSha256,
+          replacedTaskId: replacedTask.id,
+          replacedTaskRevision: 24,
+          replacedWorkItemId: 'media-082',
+          schemaVersion: 'media-canonical-replacement-v1',
+          targetEvidence: {
+            digest: 'c'.repeat(64),
+            evidenceId: 'canonical-replacement-video',
+            evidenceMethod: 'sha256-full-v1',
+            fileKind: 'video',
+            mtimeMs: 1_787_000_000_000,
+            path: '/vol2/1000/Media/movie/Movies/蜘蛛侠：英雄归来/蜘蛛侠：英雄归来.mkv',
+            scope: 'local',
+            size: 5_385_907_675,
+          },
+        },
+      },
+      seriesId: 'media-series-homecoming',
+      stage: 'closed',
+      units: [
+        {
+          evidenceSha256: 'd'.repeat(64),
+          localAcceptedAt: '2026-08-30T01:00:00.000Z',
+        },
+      ],
+      workId: 'media-work-homecoming',
+    } as unknown as Parameters<
+      MediaGovernanceTypeOrmStateStore['applyExecutorEvent']
+    >[0];
+    const removeReplacement = Reflect.get(
+      store,
+      'deleteAcceptedCanonicalReplacementWithManager',
+    ).bind(store) as (
+      currentManager: unknown,
+      currentTask: typeof candidate,
+      event: {
+        action: 'acceptance.verify';
+        eventType: 'run-succeeded';
+      },
+    ) => Promise<null | string>;
+
+    await expect(
+      removeReplacement(manager, candidate, {
+        action: 'acceptance.verify',
+        eventType: 'run-succeeded',
+      }),
+    ).resolves.toBe(replacedTask.id);
+    expect(tasks.rows.has(replacedTask.id)).toBe(false);
+    expect(units.rows.has('media-unit-homecoming-current')).toBe(false);
+    expect(sources.rows.has('media-source-homecoming-current')).toBe(false);
+    expect(runs.rows.has('media-run-homecoming-current')).toBe(false);
   });
 });

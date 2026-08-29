@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import type { MediaGovernanceExecutorEventDto } from '@/modules/admin/media-governance/contract/media-governance.dto';
+import { readMediaGovernanceCanonicalReplacement } from '@/modules/admin/media-governance/contract/media-governance-plan.contract';
 import {
   MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
@@ -27,7 +28,10 @@ import type {
   MediaGovernanceTask,
   MediaGovernanceUnit,
 } from '@/modules/admin/media-governance/application/media-governance.service';
-import { MediaGovernanceTaskEpisodeBindingEntity } from './media-governance-catalog.entities';
+import {
+  MediaGovernanceTaskEpisodeBindingEntity,
+  MediaGovernanceWorkEntity,
+} from './media-governance-catalog.entities';
 
 export const MEDIA_GOVERNANCE_STATE_STORE = Symbol(
   'MEDIA_GOVERNANCE_STATE_STORE',
@@ -164,6 +168,63 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
   }
 
   /**
+   * 在调用方已经锁定并核验 Task 后删除其完整数据库账本，供草稿删除与验收替换共用。
+   * @param manager - 持有当前原子事务及必要行锁的 TypeORM EntityManager。
+   * @param task - 已由同一事务读取并完成身份校验的 Task 行。
+   * @returns 被清理 Task 原本占用的作品编号。
+   */
+  private async deleteTaskLedgerWithManager(
+    manager: EntityManager,
+    task: MediaGovernanceTaskEntity,
+  ) {
+    const unitRepository = manager.getRepository(MediaGovernanceUnitEntity);
+    const sourceRepository = manager.getRepository(MediaGovernanceSourceEntity);
+    const units = (
+      await unitRepository.find({ where: { taskId: task.id } })
+    ).filter((unit) => unit.taskId === task.id);
+    const sources = (
+      await sourceRepository.find({ where: { taskId: task.id } })
+    ).filter((source) => source.taskId === task.id);
+    const metadataExceptionRepository = manager.getRepository(
+      MediaGovernanceMetadataExceptionEntity,
+    );
+    for (const unit of units) {
+      await metadataExceptionRepository.delete({ unitId: unit.id });
+    }
+    const descriptorRepository = manager.getRepository(
+      MediaGovernanceDescriptorRevisionEntity,
+    );
+    for (const source of sources) {
+      await descriptorRepository.delete({ sourceId: source.id });
+    }
+
+    await manager
+      .getRepository(MediaGovernanceOperatorDecisionEntity)
+      .delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceAgentSessionEntity)
+      .delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceOutboxEntity)
+      .delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceEventEntity)
+      .delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceRunEntity)
+      .delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
+      .delete({ taskId: task.id });
+    await sourceRepository.delete({ taskId: task.id });
+    await unitRepository.delete({ taskId: task.id });
+    await manager
+      .getRepository(MediaGovernanceTaskEntity)
+      .delete({ id: task.id });
+    return task.workItemId;
+  }
+
+  /**
    * 根据任务版本和工作项身份校验结果，事务性删除完整任务账本。
    * @param input - 用于根据任务版本和工作项身份校验结果，事务性删除完整任务账本的结构化输入，包含 `taskId`、`expectedRevision`、`expectedWorkItemId` 字段。
    * @returns 根据任务版本和工作项身份校验结果，事务性删除完整任务账本。
@@ -176,11 +237,10 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     this.assertReady();
     return this.dataSource.transaction(async (manager) => {
       const taskRepository = manager.getRepository(MediaGovernanceTaskEntity);
-      const unitRepository = manager.getRepository(MediaGovernanceUnitEntity);
-      const sourceRepository = manager.getRepository(
-        MediaGovernanceSourceEntity,
-      );
-      const task = await taskRepository.findOneBy({ id: input.taskId });
+      const task = await taskRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: input.taskId },
+      });
       if (!task) throw new Error('media-governance-task-not-found');
       if (
         task.revision !== input.expectedRevision ||
@@ -188,48 +248,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       ) {
         throw new Error('media-governance-task-delete-identity-mismatch');
       }
-
-      const units = (
-        await unitRepository.find({ where: { taskId: input.taskId } })
-      ).filter((unit) => unit.taskId === input.taskId);
-      const sources = (
-        await sourceRepository.find({ where: { taskId: input.taskId } })
-      ).filter((source) => source.taskId === input.taskId);
-      const metadataExceptionRepository = manager.getRepository(
-        MediaGovernanceMetadataExceptionEntity,
+      const clearedWorkItemId = await this.deleteTaskLedgerWithManager(
+        manager,
+        task,
       );
-      for (const unit of units) {
-        await metadataExceptionRepository.delete({ unitId: unit.id });
-      }
-      const descriptorRepository = manager.getRepository(
-        MediaGovernanceDescriptorRevisionEntity,
-      );
-      for (const source of sources) {
-        await descriptorRepository.delete({ sourceId: source.id });
-      }
-
-      await manager
-        .getRepository(MediaGovernanceOperatorDecisionEntity)
-        .delete({ taskId: input.taskId });
-      await manager
-        .getRepository(MediaGovernanceAgentSessionEntity)
-        .delete({ taskId: input.taskId });
-      await manager
-        .getRepository(MediaGovernanceOutboxEntity)
-        .delete({ taskId: input.taskId });
-      await manager
-        .getRepository(MediaGovernanceEventEntity)
-        .delete({ taskId: input.taskId });
-      await manager
-        .getRepository(MediaGovernanceRunEntity)
-        .delete({ taskId: input.taskId });
-      await manager
-        .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
-        .delete({ taskId: input.taskId });
-      await sourceRepository.delete({ taskId: input.taskId });
-      await unitRepository.delete({ taskId: input.taskId });
-      await taskRepository.delete({ id: input.taskId });
-      return { clearedWorkItemId: task.workItemId };
+      return { clearedWorkItemId };
     });
   }
 
@@ -555,6 +578,89 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
   }
 
   /**
+   * 在高画质电影独立验收终态内锁定并删除其替换的旧规范 Task，任一身份漂移都会回滚整个事件。
+   * @param manager - 同时保存候选 Task、Run 与 Event 的当前数据库事务。
+   * @param task - 已投影为验收成功终态的候选电影 Task。
+   * @param event - 触发当前事务的精确执行器事件。
+   * @returns 实际删除的旧 Task 标识；普通验收返回 `null`。
+   * @throws 当替换关系、同 Work 身份、旧 Task 终态或活动 Run 不满足密封合同时抛出。
+   */
+  private async deleteAcceptedCanonicalReplacementWithManager(
+    manager: EntityManager,
+    task: MediaGovernanceTask,
+    event: MediaGovernanceExecutorEventDto,
+  ) {
+    const terminalReplacement =
+      event.action === 'acceptance.verify' &&
+      event.eventType === 'run-succeeded' &&
+      task.stage === 'closed' &&
+      task.runState === 'succeeded' &&
+      task.metadataStatus === 'verified' &&
+      task.activeRunId === null &&
+      task.closedAt !== null &&
+      task.closedMode !== null &&
+      task.mediaType !== 'tv' &&
+      task.units.length === 1 &&
+      task.units.every(
+        (unit) => unit.localAcceptedAt !== null && unit.evidenceSha256 !== null,
+      );
+    if (!terminalReplacement) return null;
+    const replacement = readMediaGovernanceCanonicalReplacement(
+      task.sealedPlan,
+    );
+    if (!replacement) return null;
+    const lockedWork = await manager
+      .getRepository(MediaGovernanceWorkEntity)
+      .findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: task.workId },
+      });
+    if (!lockedWork || lockedWork.seriesId !== task.seriesId) {
+      throw new Error('canonical-replacement-work-identity-mismatch');
+    }
+    const taskRepository = manager.getRepository(MediaGovernanceTaskEntity);
+    const replaced = await taskRepository.findOne({
+      lock: { mode: 'pessimistic_write' },
+      where: { id: replacement.replacedTaskId },
+    });
+    if (!replaced) {
+      throw new Error('canonical-replacement-task-not-found');
+    }
+    let sameProvider =
+      replaced.providerRef === null && task.providerRef === null;
+    if (replaced.providerRef && task.providerRef) {
+      sameProvider =
+        replaced.providerRef.provider === task.providerRef.provider &&
+        replaced.providerRef.providerId === task.providerRef.providerId;
+    }
+    const identityInvalid =
+      replaced.id === task.id ||
+      !task.seriesId ||
+      !task.workId ||
+      replaced.seriesId !== task.seriesId ||
+      replaced.workId !== task.workId ||
+      replaced.mediaType !== task.mediaType ||
+      replaced.mediaType === 'tv' ||
+      replaced.releaseYear !== task.releaseYear ||
+      !sameProvider ||
+      replaced.revision !== replacement.replacedTaskRevision ||
+      replaced.workItemId !== replacement.replacedWorkItemId ||
+      replaced.sealedPlanSha256 !== replacement.replacedPlanSha256;
+    const stateInvalid =
+      replaced.stage !== 'closed' ||
+      replaced.runState !== 'succeeded' ||
+      replaced.metadataStatus !== 'verified' ||
+      replaced.activeRunId !== null ||
+      replaced.closedAt === null ||
+      replaced.closedMode === null;
+    if (identityInvalid || stateInvalid) {
+      throw new Error('canonical-replacement-task-identity-mismatch');
+    }
+    await this.deleteTaskLedgerWithManager(manager, replaced);
+    return replaced.id;
+  }
+
+  /**
    * 幂等应用执行器事件，并在同一事务中更新任务、运行和事件账本。
    * @param task - 用于Executor事件的领域对象，包含 `id`、`runState`、`stage` 字段。
    * @param event - 触发Executor事件的领域事件，包含 `runId`、`sequence`、`taskId`、`taskRevision` 字段。
@@ -587,6 +693,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         throw new Error('media-governance-executor-event-identity-mismatch');
       }
       await this.saveTaskWithManager(manager, task);
+      await this.deleteAcceptedCanonicalReplacementWithManager(
+        manager,
+        task,
+        event,
+      );
       if (
         event.action === 'source.cleanup' &&
         event.eventType === 'run-succeeded' &&

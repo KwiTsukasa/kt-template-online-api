@@ -1,5 +1,9 @@
 import * as path from 'node:path';
 import { sha256Json } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import {
+  MEDIA_GOVERNANCE_CANONICAL_REPLACEMENT_SCHEMA,
+  readMediaGovernanceCanonicalReplacement,
+} from '@/modules/admin/media-governance/contract/media-governance-plan.contract';
 import type {
   MediaGovernancePayloadSeal,
   MediaGovernanceTask,
@@ -57,6 +61,198 @@ type MediaGovernanceTitleIdentity = Pick<
   MediaGovernanceTask,
   'mediaType' | 'providerRef' | 'releaseYear' | 'titleHint'
 >;
+
+/**
+ * 从密封计划中提取唯一电影视频正向操作，拒绝多视频或非本地 move 计划。
+ * @param plan - 待检查的 Schema 1.2.0 密封计划。
+ * @param label - 用于区分候选与既有规范计划的稳定错误前缀。
+ * @returns 唯一电影视频正向操作。
+ * @throws 当本地清单缺失、视频数量不是一或操作字段越界时抛出。
+ */
+function singleMovieVideoOperation(
+  plan: Record<string, unknown>,
+  label: string,
+): LocalPlanOperation {
+  const manifests = plan.manifests;
+  if (!manifests || typeof manifests !== 'object' || Array.isArray(manifests)) {
+    throw new Error(`${label}-manifest-invalid`);
+  }
+  const local = (manifests as Record<string, unknown>).local;
+  if (!local || typeof local !== 'object' || Array.isArray(local)) {
+    throw new Error(`${label}-manifest-invalid`);
+  }
+  const forward = (local as Record<string, unknown>).forward;
+  if (!Array.isArray(forward)) {
+    throw new Error(`${label}-manifest-invalid`);
+  }
+  const videos = forward.filter(
+    (item): item is LocalPlanOperation =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      (item as Record<string, unknown>).fileKind === 'video',
+  );
+  if (videos.length !== 1) {
+    throw new Error(`${label}-video-count-invalid`);
+  }
+  const operation = videos[0];
+  if (
+    operation.operation !== 'move' ||
+    !path.posix.isAbsolute(operation.sourcePath) ||
+    !path.posix.isAbsolute(operation.targetPath)
+  ) {
+    throw new Error(`${label}-video-operation-invalid`);
+  }
+  return operation;
+}
+
+/**
+ * 按 evidenceId 从计划中读取唯一完整本地视频证据。
+ * @param plan - 提供 `sourceEvidence` 的密封计划。
+ * @param evidenceId - 视频操作绑定的证据标识。
+ * @param label - 用于形成稳定拒绝原因的计划角色。
+ * @returns 与视频操作一一对应的完整 SHA-256 来源证据。
+ * @throws 当证据缺失、重复或字段不符合本地视频边界时抛出。
+ */
+function localVideoEvidence(
+  plan: Record<string, unknown>,
+  evidenceId: string,
+  label: string,
+): LocalSourceEvidence {
+  const sourceEvidence = plan.sourceEvidence;
+  if (!Array.isArray(sourceEvidence)) {
+    throw new Error(`${label}-source-evidence-invalid`);
+  }
+  const matches = sourceEvidence.filter(
+    (item): item is LocalSourceEvidence =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      (item as Record<string, unknown>).evidenceId === evidenceId,
+  );
+  if (matches.length !== 1) {
+    throw new Error(`${label}-source-evidence-invalid`);
+  }
+  const evidence = matches[0];
+  const identityValid =
+    evidence.evidenceMethod === 'sha256-full-v1' &&
+    evidence.fileKind === 'video' &&
+    evidence.scope === 'local';
+  const digestValid = /^[a-f0-9]{64}$/u.test(evidence.digest);
+  const mtimeValid =
+    Number.isSafeInteger(evidence.mtimeMs) && evidence.mtimeMs >= 0;
+  const sizeValid = Number.isSafeInteger(evidence.size) && evidence.size >= 1;
+  if (!identityValid || !digestValid || !mtimeValid || !sizeValid) {
+    throw new Error(`${label}-source-evidence-invalid`);
+  }
+  return evidence;
+}
+
+/**
+ * 把同 Work 已闭环电影的规范目标身份密封进候选计划，使执行器可先备份旧片再原子替换。
+ * @param candidate - 已下载且准备执行治理的电影升级 Task。
+ * @param replaced - 当前同 Work 唯一已闭环的规范电影 Task。
+ * @param now - 记录替换合同重新密封时间的时钟。
+ * @returns 保持原清单不变并新增规范替换合同的 Schema 1.2.0 计划。
+ * @throws 当 Task 身份、终态、计划摘要、视频目标或旧证据不一致时抛出。
+ */
+export function buildMovieCanonicalReplacementPlan(
+  candidate: MediaGovernanceTask,
+  replaced: MediaGovernanceTask,
+  now = new Date(),
+): Record<string, unknown> {
+  const candidatePlan = candidate.sealedPlan;
+  const replacedPlan = replaced.sealedPlan;
+  let providerMatches =
+    candidate.providerRef === null && replaced.providerRef === null;
+  if (candidate.providerRef && replaced.providerRef) {
+    providerMatches =
+      candidate.providerRef.provider === replaced.providerRef.provider &&
+      candidate.providerRef.providerId === replaced.providerRef.providerId;
+  }
+  const identityInvalid =
+    !candidate.seriesId ||
+    !candidate.workId ||
+    candidate.seriesId !== replaced.seriesId ||
+    candidate.workId !== replaced.workId ||
+    candidate.id === replaced.id ||
+    candidate.mediaType === 'tv' ||
+    replaced.mediaType === 'tv' ||
+    candidate.mediaType !== replaced.mediaType ||
+    !providerMatches ||
+    candidate.releaseYear !== replaced.releaseYear;
+  const replacedStateInvalid =
+    replaced.stage !== 'closed' ||
+    replaced.runState !== 'succeeded' ||
+    replaced.metadataStatus !== 'verified' ||
+    replaced.activeRunId !== null ||
+    replaced.closedAt === null ||
+    replaced.closedMode === null ||
+    !replaced.workItemId;
+  const planInvalid =
+    !candidatePlan ||
+    !candidate.sealedPlanSha256 ||
+    sha256Json(candidatePlan) !== candidate.sealedPlanSha256 ||
+    !replacedPlan ||
+    !replaced.sealedPlanSha256 ||
+    sha256Json(replacedPlan) !== replaced.sealedPlanSha256;
+  if (identityInvalid || replacedStateInvalid || planInvalid) {
+    throw new Error('canonical-replacement-task-invalid');
+  }
+  if (readMediaGovernanceCanonicalReplacement(candidatePlan)) {
+    return structuredClone(candidatePlan);
+  }
+  const candidateOperation = singleMovieVideoOperation(
+    candidatePlan,
+    'canonical-replacement-candidate',
+  );
+  const replacedOperation = singleMovieVideoOperation(
+    replacedPlan,
+    'canonical-replacement-current',
+  );
+  if (candidateOperation.targetPath !== replacedOperation.targetPath) {
+    throw new Error('canonical-replacement-target-mismatch');
+  }
+  const replacedEvidence = localVideoEvidence(
+    replacedPlan,
+    replacedOperation.evidenceId,
+    'canonical-replacement-current',
+  );
+  const executionValue = candidatePlan.execution;
+  if (
+    !executionValue ||
+    typeof executionValue !== 'object' ||
+    Array.isArray(executionValue)
+  ) {
+    throw new Error('canonical-replacement-execution-invalid');
+  }
+  const execution = executionValue as Record<string, unknown>;
+  return {
+    ...candidatePlan,
+    canonicalReplacement: {
+      replacedPlanSha256: replaced.sealedPlanSha256,
+      replacedTaskId: replaced.id,
+      replacedTaskRevision: replaced.revision,
+      replacedWorkItemId: replaced.workItemId,
+      schemaVersion: MEDIA_GOVERNANCE_CANONICAL_REPLACEMENT_SCHEMA,
+      targetEvidence: {
+        digest: replacedEvidence.digest,
+        evidenceId: `canonical-replacement-${replaced.id}`,
+        evidenceMethod: 'sha256-full-v1',
+        fileKind: 'video',
+        mtimeMs: replacedEvidence.mtimeMs,
+        path: replacedOperation.targetPath,
+        scope: 'local',
+        size: replacedEvidence.size,
+      },
+    },
+    execution: {
+      ...execution,
+      replayKey: `${candidate.id}:governance:r${candidate.revision + 1}:replace`,
+    },
+    sealedAt: now.toISOString(),
+  };
+}
 
 /**
  * 按声明的文件角色校验扩展名，并投影为治理计划文件类型。

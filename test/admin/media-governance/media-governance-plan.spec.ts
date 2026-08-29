@@ -3,7 +3,9 @@ import {
   buildAdminMediaGovernancePlan,
   buildCatalogIdentityRestorationPlan,
   buildCanonicalIdentityRebasePlan,
+  buildMovieCanonicalReplacementPlan,
 } from '../../../src/modules/admin/media-governance/application/media-governance-plan';
+import { readMediaGovernanceCanonicalReplacement } from '../../../src/modules/admin/media-governance/contract/media-governance-plan.contract';
 import type {
   MediaGovernancePayloadSeal,
   MediaGovernanceTask,
@@ -187,7 +189,7 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
         },
       ],
       workItemId: 'media-064',
-    } as MediaGovernanceTask;
+    } as unknown as MediaGovernanceTask;
     const movieRoot = `/vol2/1000/.kt-media-governance-staging/${movieTask.id}/sources/media-source-movie-fixture`;
     const moviePayload: MediaGovernancePayloadSeal = {
       evidenceSha256: 'f'.repeat(64),
@@ -218,6 +220,132 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
       mediaType: 'theatrical',
       providerRef: { provider: 'bangumi', providerId: '604826' },
     });
+  });
+
+  it('seals the existing canonical movie as the rollback identity of one upgrade candidate', () => {
+    const targetPath =
+      '/vol2/1000/Media/movie/Movies/蜘蛛侠：英雄归来 (2017) [bangumiid-178607]/蜘蛛侠：英雄归来.mkv';
+    const candidatePlan = {
+      execution: {
+        replayKey: 'media-task-homecoming-remux:governance:r13',
+      },
+      manifests: {
+        local: {
+          forward: [
+            {
+              evidenceId: 'candidate-video',
+              fileKind: 'video',
+              operation: 'move',
+              sourcePath:
+                '/vol2/1000/.kt-media-governance-staging/media-task-homecoming-remux/Homecoming.REMUX.mkv',
+              targetPath,
+            },
+          ],
+        },
+      },
+      schemaVersion: '1.2.0',
+      sealed: true,
+      sealedAt: '2026-08-28T00:00:00.000Z',
+      sourceEvidence: [
+        {
+          digest: 'a'.repeat(64),
+          evidenceId: 'candidate-video',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_788_000_000_000,
+          path: '/vol2/1000/.kt-media-governance-staging/media-task-homecoming-remux/Homecoming.REMUX.mkv',
+          scope: 'local',
+          size: 53_537_900_139,
+        },
+      ],
+      workItemId: 'media-086',
+    };
+    const currentPlan = {
+      execution: { replayKey: 'media-task-homecoming-current:governance:r20' },
+      manifests: {
+        local: {
+          forward: [
+            {
+              evidenceId: 'current-video',
+              fileKind: 'video',
+              operation: 'move',
+              sourcePath:
+                '/vol2/1000/.kt-media-governance-staging/media-task-homecoming-current/Homecoming.mkv',
+              targetPath,
+            },
+          ],
+        },
+      },
+      schemaVersion: '1.2.0',
+      sealed: true,
+      sourceEvidence: [
+        {
+          digest: 'b'.repeat(64),
+          evidenceId: 'current-video',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_787_000_000_000,
+          path: '/vol2/1000/.kt-media-governance-staging/media-task-homecoming-current/Homecoming.mkv',
+          scope: 'local',
+          size: 5_385_907_675,
+        },
+      ],
+      workItemId: 'media-082',
+    };
+    const candidate = {
+      activeRunId: null,
+      id: 'media-task-homecoming-remux',
+      mediaType: 'movie',
+      providerRef: { provider: 'bangumi', providerId: '178607' },
+      releaseYear: 2017,
+      revision: 13,
+      sealedPlan: candidatePlan,
+      sealedPlanSha256: sha256Json(candidatePlan),
+      seriesId: 'media-series-homecoming',
+      workId: 'media-work-homecoming',
+    } as unknown as MediaGovernanceTask;
+    const current = {
+      activeRunId: null,
+      closedAt: '2026-08-27T00:00:00.000Z',
+      closedMode: 'bounded_repair',
+      id: 'media-task-homecoming-current',
+      mediaType: 'movie',
+      metadataStatus: 'verified',
+      providerRef: { provider: 'bangumi', providerId: '178607' },
+      releaseYear: 2017,
+      revision: 24,
+      runState: 'succeeded',
+      sealedPlan: currentPlan,
+      sealedPlanSha256: sha256Json(currentPlan),
+      seriesId: 'media-series-homecoming',
+      stage: 'closed',
+      workId: 'media-work-homecoming',
+      workItemId: 'media-082',
+    } as unknown as MediaGovernanceTask;
+
+    const replacementPlan = buildMovieCanonicalReplacementPlan(
+      candidate,
+      current,
+      new Date('2026-08-30T01:00:00.000Z'),
+    );
+    const replacement =
+      readMediaGovernanceCanonicalReplacement(replacementPlan);
+
+    expect(replacementPlan.execution).toMatchObject({
+      replayKey: 'media-task-homecoming-remux:governance:r14:replace',
+    });
+    expect(replacement).toMatchObject({
+      replacedPlanSha256: current.sealedPlanSha256,
+      replacedTaskId: current.id,
+      replacedTaskRevision: 24,
+      replacedWorkItemId: 'media-082',
+      targetEvidence: {
+        digest: 'b'.repeat(64),
+        path: targetPath,
+        size: 5_385_907_675,
+      },
+    });
+    expect(replacementPlan.manifests).toEqual(candidatePlan.manifests);
   });
 
   it('rebases an already committed movie target after a late identity amendment', () => {
@@ -356,9 +484,10 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
       titleHint: '死神 千年血战篇',
     } as MediaGovernanceTask;
     const explicitPlan = buildAdminMediaGovernancePlan(catalogTask, payload);
-    const legacyPlan = structuredClone(
-      explicitPlan,
-    ) as unknown as Record<string, unknown>;
+    const legacyPlan = structuredClone(explicitPlan) as unknown as Record<
+      string,
+      unknown
+    >;
     delete legacyPlan.catalogIdentity;
     delete legacyPlan.metadataIdentity;
     const wrongTask = {

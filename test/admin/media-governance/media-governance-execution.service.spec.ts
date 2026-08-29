@@ -147,6 +147,9 @@ describe('MediaGovernanceService production execution adapter', () => {
     }
     const targetRoot = `/vol2/1000/Media/movie/${category}/${task.titleHint}${year}${provider}`;
     task.sealedPlan = {
+      execution: {
+        replayKey: `${task.id}:governance:r${task.revision}`,
+      },
       identity: {
         mediaType: task.mediaType,
         providerRef: task.providerRef,
@@ -155,11 +158,32 @@ describe('MediaGovernanceService production execution adapter', () => {
       },
       manifests: {
         local: {
-          forward: [{ targetPath: `${targetRoot}/sample.mkv` }],
+          forward: [
+            {
+              evidenceId: 'sealed-video-fixture',
+              fileKind: 'video',
+              operation: 'move',
+              sourcePath: `/vol2/1000/.kt-media-governance-staging/${task.id}/sample.mkv`,
+              targetPath: `${targetRoot}/${task.titleHint}.mkv`,
+            },
+          ],
         },
       },
       schemaVersion: '1.2.0',
       sealed: true,
+      sourceEvidence: [
+        {
+          digest: 'a'.repeat(64),
+          evidenceId: 'sealed-video-fixture',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_786_000_000_000,
+          path: `/vol2/1000/.kt-media-governance-staging/${task.id}/sample.mkv`,
+          scope: 'local',
+          size: 1_024,
+        },
+      ],
+      workItemId: task.workItemId,
     };
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
   };
@@ -241,8 +265,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
@@ -649,8 +672,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
       sourceRole: 'primary_media',
     });
     source.manifest = [
@@ -1906,7 +1928,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
-  it('rolls a dry-run-only governance failure back to intake while retaining its work item', async () => {
+  it('recovers a known target collision even after failed-run progress was overwritten', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
@@ -1948,10 +1970,13 @@ describe('MediaGovernanceService production execution adapter', () => {
       service.removeSource(task.id, source.id, { expectedRevision: 2 }),
     ).rejects.toMatchObject({ status: 409 });
 
-    task.progress.completedItems = 1;
-    task.progress.completedBytes = 1;
-    task.progress.percent = 20;
-    task.progress.progressLabel = '仅 dry-run 已完成';
+    task.gateReason = 'NAS 执行失败：governance-local-move-state-invalid';
+    task.progress.completedItems = 0;
+    task.progress.completedBytes = 0;
+    task.progress.percent = 0;
+    task.progress.progressLabel = task.gateReason;
+    task.progress.totalBytes = 0;
+    task.progress.totalItems = 0;
     await service.removeSource(task.id, source.id, { expectedRevision: 2 });
     const cleanup = dispatch.mock.calls[0]![0];
     expect(cleanup).toMatchObject({
@@ -1993,7 +2018,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       sealedPlanSha256: null,
       sources: [],
       stage: 'intake',
-      workItemId: 'media-075',
+      workItemId: null,
     });
   });
 
@@ -2279,6 +2304,187 @@ describe('MediaGovernanceService production execution adapter', () => {
         speedLabel: '0 B/s',
       },
       revision: 10,
+      runState: 'succeeded',
+      stage: 'closed',
+    });
+  });
+
+  it('binds the unique closed movie Task as a protected canonical replacement', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const sharedIdentity = {
+      mediaType: 'movie' as const,
+      operationKind: 'source-intake' as const,
+      providerRef: { provider: 'bangumi' as const, providerId: '178607' },
+      releaseYear: 2017,
+      seriesId: 'media-series-homecoming',
+      titleHint: '蜘蛛侠：英雄归来',
+      workId: 'media-work-homecoming',
+    };
+    const current = await service.create(sharedIdentity);
+    current.workItemId = 'media-082';
+    current.stage = 'closed';
+    current.runState = 'succeeded';
+    current.metadataStatus = 'verified';
+    current.closedAt = '2026-08-27T00:00:00.000Z';
+    current.closedMode = 'bounded_repair';
+    current.units[0].localAcceptedAt = current.closedAt;
+    current.units[0].evidenceSha256 = 'c'.repeat(64);
+    sealCanonicalPlan(current);
+
+    const candidate = await service.create(sharedIdentity);
+    const source = await service.addMagnetSource(candidate.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    const relativePath = 'Spider-Man.Homecoming.REMUX.mkv';
+    source.manifest = [
+      { executable: false, index: 0, relativePath, sizeBytes: 53_537 },
+    ];
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: candidate.units[0].id,
+      },
+    ];
+    candidate.workItemId = 'media-086';
+    candidate.stage = 'download';
+    candidate.runState = 'succeeded';
+    const stagingRoot = `/vol2/1000/.kt-media-governance-staging/${candidate.id}/sources/${source.id}`;
+    candidate.payloadSeal = {
+      evidenceSha256: 'd'.repeat(64),
+      files: [
+        {
+          index: 0,
+          mtimeMs: 1_788_000_000_000,
+          path: `${stagingRoot}/${relativePath}`,
+          relativePath,
+          sha256: 'e'.repeat(64),
+          sizeBytes: 53_537,
+          sourceId: source.id,
+        },
+      ],
+      runId: 'media-run-homecoming-download',
+    };
+
+    await service.startGovernance(candidate.id, { expectedRevision: 2 });
+
+    const replacement = candidate.sealedPlan?.canonicalReplacement;
+    expect(replacement).toMatchObject({
+      replacedPlanSha256: current.sealedPlanSha256,
+      replacedTaskId: current.id,
+      replacedTaskRevision: current.revision,
+      replacedWorkItemId: 'media-082',
+      schemaVersion: 'media-canonical-replacement-v1',
+      targetEvidence: { size: 1_024 },
+    });
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'governance.execute',
+        plan: expect.objectContaining({
+          planSha256: candidate.sealedPlanSha256,
+        }),
+        taskId: candidate.id,
+      }),
+    );
+  });
+
+  it('removes the replaced Task from the live page only after acceptance commits', async () => {
+    const { service } = fixture();
+    await service.onModuleInit();
+    const sharedIdentity = {
+      mediaType: 'movie' as const,
+      operationKind: 'source-intake' as const,
+      providerRef: { provider: 'bangumi' as const, providerId: '178607' },
+      releaseYear: 2017,
+      seriesId: 'media-series-homecoming',
+      titleHint: '蜘蛛侠：英雄归来',
+      workId: 'media-work-homecoming',
+    };
+    const current = await service.create(sharedIdentity);
+    current.workItemId = 'media-082';
+    current.stage = 'closed';
+    current.runState = 'succeeded';
+    current.metadataStatus = 'verified';
+    current.closedAt = '2026-08-27T00:00:00.000Z';
+    current.closedMode = 'bounded_repair';
+    sealCanonicalPlan(current);
+    const candidate = await service.create(sharedIdentity);
+    candidate.workItemId = 'media-086';
+    sealCanonicalPlan(candidate);
+    const targetPath = (
+      candidate.sealedPlan?.manifests as {
+        local: { forward: Array<{ targetPath: string }> };
+      }
+    ).local.forward[0].targetPath;
+    candidate.sealedPlan = {
+      ...candidate.sealedPlan,
+      canonicalReplacement: {
+        replacedPlanSha256: current.sealedPlanSha256,
+        replacedTaskId: current.id,
+        replacedTaskRevision: current.revision,
+        replacedWorkItemId: 'media-082',
+        schemaVersion: 'media-canonical-replacement-v1',
+        targetEvidence: {
+          digest: 'a'.repeat(64),
+          evidenceId: 'canonical-replacement-video',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_787_000_000_000,
+          path: targetPath,
+          scope: 'local',
+          size: 1_024,
+        },
+      },
+    };
+    candidate.sealedPlanSha256 = sha256Json(candidate.sealedPlan);
+    candidate.activeRunId = 'media-run-homecoming-acceptance';
+    candidate.stage = 'acceptance';
+    candidate.runState = 'running';
+    candidate.metadataStatus = 'verified';
+    candidate.units[0].evidenceSha256 = 'b'.repeat(64);
+    candidate.units[0].localAcceptedAt = '2026-08-30T00:59:00.000Z';
+    const before = service.page({ keyword: '蜘蛛侠：英雄归来' });
+    expect(before.items.map((task) => task.id)).toEqual(
+      expect.arrayContaining([current.id, candidate.id]),
+    );
+    expect(before.items).toHaveLength(2);
+
+    await service.applyExecutorEvent({
+      acceptance: {
+        acceptedFiles: 1,
+        acceptedUnits: 1,
+        activeDownloadOwners: 0,
+        canClose: true,
+        cloudWrites: 0,
+        databaseDirectWrites: 0,
+        mechanicalScans: 0,
+        schemaVersion: 'media-admin-local-acceptance-v1',
+        stagingResiduals: 0,
+        uiWrites: 0,
+      },
+      action: 'acceptance.verify',
+      evidenceSha256: 'c'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt: '2026-08-30T01:00:00.000Z',
+      runId: candidate.activeRunId,
+      sequence: 1,
+      summary: '高画质规范目标独立验收通过',
+      taskId: candidate.id,
+      taskRevision: candidate.revision,
+    });
+
+    const after = service.page({ keyword: '蜘蛛侠：英雄归来' });
+    expect(after.items.map((task) => task.id)).toEqual([candidate.id]);
+    expect(candidate).toMatchObject({
+      closedMode: 'automatic',
       runState: 'succeeded',
       stage: 'closed',
     });

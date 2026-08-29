@@ -313,6 +313,11 @@ Work 派生不可变的 `seriesId/workId/operationKind` 与 catalog 身份。
 
 Series-first 目录接口先创建系列及主 Work，再在同一 Series 下增加 TV、电影或剧场版 Work。
 Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。`workType` 同时约束两个资料源：TV 使用 Bangumi `type=2/platform=TV` 与 TMDB TV，电影使用 Bangumi `type=6/platform=电影` 与 TMDB Movie，剧场版使用 Bangumi `type=2/platform=剧场版` 与 TMDB Movie。Bangumi 搜索的 `meta_tags` 只作上游缩小，API 仍逐项核对 `type + platform`，选中后详情核验再次执行同一合同。
+非 TV Work 在事务行锁内最多保留一个未闭环 Task；已有闭环 Task 时，下一个 Work Task 是唯一升级候选。
+`governance/start` 会把同 Work 唯一闭环 Task 的计划摘要、revision、work item 与规范视频证据密封为
+`canonicalReplacement`。NAS 在 trim.media 停服窗口用候选/旧目标双 hardlink 保护的原子 rename
+执行替换，普通 `move` 遇到既有目标仍返回冲突。候选独立验收成功时，API 在保存候选 Task、Run、
+Event 的同一事务中删除被替换 Task 的完整账本；验收前失败只回滚文件，不提前隐藏或删除旧 Task。
 电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
 
 | 方法   | 路径                                                                                                                      | 说明                                         |

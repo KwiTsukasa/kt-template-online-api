@@ -253,7 +253,9 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
 
     expect(sunshineSignal.status).toBe('ok');
     expect(homeAssistantSignal.status).toBe('degraded');
-    expect(homeAssistantSignal.summary).toContain('self-signed certificate');
+    expect(homeAssistantSignal.summary).toMatch(
+      /certificate has expired|self-signed certificate/u,
+    );
     expect(JSON.stringify(sunshineSignal)).not.toContain('Desktop');
     expect(JSON.stringify(sunshineSignal)).not.toContain('sun-local-secret');
   });

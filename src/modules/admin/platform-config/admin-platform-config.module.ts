@@ -55,6 +55,8 @@ import { EnvironmentDashboardCacheService } from './environment-dashboard/infras
 import { EnvironmentDashboardConfigService } from './environment-dashboard/infrastructure/environment-dashboard-config.service';
 import { EnvironmentEventBusService } from './environment-dashboard/infrastructure/event/environment-event-bus.service';
 import { MobileHomeService } from './mobile-home/application/mobile-home.service';
+import { HomeAssistantMobileClient } from './mobile-home/infrastructure/home-assistant-mobile.client';
+import { SunshineMobileClient } from './mobile-home/infrastructure/sunshine-mobile.client';
 import { MobileHomeController } from './mobile-home/presentation/mobile-home.controller';
 
 export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
@@ -84,6 +86,8 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   AdminTimezoneService,
   EnvironmentDashboardService,
   MobileHomeService,
+  HomeAssistantMobileClient,
+  SunshineMobileClient,
   EnvironmentDashboardSelfCheckService,
   EnvironmentDashboardCacheService,
   EnvironmentDashboardConfigService,

@@ -11,7 +11,12 @@ describe('MobileHomeController', () => {
   let app: INestApplication;
   let apiUrl: string;
   const service = {
+    assist: jest.fn(),
+    callHomeService: jest.fn(),
     getBootstrap: jest.fn(),
+    getGameSnapshot: jest.fn(),
+    getHomeSnapshot: jest.fn(),
+    submitGamePin: jest.fn(),
   };
 
   beforeAll(async () => {
@@ -63,6 +68,33 @@ describe('MobileHomeController', () => {
         unreadCount: 3,
       },
     });
+    service.getHomeSnapshot.mockResolvedValue({
+      activities: [],
+      areas: [],
+      connected: true,
+      energy: [],
+      entities: [],
+      generatedAt: '2026-08-31T10:00:00.000Z',
+      scenes: [],
+    });
+    service.callHomeService.mockResolvedValue({
+      requestId: 'request-light-0001',
+    });
+    service.assist.mockResolvedValue({
+      continueConversation: false,
+      responseType: 'action_done',
+      speech: '已打开客厅主灯',
+    });
+    service.getGameSnapshot.mockResolvedValue({
+      apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
+      generatedAt: '2026-08-31T10:00:00.000Z',
+      host: '10.66.66.4',
+      httpsPort: 38994,
+      managementReady: true,
+      streamPort: 38999,
+      virtualGamepadReady: true,
+    });
+    service.submitGamePin.mockResolvedValue({ accepted: true });
   });
 
   afterAll(async () => {
@@ -102,5 +134,52 @@ describe('MobileHomeController', () => {
       /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
     );
     expect(service.getBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns no-store Home Assistant and Sunshine snapshots', async () => {
+    const home = await request(apiUrl)
+      .get('/system/mobile-home/home')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    const game = await request(apiUrl)
+      .get('/system/mobile-home/game')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+
+    expect(home.body.data).toMatchObject({ connected: true, entities: [] });
+    expect(game.body.data).toMatchObject({
+      apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
+      host: '10.66.66.4',
+      httpsPort: 38994,
+      streamPort: 38999,
+      virtualGamepadReady: true,
+    });
+  });
+
+  it('forwards allowlisted Home writes, Assist text and Sunshine PIN requests', async () => {
+    await request(apiUrl)
+      .post('/system/mobile-home/home/service')
+      .send({
+        data: { brightness: 180 },
+        domain: 'light',
+        entityId: 'light.living_room',
+        requestId: 'request-light-0001',
+        service: 'turn_on',
+      })
+      .expect(201);
+    await request(apiUrl)
+      .post('/system/mobile-home/home/assist')
+      .send({ text: '打开客厅主灯' })
+      .expect(201);
+    await request(apiUrl)
+      .post('/system/mobile-home/game/pin')
+      .send({ name: 'KwiCore', pin: '1234' })
+      .expect(201);
+
+    expect(service.callHomeService).toHaveBeenCalledWith(
+      expect.objectContaining({ entityId: 'light.living_room' }),
+    );
+    expect(service.assist).toHaveBeenCalledWith({ text: '打开客厅主灯' });
+    expect(service.submitGamePin).toHaveBeenCalledWith('1234', 'KwiCore');
   });
 });

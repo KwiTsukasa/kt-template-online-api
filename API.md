@@ -95,12 +95,19 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 | `POST` | `/system/environment/self-check`    | 是    | 触发只读自检并返回最新环境快照                    |
 | `GET`  | `/system/environment/events/stream` | 是    | SSE 推送后端环境事件，支持 `lastEventId` 查询参数 |
 | `GET`  | `/system/mobile-home/bootstrap`     | super | 返回 KwiCore 环境与站内信只读聚合快照             |
+| `GET`  | `/system/mobile-home/home`          | super | 返回 HA 区域、实体、场景、活动与能源快照          |
+| `POST` | `/system/mobile-home/home/service`  | super | 执行幂等且白名单化的 HA 实体或场景动作            |
+| `POST` | `/system/mobile-home/home/assist`   | super | 调用 HA Conversation 并返回脱敏 Assist 回应       |
+| `GET`  | `/system/mobile-home/game`          | super | 返回 Sunshine 目录、GameStream 端口和 ViGEm 状态  |
+| `POST` | `/system/mobile-home/game/pin`      | super | 提交内嵌 Moonlight 发起的四位临时配对码           |
 
 环境总览接口使用 `Site -> Node -> Service -> Signal` 模型聚合状态，`unwired` 表示只读观测尚未配置，`unknown` 表示已知入口但缺少新鲜证据。Admin 首次加载通过 HTTP 获取快照，后续通过 API SSE 接收 local/MQTT 事件；前端不直接连接 MQTT，也不使用定时轮询。
 
 当前版本只提供观测和只读自检。重启 Pod、触发 Jenkins 部署、执行迁移、重建 NapCat 容器、启停插件、立即执行插件任务、切换 OpenClash 或修改 WireGuard 等高风险能力只会以禁用动作展示，后端不提供通用写动作入口。
 
 KwiCore Mobile Home 聚合接口返回 `data.environment` 与 `data.notices.items/total/unreadCount`，响应带 `Cache-Control: no-store`。通知仅投影移动端展示白名单并用 `KtDateTimeField` 格式化 `createTime/lastSeenAt`；环境与站内信权威读取并行执行，任一失败时接口整体失败。Remote 节点、短期 session、relay 和设置本机状态不进入该聚合合同。
+
+Home 快照并行读取 HA REST 与 WebSocket registry，只保留移动端 domain 和 attributes 白名单；能源实体只返回真实 24 小时历史点。实体动作必须携带合法 `requestId/domain/entityId/service`，服务与 data key 同时通过 allowlist 后才执行。Game 快照的 Sunshine Web UI 端口仅用于服务端 Basic 管理请求，Android 使用响应中的 `streamPort/httpsPort` 直连固定 WireGuard 主机；`virtualGamepadReady` 只在 Sunshine 同时确认 ViGEm 已安装且版本兼容时为真。PIN 接口不创建会话、不接收证书，也不代替 Moonlight 的原生挑战握手。
 
 环境快照固定为七个稳定服务：Windows PC 的 `sunshine` 使用 Basic `GET /api/apps`、`codex-app-server` 使用 `GET /readyz`；NAS 的 `nas-api` 使用进程健康检查、`home-assistant` 使用 Bearer `GET /api/` 且要求 `message="API running."`、`bot-core` 使用 QQBot 在线摘要；R4SE 的 `r4se-wireguard` 读取固定隧道地址、`r4se-mihomo` 使用 Bearer 读取 `version/configs/proxies`。外部服务缺配置为 `unwired`，401/403 或超时为脱敏 `degraded`，任何响应都不返回凭据或服务正文；共享 client 默认严格 TLS，只有固定 WireGuard Sunshine HTTPS 请求显式允许自签证书。
 
@@ -204,7 +211,7 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | QQBot         | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_PATH`、`BOT_REVERSE_WS_TOKEN`、`BOT_EVENT_BUS`、`BOT_SEND_*`、`PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                        |
 | NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`NAPCAT_*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_CODEX_APP_SERVER_URL`、`ENV_DASHBOARD_HOME_ASSISTANT_*`、`ENV_DASHBOARD_SUNSHINE_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                                                                                         |
+| Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_CODEX_APP_SERVER_URL`、`ENV_DASHBOARD_HOME_ASSISTANT_*`、`ENV_DASHBOARD_SUNSHINE_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                                                                                                    |
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
 | Media         | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                                                          |
 | LLM           | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -320,27 +327,27 @@ Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一�
 Event 的同一事务中删除被替换 Task 的完整账本；验收前失败只回滚文件，不提前隐藏或删除旧 Task。
 电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
 
-| 方法   | 路径                                                                                                                      | 说明                                         |
-| ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `GET`  | `/media-governance/series/page`                                                                                           | 分页查询 Series/Work/季集/执行聚合           |
-| `GET`  | `/media-governance/series/identity-candidates`                                                                            | 按关键词和 Work 类型搜索官方身份候选         |
-| `POST` | `/media-governance/series`                                                                                                | 原子创建 Series 与唯一主 Work                |
-| `DELETE` | `/media-governance/series/:seriesId?expectedRevision=`                                                                  | 仅删除无 Season/Episode/Task/绑定/RSS 的空壳 |
-| `POST` | `/media-governance/series/:seriesId/works`                                                                                | 向既有 Series 添加已核验 Work                |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons`                                                                | 为 TV Work 创建连续 Season/Episode           |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/tasks`                                                                  | 从 Work 派生一次 source-intake Task          |
-| `GET`  | `/media-governance/series/history-classification`                                                                         | 只读核对历史 Task 的 Work 归类状态           |
-| `GET`  | `/media-governance/series/rss-discovery/identity-candidates`                                                              | 按关键词查询 RSS 使用的 TV 身份候选          |
-| `GET`  | `/media-governance/series/:seriesId`                                                                                      | 查询 Series、Works、季、Task 与 RSS          |
-| `GET`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`                                         | 分页查询 Work Episode 与 Task/来源绑定       |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`                                     | 在一个 Work Task 内创建 1–16 条按集磁链来源  |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search`                             | 按 Work/Season 聚合固定来源和发布组 RSS      |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`                                | 创建 Work-scoped 按季 RSS 订阅               |
-| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context`        | 清理错误 Task 后迁移订阅上下文并重置条目     |
-| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context-repair` | 保留未密封 RSS Task/来源/条目并合并误建 Work |
-| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                                                        | 按 revision 启停 RSS                         |
-| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                                                         | 立即轮询、去重并按集创建 Work-bound Task     |
-| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                                                        | 分页查询 RSS 条目处理历史                    |
+| 方法     | 路径                                                                                                                      | 说明                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET`    | `/media-governance/series/page`                                                                                           | 分页查询 Series/Work/季集/执行聚合           |
+| `GET`    | `/media-governance/series/identity-candidates`                                                                            | 按关键词和 Work 类型搜索官方身份候选         |
+| `POST`   | `/media-governance/series`                                                                                                | 原子创建 Series 与唯一主 Work                |
+| `DELETE` | `/media-governance/series/:seriesId?expectedRevision=`                                                                    | 仅删除无 Season/Episode/Task/绑定/RSS 的空壳 |
+| `POST`   | `/media-governance/series/:seriesId/works`                                                                                | 向既有 Series 添加已核验 Work                |
+| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons`                                                                | 为 TV Work 创建连续 Season/Episode           |
+| `POST`   | `/media-governance/series/:seriesId/works/:workId/tasks`                                                                  | 从 Work 派生一次 source-intake Task          |
+| `GET`    | `/media-governance/series/history-classification`                                                                         | 只读核对历史 Task 的 Work 归类状态           |
+| `GET`    | `/media-governance/series/rss-discovery/identity-candidates`                                                              | 按关键词查询 RSS 使用的 TV 身份候选          |
+| `GET`    | `/media-governance/series/:seriesId`                                                                                      | 查询 Series、Works、季、Task 与 RSS          |
+| `GET`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`                                         | 分页查询 Work Episode 与 Task/来源绑定       |
+| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`                                     | 在一个 Work Task 内创建 1–16 条按集磁链来源  |
+| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search`                             | 按 Work/Season 聚合固定来源和发布组 RSS      |
+| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`                                | 创建 Work-scoped 按季 RSS 订阅               |
+| `PUT`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context`        | 清理错误 Task 后迁移订阅上下文并重置条目     |
+| `PUT`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context-repair` | 保留未密封 RSS Task/来源/条目并合并误建 Work |
+| `PUT`    | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                                                        | 按 revision 启停 RSS                         |
+| `POST`   | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                                                         | 立即轮询、去重并按集创建 Work-bound Task     |
+| `GET`    | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                                                        | 分页查询 RSS 条目处理历史                    |
 
 Series 删除使用独立 `Media:Governance:Delete` 权限和客户端已读取的 revision。服务端在同一事务中锁定 Series、Work、Task、Season/Episode、绑定、RSS 与资料引用范围；只允许级联删除 Work/Series 资料引用和空 Work，任一执行或订阅事实存在时固定返回 `409`。权限由 `media-governance-series-delete-v1.sql` 幂等注册并只授予活动 `super`，对应 verify 脚本检查身份唯一、无冲突、无重复和无非 super 授权。
 

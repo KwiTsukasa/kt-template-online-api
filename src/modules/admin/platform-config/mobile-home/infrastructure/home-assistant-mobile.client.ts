@@ -1,6 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import axios, { type AxiosRequestConfig } from 'axios';
-import WebSocket from 'ws';
+import { WebSocket } from 'ws';
 import { EnvironmentDashboardConfigService } from '../../environment-dashboard/infrastructure/environment-dashboard-config.service';
 
 export interface HomeAssistantStatePayload {

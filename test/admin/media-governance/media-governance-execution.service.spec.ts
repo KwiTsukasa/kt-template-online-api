@@ -2473,7 +2473,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       action: 'acceptance.verify',
       evidenceSha256: 'c'.repeat(64),
       eventType: 'run-succeeded',
-      observedAt: '2026-08-30T01:00:00.000Z',
+      observedAt: new Date().toISOString(),
       runId: candidate.activeRunId,
       sequence: 1,
       summary: '高画质规范目标独立验收通过',

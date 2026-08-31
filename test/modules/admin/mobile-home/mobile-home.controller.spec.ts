@@ -87,13 +87,14 @@ describe('MobileHomeController', () => {
     });
     service.getGameSnapshot.mockResolvedValue({
       apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
-      displayResolution: '2560x1600',
+      displayResolution: '3200x1440',
       generatedAt: '2026-08-31T10:00:00.000Z',
       host: '10.66.66.4',
       httpsPort: 38994,
       managementReady: true,
       streamPort: 38999,
       virtualGamepadReady: true,
+      virtualDisplayReady: true,
     });
     service.submitGamePin.mockResolvedValue({ accepted: true });
   });
@@ -150,11 +151,12 @@ describe('MobileHomeController', () => {
     expect(home.body.data).toMatchObject({ connected: true, entities: [] });
     expect(game.body.data).toMatchObject({
       apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
-      displayResolution: '2560x1600',
+      displayResolution: '3200x1440',
       host: '10.66.66.4',
       httpsPort: 38994,
       streamPort: 38999,
       virtualGamepadReady: true,
+      virtualDisplayReady: true,
     });
   });
 

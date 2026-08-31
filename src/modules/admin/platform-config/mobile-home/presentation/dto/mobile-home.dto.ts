@@ -303,6 +303,9 @@ export class MobileGameSnapshotResponseDto {
 
   @ApiProperty()
   virtualGamepadReady!: boolean;
+
+  @ApiProperty()
+  virtualDisplayReady!: boolean;
 }
 
 export class MobileGamePinRequestDto {

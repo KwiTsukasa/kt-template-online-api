@@ -23,20 +23,42 @@ describe('SunshineMobileClient', () => {
     expect(client.httpsPort()).toBe(38994);
   });
 
-  it('projects the latest Windows desktop resolution without returning logs', async () => {
-    http.request.mockResolvedValueOnce({
-      data: [
-        '[2026-08-31 08:30:40.968]: Info: Desktop resolution [1920x1200]',
-        '[2026-08-31 09:43:58.902]: Info: Desktop resolution [2560x1600]',
-      ].join('\n'),
-      status: 200,
-    });
+  it('projects the latest capture resolution and configured virtual display without logs', async () => {
+    http.request
+      .mockResolvedValueOnce({
+        data: [
+          '[2026-08-31 08:30:40.968]: Info: Desktop resolution [1920x1200]',
+          '[2026-08-31 09:43:58.902]: Info: Desktop resolution [3200x1440]',
+          'Currently available display devices:',
+          '"friendly_name": "VDD by MTT"',
+        ].join('\n'),
+        status: 200,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          dd_configuration_option: 'ensure_active',
+          dd_resolution_option: 'auto',
+          output_name: '{virtual-display-id}',
+        },
+        status: 200,
+      });
 
-    await expect(client.displayResolution()).resolves.toBe('2560x1600');
-    expect(http.request).toHaveBeenCalledWith(
+    await expect(client.displayState()).resolves.toEqual({
+      resolution: '3200x1440',
+      virtualDisplayReady: true,
+    });
+    expect(http.request).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         method: 'GET',
         url: 'https://10.66.66.4:39000/api/logs',
+      }),
+    );
+    expect(http.request).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: 'GET',
+        url: 'https://10.66.66.4:39000/api/config',
       }),
     );
   });

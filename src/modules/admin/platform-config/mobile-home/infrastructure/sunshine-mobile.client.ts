@@ -23,6 +23,17 @@ export interface SunshineVigemStatusPayload {
   version_compatible?: boolean;
 }
 
+export interface SunshineDisplayState {
+  resolution: string;
+  virtualDisplayReady: boolean;
+}
+
+interface SunshineConfigPayload {
+  dd_configuration_option?: string;
+  dd_resolution_option?: string;
+  output_name?: string;
+}
+
 interface SunshinePinPayload {
   status?: boolean;
 }
@@ -57,21 +68,34 @@ export class SunshineMobileClient {
   }
 
   /**
-   * 从 Sunshine 运行日志中提取最近一次真实桌面捕获分辨率，避免移动端猜测 Windows 显示配置。
-   * @returns 规范为 `宽x高` 的最近桌面分辨率。
+   * 仅在最近捕获分辨率合法、目标 VDD 仍被枚举且动态配置保持 `ensure_active/auto` 时标记虚拟显示就绪，不外泄日志或配置正文。
+   * @returns 最近桌面分辨率与虚拟显示配置是否完整。
    * @throws 日志没有合法桌面分辨率时拒绝返回。
    */
-  async displayResolution(): Promise<string> {
+  async displayState(): Promise<SunshineDisplayState> {
     this.requireConfigured();
-    const response = await this.http.request<string>({
+    const logsRequest = this.http.request<string>({
       headers: this.authHeaders(),
       httpsAgent: this.httpsAgent(),
       method: 'GET',
       timeout: SUNSHINE_TIMEOUT_MS,
       url: this.url('api/logs'),
     });
+    const configRequest = this.http.request<SunshineConfigPayload>({
+      headers: this.authHeaders(),
+      httpsAgent: this.httpsAgent(),
+      method: 'GET',
+      timeout: SUNSHINE_TIMEOUT_MS,
+      url: this.url('api/config'),
+    });
+    const [logsResponse, configResponse] = await Promise.all([
+      logsRequest,
+      configRequest,
+    ]);
     const matches = Array.from(
-      response.data.matchAll(/Desktop resolution \[(\d{3,5})x(\d{3,5})\]/gu),
+      logsResponse.data.matchAll(
+        /Desktop resolution \[(\d{3,5})x(\d{3,5})\]/gu,
+      ),
     );
     const latest = matches[matches.length - 1];
     if (!latest) throw new Error('Sunshine 未报告桌面分辨率');
@@ -80,7 +104,26 @@ export class SunshineMobileClient {
     if (width < 640 || width > 16_384 || height < 360 || height > 16_384) {
       throw new Error('Sunshine 桌面分辨率无效');
     }
-    return `${width}x${height}`;
+    const devicesMarker = 'Currently available display devices:';
+    const devicesIndex = logsResponse.data.lastIndexOf(devicesMarker);
+    let latestDevices = '';
+    if (devicesIndex >= 0) latestDevices = logsResponse.data.slice(devicesIndex);
+    const virtualDisplayPresent = /"friendly_name"\s*:\s*"(?:VDD by MTT|Virtual Display Driver)"/u.test(
+      latestDevices,
+    );
+    let configuredOutput = '';
+    if (typeof configResponse.data.output_name === 'string') {
+      configuredOutput = configResponse.data.output_name.trim();
+    }
+    const virtualDisplayReady =
+      virtualDisplayPresent &&
+      Boolean(configuredOutput) &&
+      configResponse.data.dd_configuration_option === 'ensure_active' &&
+      configResponse.data.dd_resolution_option === 'auto';
+    return {
+      resolution: `${width}x${height}`,
+      virtualDisplayReady,
+    };
   }
 
   /**

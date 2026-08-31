@@ -47,7 +47,7 @@ describe('MobileHomeService', () => {
   };
   const sunshine = {
     apps: jest.fn(),
-    displayResolution: jest.fn(),
+    displayState: jest.fn(),
     host: jest.fn(),
     httpsPort: jest.fn(),
     streamPort: jest.fn(),
@@ -75,7 +75,10 @@ describe('MobileHomeService', () => {
     });
     homeAssistant.history.mockResolvedValue([]);
     sunshine.apps.mockResolvedValue({ apps: [] });
-    sunshine.displayResolution.mockResolvedValue('2560x1600');
+    sunshine.displayState.mockResolvedValue({
+      resolution: '3200x1440',
+      virtualDisplayReady: true,
+    });
     sunshine.host.mockReturnValue('10.66.66.4');
     sunshine.httpsPort.mockReturnValue(38994);
     sunshine.streamPort.mockReturnValue(38999);
@@ -315,13 +318,14 @@ describe('MobileHomeService', () => {
           name: 'Desktop',
         },
       ],
-      displayResolution: '2560x1600',
+      displayResolution: '3200x1440',
       generatedAt: expect.any(String),
       host: '10.66.66.4',
       httpsPort: 38994,
       managementReady: true,
       streamPort: 38999,
       virtualGamepadReady: true,
+      virtualDisplayReady: true,
     });
     await expect(service.submitGamePin('1234', 'KwiCore')).resolves.toEqual({
       accepted: true,

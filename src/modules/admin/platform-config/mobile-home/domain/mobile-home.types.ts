@@ -130,6 +130,7 @@ export interface MobileGameSnapshotResponse {
   managementReady: boolean;
   streamPort: number;
   virtualGamepadReady: boolean;
+  virtualDisplayReady: boolean;
 }
 
 export interface MobileGamePinRequest {

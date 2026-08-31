@@ -252,10 +252,10 @@ export class MobileHomeService {
    * @returns 移动端游戏目录快照。
    */
   async getGameSnapshot(): Promise<MobileGameSnapshotResponse> {
-    const [source, vigemStatus, displayResolution] = await Promise.all([
+    const [source, vigemStatus, displayState] = await Promise.all([
       this.sunshine.apps(),
       this.sunshine.vigemStatus(),
-      this.sunshine.displayResolution(),
+      this.sunshine.displayState(),
     ]);
     const apps: MobileGameAppSnapshot[] = [];
     for (const app of source.apps || []) {
@@ -269,7 +269,7 @@ export class MobileHomeService {
     }
     return {
       apps,
-      displayResolution,
+      displayResolution: displayState.resolution,
       generatedAt: new Date().toISOString(),
       host: this.sunshine.host(),
       httpsPort: this.sunshine.httpsPort(),
@@ -278,6 +278,7 @@ export class MobileHomeService {
       virtualGamepadReady:
         vigemStatus.installed === true &&
         vigemStatus.version_compatible === true,
+      virtualDisplayReady: displayState.virtualDisplayReady,
     };
   }
 

@@ -283,6 +283,9 @@ export class MobileGameSnapshotResponseDto {
   @ApiProperty({ type: [MobileGameAppSnapshotDto] })
   apps!: MobileGameAppSnapshotDto[];
 
+  @ApiProperty({ example: '2560x1600' })
+  displayResolution!: string;
+
   @ApiProperty()
   generatedAt!: string;
 

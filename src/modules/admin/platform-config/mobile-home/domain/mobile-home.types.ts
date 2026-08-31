@@ -123,6 +123,7 @@ export interface MobileGameAppSnapshot {
 
 export interface MobileGameSnapshotResponse {
   apps: MobileGameAppSnapshot[];
+  displayResolution: string;
   generatedAt: string;
   host: string;
   httpsPort: number;

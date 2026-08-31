@@ -57,6 +57,33 @@ export class SunshineMobileClient {
   }
 
   /**
+   * 从 Sunshine 运行日志中提取最近一次真实桌面捕获分辨率，避免移动端猜测 Windows 显示配置。
+   * @returns 规范为 `宽x高` 的最近桌面分辨率。
+   * @throws 日志没有合法桌面分辨率时拒绝返回。
+   */
+  async displayResolution(): Promise<string> {
+    this.requireConfigured();
+    const response = await this.http.request<string>({
+      headers: this.authHeaders(),
+      httpsAgent: this.httpsAgent(),
+      method: 'GET',
+      timeout: SUNSHINE_TIMEOUT_MS,
+      url: this.url('api/logs'),
+    });
+    const matches = Array.from(
+      response.data.matchAll(/Desktop resolution \[(\d{3,5})x(\d{3,5})\]/gu),
+    );
+    const latest = matches[matches.length - 1];
+    if (!latest) throw new Error('Sunshine 未报告桌面分辨率');
+    const width = Number.parseInt(latest[1], 10);
+    const height = Number.parseInt(latest[2], 10);
+    if (width < 640 || width > 16_384 || height < 360 || height > 16_384) {
+      throw new Error('Sunshine 桌面分辨率无效');
+    }
+    return `${width}x${height}`;
+  }
+
+  /**
    * 读取 Sunshine 对 ViGEmBus 的权威兼容判定，只供上层投影布尔能力状态。
    * @returns Sunshine `/api/vigembus/status` 响应。
    */

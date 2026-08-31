@@ -252,9 +252,10 @@ export class MobileHomeService {
    * @returns 移动端游戏目录快照。
    */
   async getGameSnapshot(): Promise<MobileGameSnapshotResponse> {
-    const [source, vigemStatus] = await Promise.all([
+    const [source, vigemStatus, displayResolution] = await Promise.all([
       this.sunshine.apps(),
       this.sunshine.vigemStatus(),
+      this.sunshine.displayResolution(),
     ]);
     const apps: MobileGameAppSnapshot[] = [];
     for (const app of source.apps || []) {
@@ -268,6 +269,7 @@ export class MobileHomeService {
     }
     return {
       apps,
+      displayResolution,
       generatedAt: new Date().toISOString(),
       host: this.sunshine.host(),
       httpsPort: this.sunshine.httpsPort(),

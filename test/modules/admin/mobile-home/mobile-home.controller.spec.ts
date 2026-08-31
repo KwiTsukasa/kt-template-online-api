@@ -87,6 +87,7 @@ describe('MobileHomeController', () => {
     });
     service.getGameSnapshot.mockResolvedValue({
       apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
+      displayResolution: '2560x1600',
       generatedAt: '2026-08-31T10:00:00.000Z',
       host: '10.66.66.4',
       httpsPort: 38994,
@@ -149,6 +150,7 @@ describe('MobileHomeController', () => {
     expect(home.body.data).toMatchObject({ connected: true, entities: [] });
     expect(game.body.data).toMatchObject({
       apps: [{ id: 'app-1', name: 'Steam Big Picture' }],
+      displayResolution: '2560x1600',
       host: '10.66.66.4',
       httpsPort: 38994,
       streamPort: 38999,

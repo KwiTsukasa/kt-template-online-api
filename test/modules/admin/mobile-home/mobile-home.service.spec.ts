@@ -130,7 +130,9 @@ describe('MobileHomeService', () => {
 
   it('projects Home Assistant registries, typed attributes, activity, scenes and real energy history', async () => {
     homeAssistant.snapshot.mockResolvedValueOnce({
-      areas: [{ area_id: 'living-room', floor_id: 'floor-1', name: '客厅' }],
+      areas: [
+        { area_id: 'living-room', floor_id: 'floor-1', name: 'Living Room' },
+      ],
       devices: [{ area_id: 'living-room', id: 'device-light' }],
       entities: [
         {
@@ -145,6 +147,12 @@ describe('MobileHomeService', () => {
           message: '已上锁',
           name: '入户门',
           when: '2026-08-31T10:00:00.000Z',
+        },
+        {
+          entity_id: 'sensor.sun_next_midnight',
+          name: 'Sun Next midnight',
+          state: '2026-09-01T00:00:01+00:00',
+          when: '2026-08-31T08:00:00.000Z',
         },
       ],
       states: [
@@ -173,6 +181,11 @@ describe('MobileHomeService', () => {
           entity_id: 'scene.movie',
           last_changed: '2026-08-31T09:00:00.000Z',
           state: 'scening',
+        },
+        {
+          attributes: { friendly_name: 'Backup Backup Manager state' },
+          entity_id: 'sensor.backup_backup_manager_state',
+          state: 'idle',
         },
       ],
     });
@@ -212,6 +225,12 @@ describe('MobileHomeService', () => {
       }),
     ]);
     expect(result.activities[0]).toMatchObject({ severity: 'success' });
+    expect(result.activities[1].summary).toBe('下次午夜');
+    expect(
+      result.entities.find(
+        (entity) => entity.entityId === 'sensor.backup_backup_manager_state',
+      )?.name,
+    ).toBe('备份管理器状态');
     expect(result.energy[0]).toMatchObject({
       entityId: 'sensor.daily_energy',
       points: [{ observedAt: '2026-08-31T09:00:00.000Z', value: 11.4 }],

@@ -87,6 +87,30 @@ const HOME_SERVICE_DATA_KEYS = new Set([
   'rgb_color',
   'temperature',
 ]);
+const HOME_AREA_LOCALIZATION = new Map([
+  ['balcony', '阳台'],
+  ['bathroom', '卫生间'],
+  ['bedroom', '卧室'],
+  ['dining room', '餐厅'],
+  ['entrance', '玄关'],
+  ['hallway', '走廊'],
+  ['kitchen', '厨房'],
+  ['living room', '客厅'],
+  ['office', '书房'],
+  ['study', '书房'],
+]);
+const HOME_ENTITY_LOCALIZATION = new Map([
+  ['sensor.backup_backup_manager_state', '备份管理器状态'],
+  ['sensor.backup_last_attempted_automatic_backup', '上次备份尝试'],
+  ['sensor.backup_last_successful_automatic_backup', '上次成功备份'],
+  ['sensor.backup_next_scheduled_automatic_backup', '下次自动备份'],
+  ['sensor.sun_next_dawn', '下次曙光'],
+  ['sensor.sun_next_dusk', '下次暮光'],
+  ['sensor.sun_next_midnight', '下次午夜'],
+  ['sensor.sun_next_noon', '下次正午'],
+  ['sensor.sun_next_rising', '下次日出'],
+  ['sensor.sun_next_setting', '下次日落'],
+]);
 
 type AdminNoticePageItem = Awaited<
   ReturnType<AdminNoticeService['page']>
@@ -156,7 +180,7 @@ export class MobileHomeService {
         .length,
       floorId: area.floor_id || undefined,
       id: area.area_id,
-      name: area.name,
+      name: this.localizeAreaName(area.name, area.area_id),
     }));
     const scenes = source.states
       .filter((state) => SCENE_DOMAINS.has(this.domainOf(state.entity_id)))
@@ -323,7 +347,10 @@ export class MobileHomeService {
       deviceId,
       domain: this.domainOf(state.entity_id),
       entityId: state.entity_id,
-      name: friendlyName || registryName || state.entity_id,
+      name: this.localizeEntityName(
+        friendlyName || registryName || state.entity_id,
+        state.entity_id,
+      ),
       state: state.state,
       updatedAt: state.last_updated || state.last_changed,
     };
@@ -349,7 +376,10 @@ export class MobileHomeService {
       enabled,
       entityId: state.entity_id,
       lastChanged: state.last_changed,
-      name: friendlyName || state.entity_id,
+      name: this.localizeEntityName(
+        friendlyName || state.entity_id,
+        state.entity_id,
+      ),
     };
   }
 
@@ -363,9 +393,21 @@ export class MobileHomeService {
     entry: HomeAssistantLogbookPayload,
     index: number,
   ): MobileHomeActivitySnapshot {
-    const parts = [entry.name, entry.message, entry.state]
+    const localizedName = this.localizeEntityName(
+      `${entry.name || ''}`,
+      `${entry.entity_id || ''}`,
+    );
+    const parts = [localizedName, entry.message]
       .map((item) => `${item || ''}`.trim())
       .filter(Boolean);
+    const state = `${entry.state || ''}`.trim();
+    if (
+      state &&
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/u.test(state) &&
+      !parts.includes(state)
+    ) {
+      parts.push(state);
+    }
     const summary = parts.join(' · ') || 'Home Assistant 状态变化';
     let severity: 'info' | 'success' | 'warning' = 'info';
     if (/unavailable|unknown|alarm|leak|smoke|异常|失败|告警/iu.test(summary)) {
@@ -562,6 +604,45 @@ export class MobileHomeService {
     const separator = entityId.indexOf('.');
     if (separator <= 0) return '';
     return entityId.slice(0, separator);
+  }
+
+  /**
+   * 按区域名称和稳定 ID 的规范键匹配常见中文区域，未知用户自定义名称保持原文。
+   * @param name - Home Assistant 区域显示名。
+   * @param id - Home Assistant 稳定区域标识。
+   * @returns 已知常见区域的中文名或原始显示名。
+   */
+  private localizeAreaName(name: string, id: string): string {
+    const nameMatch = HOME_AREA_LOCALIZATION.get(this.homeNameKey(name));
+    if (nameMatch) return nameMatch;
+    const idMatch = HOME_AREA_LOCALIZATION.get(this.homeNameKey(id));
+    if (idMatch) return idMatch;
+    return name;
+  }
+
+  /**
+   * 按稳定 entityId 本土化 HA 内置系统实体，用户自定义 friendly_name 保持权威原文。
+   * @param name - registry 或 state 提供的实体显示名。
+   * @param entityId - Home Assistant 稳定实体标识。
+   * @returns 已知系统实体的中文名或原始显示名。
+   */
+  private localizeEntityName(name: string, entityId: string): string {
+    const localized = HOME_ENTITY_LOCALIZATION.get(entityId);
+    if (localized) return localized;
+    return name;
+  }
+
+  /**
+   * 把区域名称的大小写、下划线、连字符与连续空白收敛为同一匹配键。
+   * @param value - 区域名称或区域 ID。
+   * @returns 用单空格分隔的小写匹配键。
+   */
+  private homeNameKey(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(/[_-]+/gu, ' ')
+      .replaceAll(/\s+/gu, ' ');
   }
 
   /**

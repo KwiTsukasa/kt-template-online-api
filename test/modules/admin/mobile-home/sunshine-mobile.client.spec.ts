@@ -36,7 +36,7 @@ describe('SunshineMobileClient', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          dd_configuration_option: 'ensure_primary',
+          dd_configuration_option: 'ensure_active',
           dd_resolution_option: 'auto',
           output_name: '{virtual-display-id}',
         },

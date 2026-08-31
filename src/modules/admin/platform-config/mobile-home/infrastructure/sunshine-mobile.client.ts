@@ -68,7 +68,7 @@ export class SunshineMobileClient {
   }
 
   /**
-   * 仅在最近捕获分辨率合法、目标 VDD 仍被枚举且动态配置保持 `ensure_primary/auto` 时标记虚拟显示就绪，不外泄日志或配置正文。
+   * 仅在最近捕获分辨率合法、目标 VDD 仍被枚举且动态配置保持 `ensure_active/auto` 时标记虚拟显示就绪，不外泄日志或配置正文。
    * @returns 最近桌面分辨率与虚拟显示配置是否完整。
    * @throws 日志没有合法桌面分辨率时拒绝返回。
    */
@@ -118,7 +118,7 @@ export class SunshineMobileClient {
     const virtualDisplayReady =
       virtualDisplayPresent &&
       Boolean(configuredOutput) &&
-      configResponse.data.dd_configuration_option === 'ensure_primary' &&
+      configResponse.data.dd_configuration_option === 'ensure_active' &&
       configResponse.data.dd_resolution_option === 'auto';
     return {
       resolution: `${width}x${height}`,

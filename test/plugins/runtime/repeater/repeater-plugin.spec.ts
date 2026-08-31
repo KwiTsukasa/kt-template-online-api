@@ -38,6 +38,25 @@ describe('repeater protocol plugin', () => {
     });
   });
 
+  it('preserves the triggering message whitespace in the reply', async () => {
+    const application = new RepeaterApplication(
+      host,
+      manifest,
+      () => 1_000_000,
+    );
+    const text =
+      'Tell me👏  Tell Me👏嘿嘿来⭐哟嘿嘿来⭐\n霁华👏siki呐👏瓦达西👏👏尼纳鲁诺👏👏';
+    const event = createEvent({ rawText: text, text });
+
+    await application.handleMessage(event);
+    await application.handleMessage(event);
+
+    await expect(application.handleMessage(event)).resolves.toEqual({
+      handled: true,
+      replies: [{ content: text, kind: 'text' }],
+    });
+  });
+
   it('isolates state by opaque conversation key and ignores self events', async () => {
     const application = new RepeaterApplication(host, manifest, () => 1_000_000);
     await application.handleMessage(createEvent());

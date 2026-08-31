@@ -46,27 +46,31 @@ export class RepeaterApplication {
    */
   async handleMessage(message: RepeaterMessage): Promise<BotPluginEventResult> {
     const config = readRepeaterRuntimeConfig(this.host);
-    const text = normalizeRepeaterText(message.text);
-    if (!canRepeaterEcho(message, text, config.maxTextLength)) {
+    const normalizedText = normalizeRepeaterText(message.text);
+    if (!canRepeaterEcho(message, normalizedText, config.maxTextLength)) {
       this.resetState(message);
       return emptyEventResult();
     }
 
     const key = buildRepeaterStateKey(message);
     const current = this.now();
-    const state = createNextRepeaterState(this.states.get(key), text, current);
+    const state = createNextRepeaterState(
+      this.states.get(key),
+      normalizedText,
+      current,
+    );
     this.states.set(key, state);
     this.pruneStates(current, config.stateTtlMs);
-    if (!shouldRepeaterEcho(state, text, current, config)) {
+    if (!shouldRepeaterEcho(state, normalizedText, current, config)) {
       return emptyEventResult();
     }
 
-    state.repeatedText = text;
+    state.repeatedText = normalizedText;
     state.lastRepeatedAt = current;
     state.updatedAt = current;
     return {
       handled: true,
-      replies: [{ content: text, kind: 'text' }],
+      replies: [{ content: message.text, kind: 'text' }],
     };
   }
 

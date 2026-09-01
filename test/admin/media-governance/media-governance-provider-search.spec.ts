@@ -1,4 +1,5 @@
 import {
+  parseTmdbTvSeasonFactsHtml,
   parseTmdbSearchHtml,
   searchTmdbMediaCandidates,
   verifyTmdbMediaCandidate,
@@ -120,6 +121,43 @@ describe('TMDB provider search', () => {
       title: '赛博朋克：边缘行者',
     });
     fetchMock.mockRestore();
+  });
+
+  it('projects the official TMDB season list into continuous TV facts', () => {
+    const seasonsHtml = `
+      <section class="panel">
+        <div class="season">
+          <a href="/tv/105248/season/1?language=zh-CN">封面</a>
+          <div class="content">
+            <h2><a href="/tv/105248/season/1?language=zh-CN">赛博朋克：边缘行者</a></h2>
+            <h4>2022 • 共 10 集</h4>
+          </div>
+        </div>
+      </section>
+    `;
+
+    expect(parseTmdbTvSeasonFactsHtml(seasonsHtml, '105248')).toEqual([
+      {
+        episodeCount: 10,
+        episodeStart: 1,
+        releaseYear: 2022,
+        seasonNumber: 1,
+        title: '第 1 季',
+      },
+    ]);
+  });
+
+  it('rejects a partial TMDB season card instead of creating a TV shell', () => {
+    const partialHtml = `
+      <div class="season">
+        <a href="/tv/105248/season/1?language=zh-CN">第 1 季</a>
+        <h4>2022</h4>
+      </div>
+    `;
+
+    expect(() => parseTmdbTvSeasonFactsHtml(partialHtml, '105248')).toThrow(
+      'tmdb-provider-season-episode-count-missing',
+    );
   });
 });
 

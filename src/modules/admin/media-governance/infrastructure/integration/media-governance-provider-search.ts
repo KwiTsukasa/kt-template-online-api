@@ -13,6 +13,14 @@ export interface MediaGovernanceTmdbCandidate {
   title: string;
 }
 
+export interface MediaGovernanceTmdbSeasonFact {
+  episodeCount: number;
+  episodeStart: number;
+  releaseYear: null | number;
+  seasonNumber: number;
+  title: string;
+}
+
 /**
  * 查询 TMDB 中文搜索页，保留展示标题与原始片名，并按发行年份优先返回有界候选。
  * @param input - 用于searchTmdb媒体任务Candidates的结构化输入，包含 `mediaType`、`title`、`releaseYear` 字段。
@@ -100,6 +108,94 @@ export async function verifyTmdbMediaCandidate(input: {
     releaseYear,
     title,
   };
+}
+
+/**
+ * 按显式 TMDB TV ID 读取官方季列表，并拒绝缺少正集数季事实的响应。
+ * @param providerId - TMDB TV 唯一编号。
+ * @returns 按季号升序排列且至少包含一个正集数季的官方事实。
+ * @throws ID 非法、页面不可用或季事实不完整时拒绝创建空 TV Series。
+ */
+export async function fetchTmdbTvSeasonFacts(
+  providerId: string,
+): Promise<MediaGovernanceTmdbSeasonFact[]> {
+  if (!/^[1-9]\d*$/u.test(providerId)) {
+    throw new Error('tmdb-provider-id-invalid');
+  }
+  const pathname = `/tv/${providerId}/seasons`;
+  const url = new URL(`https://www.themoviedb.org${pathname}`);
+  url.searchParams.set('language', 'zh-CN');
+  const html = await fetchTmdbHtml(url, pathname);
+  const facts = parseTmdbTvSeasonFactsHtml(html, providerId);
+  if (facts.length === 0) {
+    throw new Error('tmdb-provider-season-facts-missing');
+  }
+  return facts;
+}
+
+/**
+ * 从 TMDB TV 季列表卡片读取季号、正集数和可选首播年份，并去除重复链接。
+ * @param html - TMDB 官方季列表 HTML。
+ * @param providerId - 页面必须归属的 TMDB TV 编号。
+ * @returns 可直接固化为连续 Season/Episode 的有界季事实。
+ * @throws 页面出现越界季号或无法读取集数的季卡片时拒绝部分投影。
+ */
+export function parseTmdbTvSeasonFactsHtml(
+  html: string,
+  providerId: string,
+): MediaGovernanceTmdbSeasonFact[] {
+  if (!/^[1-9]\d*$/u.test(providerId)) {
+    throw new Error('tmdb-provider-id-invalid');
+  }
+  const facts: MediaGovernanceTmdbSeasonFact[] = [];
+  const seen = new Set<number>();
+  const linkPattern = new RegExp(
+    `href="\\/tv\\/${providerId}\\/season\\/(\\d{1,3})(?:\\?[^\"]*)?"`,
+    'gu',
+  );
+  for (const match of html.matchAll(linkPattern)) {
+    const seasonNumber = Number(match[1]);
+    if (seen.has(seasonNumber)) continue;
+    if (
+      !Number.isInteger(seasonNumber) ||
+      seasonNumber < 0 ||
+      seasonNumber > 99
+    ) {
+      throw new Error('tmdb-provider-season-number-invalid');
+    }
+    seen.add(seasonNumber);
+    let cardEnd = match.index + 16_000;
+    const nextSeason = html.indexOf('<div class="season">', match.index + 1);
+    if (nextSeason >= 0 && nextSeason < cardEnd) cardEnd = nextSeason;
+    const cardText = decodeHtmlAttribute(
+      html.slice(match.index, cardEnd).replace(/<[^>]+>/gu, ' '),
+    ).replace(/\s+/gu, ' ');
+    const episodeCountText = cardText.match(
+      /(?:共\s*)?(\d{1,4})\s*(?:集|Episodes?)/iu,
+    )?.[1];
+    if (!episodeCountText) {
+      throw new Error('tmdb-provider-season-episode-count-missing');
+    }
+    const episodeCount = Number(episodeCountText);
+    if (episodeCount === 0) continue;
+    if (episodeCount > 2_000) {
+      throw new Error('tmdb-provider-season-episode-count-invalid');
+    }
+    const releaseYearText = cardText.match(/(?:18|19|20|21)\d{2}/u)?.[0];
+    let releaseYear: null | number = null;
+    if (releaseYearText) releaseYear = Number(releaseYearText);
+    let title = `第 ${seasonNumber} 季`;
+    if (seasonNumber === 0) title = '特别篇';
+    facts.push({
+      episodeCount,
+      episodeStart: 1,
+      releaseYear,
+      seasonNumber,
+      title,
+    });
+  }
+  facts.sort((left, right) => left.seasonNumber - right.seasonNumber);
+  return facts;
 }
 
 /**

@@ -56,6 +56,10 @@ import {
   verifyMediaGovernanceCatalogIdentity,
 } from '@/modules/admin/media-governance/infrastructure/integration/media-governance-rss-discovery';
 import {
+  fetchTmdbTvSeasonFacts,
+  type MediaGovernanceTmdbSeasonFact,
+} from '@/modules/admin/media-governance/infrastructure/integration/media-governance-provider-search';
+import {
   mediaGovernanceMagnetInfoHash,
   mediaGovernanceRssTitleIncluded,
   normalizeMediaGovernanceMagnetUri,
@@ -102,6 +106,8 @@ type RssTaskIdentity = {
   releaseYear: null | number;
   title: string;
 };
+
+type CanonicalSeasonFact = MediaGovernanceTmdbSeasonFact;
 
 type HistoricalIdentityTarget = {
   matchRole: 'canonical' | 'external-ref';
@@ -551,6 +557,7 @@ export class MediaGovernanceCatalogService
     if (releaseYear === null) {
       throwVbenError('主作品身份缺少首播或上映年份', HttpStatus.CONFLICT);
     }
+    const seasonFacts = await this.resolveCreationSeasonFacts(input, identity);
     const canonicalNamespace = workIdentityNamespace(
       identity.provider,
       input.workType,
@@ -607,6 +614,9 @@ export class MediaGovernanceCatalogService
       });
       await seriesRepository.save(series);
       await this.saveWorkReference(manager, work, identity, 'canonical');
+      for (const seasonFact of seasonFacts) {
+        await this.saveSeasonEpisodes(manager, id, workId, seasonFact);
+      }
       return id;
     });
     const detail = await this.detail(seriesId);
@@ -614,6 +624,75 @@ export class MediaGovernanceCatalogService
       () => undefined,
     );
     return detail;
+  }
+
+  /**
+   * 为 TMDB TV 创建读取官方季集事实；其他资料源和独立作品保持原有无季合同。
+   * @param input - 用户确认的 Work 类型与资料身份。
+   * @param identity - 已通过官方详情重新核验的作品身份。
+   * @returns 创建事务必须一并固化的季事实。
+   * @throws TMDB TV 季列表不可用或为空时返回可见冲突，阻止落下 TV 空壳。
+   */
+  private async resolveCreationSeasonFacts(
+    input: MediaGovernanceSeriesCreateDto,
+    identity: MediaGovernanceRssIdentityCandidate,
+  ): Promise<CanonicalSeasonFact[]> {
+    if (input.workType !== 'tv' || identity.provider !== 'tmdb') return [];
+    try {
+      return await fetchTmdbTvSeasonFacts(identity.providerId);
+    } catch {
+      throwVbenError('所选 TV 作品季集信息无法重新核验', HttpStatus.CONFLICT);
+    }
+  }
+
+  /**
+   * 在调用方事务中写入一个连续 Season 及其全部 Episode，确保 Series 创建与季集事实原子提交。
+   * @param manager - 当前 Series 创建或手动加季事务管理器。
+   * @param seriesId - Season 所属 Series 标识。
+   * @param workId - Season 所属 TV Work 标识。
+   * @param input - 已核验的季号、集数、起始集、标题和年份。
+   */
+  private async saveSeasonEpisodes(
+    manager: EntityManager,
+    seriesId: string,
+    workId: string,
+    input: CanonicalSeasonFact,
+  ): Promise<void> {
+    const seasonRepository = manager.getRepository(MediaGovernanceSeasonEntity);
+    const season = seasonRepository.create({
+      episodeCount: input.episodeCount,
+      episodeStart: input.episodeStart,
+      id: `media-season-${randomUUID()}`,
+      releaseYear: input.releaseYear,
+      seasonNumber: input.seasonNumber,
+      seriesId,
+      status: 'known',
+      title: input.title.trim(),
+      workId,
+    });
+    await seasonRepository.save(season);
+    const episodeRepository = manager.getRepository(
+      MediaGovernanceEpisodeEntity,
+    );
+    const episodes = [];
+    for (
+      let episodeNumber = input.episodeStart;
+      episodeNumber < input.episodeStart + input.episodeCount;
+      episodeNumber += 1
+    ) {
+      episodes.push(
+        episodeRepository.create({
+          episodeNumber,
+          id: `media-episode-${randomUUID()}`,
+          seasonId: season.id,
+          seasonNumber: season.seasonNumber,
+          seriesId,
+          status: 'known',
+          title: null,
+        }),
+      );
+    }
+    await episodeRepository.save(episodes);
   }
 
   /**
@@ -883,40 +962,15 @@ export class MediaGovernanceCatalogService
         throwVbenError('当前 Work 已存在相同季号', HttpStatus.CONFLICT);
       }
       const episodeStart = input.episodeStart ?? 1;
-      const season = seasonRepository.create({
+      let releaseYear: null | number = null;
+      if (input.releaseYear !== undefined) releaseYear = input.releaseYear;
+      await this.saveSeasonEpisodes(manager, seriesId, workId, {
         episodeCount: input.episodeCount,
         episodeStart,
-        id: `media-season-${randomUUID()}`,
-        releaseYear: input.releaseYear ?? null,
+        releaseYear,
         seasonNumber: input.seasonNumber,
-        seriesId,
-        status: 'known',
         title: input.title.trim(),
-        workId,
       });
-      await seasonRepository.save(season);
-      const episodeRepository = manager.getRepository(
-        MediaGovernanceEpisodeEntity,
-      );
-      const episodes = [];
-      for (
-        let episodeNumber = episodeStart;
-        episodeNumber < episodeStart + input.episodeCount;
-        episodeNumber += 1
-      ) {
-        episodes.push(
-          episodeRepository.create({
-            episodeNumber,
-            id: `media-episode-${randomUUID()}`,
-            seasonId: season.id,
-            seasonNumber: season.seasonNumber,
-            seriesId,
-            status: 'known',
-            title: null,
-          }),
-        );
-      }
-      await episodeRepository.save(episodes);
     });
     await this.publishCatalogChanged(seriesId, [], 'updated').catch(
       () => undefined,

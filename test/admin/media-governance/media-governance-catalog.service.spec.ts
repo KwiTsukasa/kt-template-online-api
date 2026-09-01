@@ -661,6 +661,8 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
   });
 
   it('atomically creates a Series and one verified primary Work', async () => {
+    const savedEpisodes: unknown[] = [];
+    const savedSeasons: unknown[] = [];
     const savedSeries: unknown[] = [];
     const savedWorks: unknown[] = [];
     const savedWorkRefs: unknown[] = [];
@@ -685,6 +687,26 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
           save: jest.fn(async (value) => {
             savedWorks.push(value);
             return value;
+          }),
+        },
+      ],
+      [
+        MediaGovernanceSeasonEntity,
+        {
+          create: jest.fn((value) => value),
+          save: jest.fn(async (value) => {
+            savedSeasons.push(value);
+            return value;
+          }),
+        },
+      ],
+      [
+        MediaGovernanceEpisodeEntity,
+        {
+          create: jest.fn((value) => value),
+          save: jest.fn(async (values) => {
+            savedEpisodes.push(...values);
+            return values;
           }),
         },
       ],
@@ -727,6 +749,15 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
         works: [{ id: 'media-work-jjk-tv' }],
       }),
       publishCatalogChanged: jest.fn().mockResolvedValue(undefined),
+      resolveCreationSeasonFacts: jest.fn().mockResolvedValue([
+        {
+          episodeCount: 10,
+          episodeStart: 1,
+          releaseYear: 2022,
+          seasonNumber: 1,
+          title: '第 1 季',
+        },
+      ]),
       verifyWorkIdentity: jest.fn().mockResolvedValue({
         candidateId: 'tmdb:95479',
         episodeCount: null,
@@ -767,6 +798,20 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       }),
     ]);
     expect(savedSeriesRefs).toHaveLength(0);
+    expect(savedSeasons).toEqual([
+      expect.objectContaining({
+        episodeCount: 10,
+        seasonNumber: 1,
+        title: '第 1 季',
+      }),
+    ]);
+    expect(savedEpisodes).toHaveLength(10);
+    expect(savedEpisodes[0]).toEqual(
+      expect.objectContaining({ episodeNumber: 1, seasonNumber: 1 }),
+    );
+    expect(savedEpisodes[9]).toEqual(
+      expect.objectContaining({ episodeNumber: 10, seasonNumber: 1 }),
+    );
   });
 
   it('requires the Work identity when two Works can both contain S01', async () => {

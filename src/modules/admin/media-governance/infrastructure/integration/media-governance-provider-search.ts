@@ -5,6 +5,7 @@ const MAX_CANDIDATES = 8;
 
 export interface MediaGovernanceTmdbCandidate {
   candidateId: string;
+  originalTitle: null | string;
   posterUrl: null | string;
   provider: 'tmdb';
   providerId: string;
@@ -13,7 +14,7 @@ export interface MediaGovernanceTmdbCandidate {
 }
 
 /**
- * 查询 TMDB 中文搜索页，并按发行年份优先返回有界候选。
+ * 查询 TMDB 中文搜索页，保留展示标题与原始片名，并按发行年份优先返回有界候选。
  * @param input - 用于searchTmdb媒体任务Candidates的结构化输入，包含 `mediaType`、`title`、`releaseYear` 字段。
  * @returns 按输入顺序得到的searchTmdb媒体任务Candidates列表；没有匹配项时为空数组。
  * @throws 当 `!response.ok || !String(response.headers.get('content-type') ?? '') .to…` 成立时拒绝当前输入并抛出 `Error`。
@@ -44,7 +45,7 @@ export async function searchTmdbMediaCandidates(input: {
 /**
  * 按显式 TMDB ID 读取官方详情页并核对媒体类型与年份，作为搜索页不可用时的独立身份验证路径。
  * @param input - 媒体类型、TMDB ID 与任务声明年份。
- * @returns 通过官方页面验证的唯一 TMDB 候选。
+ * @returns 通过官方页面验证且包含展示标题、原始片名与年份的唯一 TMDB 候选。
  * @throws 页面不可用、路径漂移、标题缺失或年份不一致时拒绝候选。
  */
 export async function verifyTmdbMediaCandidate(input: {
@@ -65,17 +66,26 @@ export async function verifyTmdbMediaCandidate(input: {
     /<meta\b[^>]*\bproperty="og:title"[^>]*\bcontent="([^"]+)"/iu,
   )?.[1];
   const documentTitle = html.match(/<title>([^<]+)<\/title>/iu)?.[1];
+  const decodedDocumentTitle = decodeHtmlAttribute(documentTitle ?? '').trim();
   let title = decodeHtmlAttribute(openGraphTitle ?? '').trim();
-  if (!title) title = decodeHtmlAttribute(documentTitle ?? '').trim();
+  if (!title) title = decodedDocumentTitle;
   title = title.replace(/\s*[—|-]\s*The Movie Database.*$/iu, '').trim();
   const releaseText = decodeHtmlAttribute(
-    html.match(/class="[^"]*\brelease\b[^"]*"[^>]*>([^<]*)</iu)?.[1] ?? '',
+    html.match(/class="[^"]*\brelease(?:_date)?\b[^"]*"[^>]*>([^<]*)/iu)?.[1] ??
+      '',
   );
-  const yearMatch = `${title} ${releaseText}`.match(
+  const originalTitle = decodeHtmlAttribute(
+    html.match(
+      /<p\b[^>]*\bclass="[^"]*\bwrap\b[^"]*"[^>]*>\s*<strong\b[^>]*>(?:<bdi>)?(?:原始片名|Original Name)(?:<\/bdi>)?<\/strong>\s*([^<]+)<\/p>/iu,
+    )?.[1] ?? '',
+  );
+  const yearMatch = `${decodedDocumentTitle} ${releaseText}`.match(
     /(?:18|19|20|21)\d{2}/u,
   )?.[0];
   let releaseYear: null | number = null;
   if (yearMatch) releaseYear = Number(yearMatch);
+  let normalizedOriginalTitle: null | string = null;
+  if (originalTitle.trim()) normalizedOriginalTitle = originalTitle.trim();
   const yearMatches =
     input.releaseYear === null || releaseYear === input.releaseYear;
   if (!title || !yearMatches) {
@@ -83,6 +93,7 @@ export async function verifyTmdbMediaCandidate(input: {
   }
   return {
     candidateId: `tmdb:${input.providerId}`,
+    originalTitle: normalizedOriginalTitle,
     posterUrl: null,
     provider: 'tmdb',
     providerId: input.providerId,
@@ -127,7 +138,7 @@ async function fetchTmdbHtml(url: URL, expectedPathPrefix: string) {
 }
 
 /**
- * 从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识。
+ * 从 TMDB 搜索页提取去重后的展示标题、原始片名、年份、海报与资料源标识。
  * @param html - 用于从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识的领域对象，包含 `matchAll` 字段。
  * @param mediaType - 决定从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识内容、边界或目标的 `mediaType` 值。
  * @returns 按输入顺序得到的从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识列表；没有匹配项时为空数组。
@@ -158,6 +169,11 @@ export function parseTmdbSearchHtml(
         '',
     );
     const year = releaseText.match(/(?:18|19|20|21)\d{2}/u)?.[0];
+    const originalTitle = decodeHtmlAttribute(
+      card.match(
+        /<span\b[^>]*\bclass="[^"]*\bfont-light\b[^"]*"[^>]*>\s*\(([^<]+)\)\s*<\/span>/iu,
+      )?.[1] ?? '',
+    ).trim();
     seen.add(providerId);
     let posterUrl = null;
     if (/^https:\/\/media\.themoviedb\.org\//u.test(poster)) {
@@ -165,8 +181,11 @@ export function parseTmdbSearchHtml(
     }
     let releaseYear = null;
     if (year) releaseYear = Number(year);
+    let normalizedOriginalTitle: null | string = null;
+    if (originalTitle) normalizedOriginalTitle = originalTitle;
     candidates.push({
       candidateId: `tmdb:${providerId}`,
+      originalTitle: normalizedOriginalTitle,
       posterUrl,
       provider: 'tmdb',
       providerId,

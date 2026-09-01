@@ -10,6 +10,10 @@ describe('TMDB provider search', () => {
       <a href="/tv/105473?language=zh-CN">
         <img alt="刀使巫女 刻印一闪的灯火" src="https://media.themoviedb.org/t/p/w94/test.jpg" />
       </a>
+      <h2>
+        <span>刀使巫女 刻印一闪的灯火</span>
+        <span class="font-light"> (刀使ノ巫女 刻みし一閃の燈火)</span>
+      </h2>
       <span class="release_date w-full">2020年10月25日</span>
     </div>
     <a href="/tv/105473?language=zh-CN"><span>重复链接</span></a>
@@ -19,6 +23,7 @@ describe('TMDB provider search', () => {
     expect(parseTmdbSearchHtml(html, 'tv')).toEqual([
       {
         candidateId: 'tmdb:105473',
+        originalTitle: '刀使ノ巫女 刻みし一閃の燈火',
         posterUrl: 'https://media.themoviedb.org/t/p/w94/test.jpg',
         provider: 'tmdb',
         providerId: '105473',
@@ -77,6 +82,43 @@ describe('TMDB provider search', () => {
       title: '随风而逝 (1999)',
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
+  });
+
+  it('reads the current TMDB release_date and original-name facts for TV 105248', async () => {
+    const detailHtml = `
+      <html>
+        <head>
+          <meta property="og:title" content="赛博朋克：边缘行者" />
+          <title>赛博朋克：边缘行者 (TV Series 2022) &#8212; The Movie Database (TMDB)</title>
+        </head>
+        <body>
+          <span class="tag release_date">(2022)</span>
+          <p class="wrap"><strong>原始片名</strong> サイバーパンク: エッジランナーズ</p>
+        </body>
+      </html>
+    `;
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        tmdbResponse(detailHtml, 'https://www.themoviedb.org/tv/105248'),
+      );
+
+    await expect(
+      verifyTmdbMediaCandidate({
+        mediaType: 'tv',
+        providerId: '105248',
+        releaseYear: 2022,
+      }),
+    ).resolves.toEqual({
+      candidateId: 'tmdb:105248',
+      originalTitle: 'サイバーパンク: エッジランナーズ',
+      posterUrl: null,
+      provider: 'tmdb',
+      providerId: '105248',
+      releaseYear: 2022,
+      title: '赛博朋克：边缘行者',
+    });
     fetchMock.mockRestore();
   });
 });

@@ -257,7 +257,7 @@ async function searchMediaGovernanceIdentityCandidates(
     const tmdbItems = tmdbResult.value.map((candidate) => ({
       candidateId: candidate.candidateId,
       episodeCount: null,
-      originalTitle: null,
+      originalTitle: candidate.originalTitle,
       posterUrl: candidate.posterUrl,
       provider: candidate.provider,
       providerId: candidate.providerId,
@@ -534,7 +534,7 @@ async function resolveDiscoveryIdentity(
     aliases: [],
     candidateId: verified.candidateId,
     episodeCount: null,
-    originalTitle: null,
+    originalTitle: verified.originalTitle,
     posterUrl: verified.posterUrl,
     provider: 'tmdb',
     providerId,

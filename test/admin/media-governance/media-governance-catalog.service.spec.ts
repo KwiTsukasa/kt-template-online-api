@@ -730,7 +730,7 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       verifyWorkIdentity: jest.fn().mockResolvedValue({
         candidateId: 'tmdb:95479',
         episodeCount: null,
-        originalTitle: null,
+        originalTitle: '呪術廻戦',
         posterUrl: null,
         provider: 'tmdb',
         providerId: '95479',
@@ -749,15 +749,23 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
         workType: 'tv',
       }),
     ).resolves.toMatchObject({ series: { id: 'media-series-jjk' } });
-    expect(savedSeries).toHaveLength(1);
+    expect(savedSeries).toEqual([
+      expect.objectContaining({ originalTitle: '呪術廻戦' }),
+    ]);
     expect(savedWorks).toEqual([
       expect.objectContaining({
         canonicalNamespace: 'tv',
         canonicalProviderId: '95479',
+        originalTitle: '呪術廻戦',
         workType: 'tv',
       }),
     ]);
-    expect(savedWorkRefs).toHaveLength(1);
+    expect(savedWorkRefs).toEqual([
+      expect.objectContaining({
+        providerId: '95479',
+        title: '咒术回战',
+      }),
+    ]);
     expect(savedSeriesRefs).toHaveLength(0);
   });
 

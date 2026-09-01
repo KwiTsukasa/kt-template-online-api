@@ -3,6 +3,7 @@ import {
   searchMediaGovernanceCatalogIdentityCandidates,
   searchMediaGovernanceRssIdentityCandidates,
   verifyMediaGovernanceCatalogIdentity,
+  verifyMediaGovernanceRssIdentity,
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-rss-discovery';
 
 describe('media governance RSS discovery', () => {
@@ -29,6 +30,7 @@ describe('media governance RSS discovery', () => {
       searchTmdb: async () => [
         {
           candidateId: 'tmdb:30984',
+          originalTitle: 'BLEACH',
           posterUrl: null,
           provider: 'tmdb',
           providerId: '30984',
@@ -47,6 +49,7 @@ describe('media governance RSS discovery', () => {
         }),
         expect.objectContaining({
           candidateId: 'tmdb:30984',
+          originalTitle: 'BLEACH',
           provider: 'tmdb',
           title: '死神',
         }),
@@ -170,6 +173,44 @@ describe('media governance RSS discovery', () => {
     ).rejects.toThrow('rss-discovery-identity-media-type-mismatch');
   });
 
+  it('preserves the official TMDB original title through RSS and catalog revalidation', async () => {
+    const verifyTmdb = jest.fn().mockResolvedValue({
+      candidateId: 'tmdb:105248',
+      originalTitle: 'サイバーパンク: エッジランナーズ',
+      posterUrl: null,
+      provider: 'tmdb',
+      providerId: '105248',
+      releaseYear: 2022,
+      title: '赛博朋克：边缘行者',
+    });
+    const context = {
+      identity: {
+        provider: 'tmdb' as const,
+        providerId: '105248',
+        releaseYear: 2022,
+      },
+      mediaType: 'tv' as const,
+      originalTitle: null,
+      releaseYear: 2022,
+      seasonNumber: 0,
+      seriesTitle: '',
+    };
+    const expected = {
+      originalTitle: 'サイバーパンク: エッジランナーズ',
+      providerId: '105248',
+      releaseYear: 2022,
+      title: '赛博朋克：边缘行者',
+    };
+
+    await expect(
+      verifyMediaGovernanceCatalogIdentity(context, { verifyTmdb }),
+    ).resolves.toMatchObject(expected);
+    await expect(
+      verifyMediaGovernanceRssIdentity(context, { verifyTmdb }),
+    ).resolves.toMatchObject(expected);
+    expect(verifyTmdb).toHaveBeenCalledTimes(2);
+  });
+
   it('isolates one identity provider failure instead of discarding valid candidates', async () => {
     const result = await searchMediaGovernanceRssIdentityCandidates('BLEACH', {
       fetchImpl: (async () => {
@@ -178,6 +219,7 @@ describe('media governance RSS discovery', () => {
       searchTmdb: async () => [
         {
           candidateId: 'tmdb:30984',
+          originalTitle: 'BLEACH',
           posterUrl: null,
           provider: 'tmdb',
           providerId: '30984',

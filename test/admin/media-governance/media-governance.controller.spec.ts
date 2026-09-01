@@ -15,15 +15,12 @@ import {
 import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
 import { MediaGovernancePermissionGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
-import { LlmConfigService } from '../../../src/modules/admin/llm/application/llm-config.service';
-import { LlmConversationService } from '../../../src/modules/admin/llm/application/llm-conversation.service';
 
 describe('MediaGovernanceController', () => {
   let app: INestApplication;
   let apiUrl: string;
   let eventStream: MediaGovernanceEventStreamService;
   let service: MediaGovernanceService;
-  let conversationSequence = 0n;
   const authGuard: CanActivate = {
     canActivate(context: ExecutionContext) {
       context.switchToHttp().getRequest().adminUser = {
@@ -41,35 +38,6 @@ describe('MediaGovernanceController', () => {
         MediaGovernanceEventStreamService,
         MediaGovernancePermissionGuard,
         MediaGovernanceService,
-        {
-          provide: LlmConfigService,
-          useValue: {
-            resolveModel: jest.fn(async () => 'gpt-test'),
-            runtimeForProvider: jest.fn(async () => ({
-              entity: {
-                id: '2041700000000100002',
-              },
-            })),
-          },
-        },
-        {
-          provide: LlmConversationService,
-          useValue: {
-            createScene: jest.fn(async () => {
-              conversationSequence += 1n;
-              return {
-                id: String(2_041_700_000_000_190_000n + conversationSequence),
-              };
-            }),
-            resolveIdentity: jest.fn(async (input) => ({
-              activeTurnId: null,
-              conversationId: input.conversationId,
-              providerThreadId: null,
-              scene: input.scene,
-              sceneRefId: input.sceneRefId,
-            })),
-          },
-        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -216,54 +184,6 @@ describe('MediaGovernanceController', () => {
       .expect(404);
   });
 
-  it('keeps read-only Agent projection while retiring the duplicate message route', async () => {
-    const taskId = 'media-task-http-agent-001';
-    const threadId = 'thread-media-http-agent-001';
-    const session = {
-      conversationRevision: 4,
-      currentActionLabel: '等待操作员消息',
-      currentUnitId: null,
-      hasMoreMessages: false,
-      historyComplete: true,
-      lastHeartbeatLabel: '刚刚',
-      messages: [],
-      policyBoundaryLabel: '五层边界已启用',
-      result: null,
-      status: 'needs-operator',
-      statusLabel: 'Agent 已回复，可继续对话',
-      threadId,
-    };
-    const sessionSpy = jest
-      .spyOn(service, 'agentSession')
-      .mockResolvedValueOnce(session as never);
-
-    const history = await request(apiUrl)
-      .get(
-        `/media-governance/tasks/${taskId}/agent/session?afterSequence=2&limit=50`,
-      )
-      .expect(200)
-      .expect('Cache-Control', 'no-store');
-    expect(history.body.data).toMatchObject({
-      conversationRevision: 4,
-      threadId,
-    });
-    expect(sessionSpy).toHaveBeenCalledWith(taskId, {
-      afterSequence: 2,
-      limit: 50,
-    });
-
-    await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/agent/messages`)
-      .send({
-        clientMessageId: 'media-user-http-agent-001',
-        content: '继续核对当前任务',
-        expectedConversationRevision: 4,
-        threadId,
-      })
-      .expect(404);
-    sessionSpy.mockRestore();
-  });
-
   it('routes canonical identity rebase through real HTTP revision validation', async () => {
     const taskId = 'media-task-http-identity-rebase';
     const rebaseSpy = jest
@@ -323,7 +243,6 @@ describe('MediaGovernanceController', () => {
       .expect(200)
       .expect('Cache-Control', 'no-store');
     expect(summary.body.data).toMatchObject({
-      agentPending: 0,
       attentionRequired: 0,
       blocked: 0,
       closed: 0,
@@ -346,36 +265,6 @@ describe('MediaGovernanceController', () => {
         stageLabel: '接收资料',
       },
     });
-  });
-
-  it('creates and binds one local Codex LLM conversation over real HTTP', async () => {
-    const created = await createLegacyTask({
-      mediaType: 'tv',
-      seasonNumbers: ['S01'],
-      titleHint: '草稿 Agent 入口接口测试',
-    });
-
-    const agent = await request(apiUrl)
-      .post(`/media-governance/tasks/${created.body.data.id}/agent/start`)
-      .send({ expectedRevision: 1 })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-
-    expect(agent.body).toMatchObject({
-      code: 200,
-      data: {
-        currentActionLabel: '等待在统一 LLM 对话页发送消息',
-        policyBoundaryLabel:
-          '会话、模型、流式状态与 Codex thread 由 LLM 模块统一管理',
-        status: 'needs-operator',
-        statusLabel: '等待进入本地 Codex 对话',
-      },
-      msg: '操作成功',
-    });
-    expect(agent.body.data.threadId).toMatch(/^204170000000019/u);
-    const task = service.detail(created.body.data.id);
-    expect(task.llmConversationId).toBe(agent.body.data.threadId);
-    expect(agent.body).not.toHaveProperty('err');
   });
 
   it('supports keyword search and revision-gated discard over real HTTP', async () => {
@@ -508,7 +397,7 @@ describe('MediaGovernanceController', () => {
     expect(JSON.stringify(source.body)).not.toContain('private.invalid');
   });
 
-  it('exposes metadata and acceptance gates over real HTTP and fails closed out of order', async () => {
+  it('removes metadata actions and keeps mechanical acceptance revision-gated', async () => {
     const created = await createLegacyTask({
       mediaType: 'movie',
       titleHint: '分档与验收接口测试',
@@ -518,29 +407,11 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/metadata/verify`)
       .send({ expectedRevision: 1 })
-      .expect(409);
+      .expect(404);
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/acceptance/verify`)
       .send({ expectedRevision: 1 })
       .expect(409);
-  });
-
-  it('forwards an evidence-bound metadata recheck over real HTTP', async () => {
-    const taskId = 'media-task-http-metadata-recheck-001';
-    const verification = jest
-      .spyOn(service, 'startMetadataVerification')
-      .mockResolvedValueOnce({ id: taskId, revision: 33 } as never);
-
-    const response = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/metadata/verify`)
-      .send({ expectedRevision: 32 })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-
-    expect(verification).toHaveBeenCalledWith(taskId, {
-      expectedRevision: 32,
-    });
-    expect(response.body.data).toEqual({ id: taskId, revision: 33 });
   });
 
   it('accepts one multipart TV season and safely parses a torrent fixture', async () => {
@@ -595,7 +466,7 @@ describe('MediaGovernanceController', () => {
       });
   });
 
-  it('runs the HTTP Demo through download, governance and one LLM conversation binding', async () => {
+  it('runs the HTTP Demo through download and mechanical governance closure', async () => {
     const created = await createLegacyTask({
       mediaType: 'tv',
       seasonNumbers: ['S01'],
@@ -652,17 +523,12 @@ describe('MediaGovernanceController', () => {
       .expect(201);
     await new Promise((resolve) => setTimeout(resolve, 650));
 
-    const agent = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/agent/start`)
-      .send({ expectedRevision: 7 })
-      .expect(201);
-    expect(agent.body.data.policyBoundaryLabel).toContain('LLM 模块统一管理');
-    const boundTask = service.detail(taskId);
-    expect(boundTask).toMatchObject({
-      llmConversationId: agent.body.data.threadId,
-      revision: 8,
-      runState: 'blocked',
-      stage: 'metadata',
+    const closedTask = service.detail(taskId);
+    expect(closedTask).toMatchObject({
+      closedMode: 'mechanical',
+      revision: 7,
+      runState: 'succeeded',
+      stage: 'closed',
     });
   });
 });

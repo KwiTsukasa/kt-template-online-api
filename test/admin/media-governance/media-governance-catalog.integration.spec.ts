@@ -25,7 +25,7 @@ if (process.env.KT_MEDIA_CATALOG_INTEGRATION === '1') {
  * 把真实 create 生成的 Task 推进到自动目录同步要求的验证边界。
  *
  * @param task - 本地进程模拟器创建的 TV Task。
- * @param metadataProviderId - 要作为 verified metadata identity 的 TMDB 编号。
+ * @param metadataProviderId - 要作为固化二级身份的 TMDB 编号。
  */
 function verifyTaskBoundary(
   task: MediaGovernanceTask,
@@ -38,9 +38,12 @@ function verifyTaskBoundary(
     providerTitle: task.titleHint,
     releaseYear: 2026,
   };
-  task.metadataStatus = 'verified';
-  task.stage = 'metadata';
+  task.closedAt = '2026-09-01T04:00:00.000Z';
+  task.closedMode = 'mechanical';
+  task.stage = 'closed';
   task.runState = 'succeeded';
+  unit.evidenceSha256 = 'f'.repeat(64);
+  unit.localAcceptedAt = task.closedAt;
   unit.expectedEpisodeNumbers = [1, 2];
   task.sources = [
     {

@@ -36,7 +36,8 @@ function automaticTask(
       providerTitle: '自动归类作品',
       releaseYear: 2026,
     },
-    metadataStatus: 'verified',
+    closedAt: '2026-09-01T04:00:00.000Z',
+    closedMode: 'mechanical',
     providerRef: { provider: 'bangumi', providerId: '80001' },
     releaseYear: 2026,
     runState: 'succeeded',
@@ -58,7 +59,7 @@ function automaticTask(
         sourceRole: 'primary_media',
       },
     ],
-    stage: 'metadata',
+    stage: 'closed',
     titleHint: '自动归类作品',
     units: [
       {
@@ -173,7 +174,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '30984',
           releaseYear: 2004,
         },
-        metadataStatus: 'verified',
         sources: [
           {
             selectedFileMappings: [
@@ -200,7 +200,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '95479',
           releaseYear: 2020,
         },
-        metadataStatus: 'verified',
         sources: [
           {
             selectedFileMappings: [
@@ -227,7 +226,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '43423',
           releaseYear: 1999,
         },
-        metadataStatus: 'verified',
         sources: [],
         titleHint: '随风而逝',
         units: [],
@@ -240,7 +238,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '30984',
           releaseYear: 2004,
         },
-        metadataStatus: 'verified',
         sources: [],
         titleHint: '死神 缺集号',
         units: [
@@ -260,7 +257,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '302286',
           releaseYear: 2022,
         },
-        metadataStatus: 'verified',
         sources: [],
         titleHint: '身份冲突',
         units: [
@@ -276,7 +272,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
         id: 'media-task-already-bound',
         mediaType: 'tv',
         metadataIdentity: null,
-        metadataStatus: 'verified',
         sources: [],
         titleHint: '既有绑定',
         units: [],
@@ -289,7 +284,6 @@ describe('MediaGovernanceCatalogService historical classification', () => {
           providerId: '30984',
           releaseYear: 2004,
         },
-        metadataStatus: 'requires-agent',
         sources: [],
         titleHint: '身份尚未核实',
         units: [
@@ -367,10 +361,10 @@ describe('MediaGovernanceCatalogService historical classification', () => {
 
     expect(second).toEqual(first);
     expect(first.summary).toEqual({
-      classifiable: 2,
+      classifiable: 3,
       classified: 1,
       notApplicable: 0,
-      pending: 4,
+      pending: 3,
       total: 7,
     });
     expect(
@@ -449,8 +443,8 @@ describe('MediaGovernanceCatalogService historical classification', () => {
         (item) => item.taskId === 'media-task-unverified-identity',
       ),
     ).toMatchObject({
-      reasonCode: 'metadata-identity-unverified',
-      status: 'pending',
+      reasonCode: 'catalog-binding-missing',
+      status: 'classifiable',
     });
     expect(runtimeTasks).toEqual(taskSnapshot);
     for (const write of writeMocks) expect(write).not.toHaveBeenCalled();
@@ -602,7 +596,7 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       runId: 'media-run-auto-0001',
       runSequence: 1,
       summary: {} as never,
-      task: { id: task.id, metadataStatus: 'verified', revision: 1 },
+      task: { id: task.id, revision: 1 },
       taskId: task.id,
       updatedAt: '2026-08-24T00:00:00.000Z',
     });
@@ -613,7 +607,12 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       runId: null,
       runSequence: null,
       summary: {} as never,
-      task: { id: task.id, metadataStatus: 'verified', revision: 2 },
+      task: {
+        id: task.id,
+        revision: 2,
+        runState: 'succeeded',
+        stage: 'closed',
+      },
       taskId: task.id,
       updatedAt: '2026-08-24T00:00:01.000Z',
     });
@@ -629,7 +628,8 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
     const verified = automaticTask();
     const pending = automaticTask({
       id: 'media-task-pending-0001',
-      metadataStatus: 'pending',
+      runState: 'draft',
+      stage: 'intake',
     });
     const mediaTasks = {
       page: jest.fn().mockReturnValue({
@@ -1192,7 +1192,9 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       ]),
     );
     expect(episodeRepository.save).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ status: 'queued' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'completed' }),
+      ]),
     );
   });
 

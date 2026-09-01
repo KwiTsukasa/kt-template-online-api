@@ -8,10 +8,7 @@ import {
   LlmConversationListQueryDto,
   LlmConversationMessageStreamDto,
 } from '../contract/llm.dto';
-import type {
-  LlmConversationScene,
-  LlmTokenUsage,
-} from '../contract/llm.types';
+import type { LlmTokenUsage } from '../contract/llm.types';
 import { LlmProviderAdapterRegistry } from '../infrastructure/integration/llm-provider.adapter';
 import {
   AdminLlmConversationEntity,
@@ -83,45 +80,18 @@ export class LlmConversationService {
     const conversations = await this.conversationRepository.find({
       order: { lastMessageAt: 'DESC', createTime: 'DESC' },
       take: limit,
-      where: { configId: query.configId, isDeleted: false },
+      where: { configId: query.configId, isDeleted: false, scene: 'general' },
     });
     return conversations.map((item) => this.toConversationView(item));
   }
 
   /**
-   * 把普通对话委托给场景创建边界，初始不固化模型并为空标题提供稳定兜底。
+   * 创建独立通用对话，初始不固化模型并为空标题提供稳定兜底。
    * @param body - 连接标识与可选标题。
    * @returns 新对话摘要。
    */
   async create(body: LlmConversationCreateDto) {
-    return this.createScene(
-      body.configId,
-      body.title?.trim() || '新对话',
-      'general',
-      null,
-    );
-  }
-
-  /**
-   * 按 sceneRefId 复用唯一业务对话；并发创建冲突后回读已有记录，普通场景保持独立。
-   * @param configId - 当前启用的大模型连接标识。
-   * @param title - 对话标题。
-   * @param scene - 通用对话或受支持的业务场景。
-   * @param sceneRefId - 业务场景引用标识；通用对话传 null。
-   * @returns 新建对话摘要。
-   * @throws 连接不可用，或业务场景保存失败且无法回读唯一已有对话时抛出错误。
-   */
-  async createScene(
-    configId: string,
-    title: string,
-    scene: LlmConversationScene,
-    sceneRefId: null | string,
-  ) {
-    const runtime = await this.configs.runtime(configId);
-    if (scene !== 'general' && sceneRefId) {
-      const existing = await this.findSceneConversation(scene, sceneRefId);
-      if (existing) return this.toConversationView(existing);
-    }
+    const runtime = await this.configs.runtime(body.configId);
     const entity = this.conversationRepository.create({
       activeTurnId: null,
       activeTurnStartedAt: null,
@@ -130,23 +100,16 @@ export class LlmConversationService {
       lastMessageAt: null,
       messageCount: 0,
       providerThreadId: null,
-      scene,
-      sceneRefId,
+      scene: 'general',
+      sceneRefId: null,
       selectedModel: null,
       selectedReasoningEffort: null,
       selectedServiceTier: null,
-      title: title.trim() || '新对话',
+      title: body.title?.trim() || '新对话',
     });
-    try {
-      return this.toConversationView(
-        await this.conversationRepository.save(entity),
-      );
-    } catch (error) {
-      if (scene === 'general' || !sceneRefId) throw error;
-      const existing = await this.findSceneConversation(scene, sceneRefId);
-      if (existing) return this.toConversationView(existing);
-      throw error;
-    }
+    return this.toConversationView(
+      await this.conversationRepository.save(entity),
+    );
   }
 
   /**
@@ -168,161 +131,17 @@ export class LlmConversationService {
   }
 
   /**
-   * 从对话表解析唯一业务身份，并按调用方显式提供的 provider thread 执行不可变校验。
-   * @param input - 对话、场景、业务引用及可选 provider thread 期望值。
-   * @returns 由 `admin_llm_conversation` 权威字段组成的规范身份元组。
-   * @throws 对话不存在，或场景、业务引用、provider thread 任一不一致时抛出错误。
-   */
-  async resolveIdentity(input: {
-    activeTurnId?: null | string;
-    conversationId: string;
-    providerThreadId?: null | string;
-    scene: LlmConversationScene;
-    sceneRefId: null | string;
-  }) {
-    const conversation = await this.requireConversation(input.conversationId);
-    if (
-      conversation.scene !== input.scene ||
-      conversation.sceneRefId !== input.sceneRefId
-    ) {
-      throwVbenError('大模型对话身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (
-      Object.hasOwn(input, 'providerThreadId') &&
-      conversation.providerThreadId !== input.providerThreadId
-    ) {
-      throwVbenError('大模型 provider thread 身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (
-      Object.hasOwn(input, 'activeTurnId') &&
-      conversation.activeTurnId !== input.activeTurnId
-    ) {
-      throwVbenError('大模型对话回合身份不匹配', HttpStatus.CONFLICT);
-    }
-    return {
-      activeTurnId: conversation.activeTurnId,
-      conversationId: conversation.id,
-      providerThreadId: conversation.providerThreadId,
-      scene: conversation.scene,
-      sceneRefId: conversation.sceneRefId,
-    };
-  }
-
-  /**
-   * 按业务场景身份更新唯一对话标题，避免首条自由文本覆盖 Task 的长期身份标签。
-   * @param input - 对话、业务场景、业务引用与目标标题。
-   * @returns 更新后的规范对话视图。
-   */
-  async updateSceneTitle(input: {
-    conversationId: string;
-    scene: Exclude<LlmConversationScene, 'general'>;
-    sceneRefId: string;
-    title: string;
-  }) {
-    const conversation = await this.requireConversation(input.conversationId);
-    if (
-      conversation.scene !== input.scene ||
-      conversation.sceneRefId !== input.sceneRefId
-    ) {
-      throwVbenError('大模型对话身份不匹配', HttpStatus.CONFLICT);
-    }
-    const title = input.title.trim().slice(0, 160);
-    if (!title)
-      throwVbenError('大模型对话标题不能为空', HttpStatus.BAD_REQUEST);
-    if (conversation.title !== title) {
-      conversation.title = title;
-      await this.conversationRepository.save(conversation);
-    }
-    return this.toConversationView(conversation);
-  }
-
-  /**
-   * 在活动回合开始供应商 turn 前以 CAS 方式绑定 provider thread，首次为空时写入，已有绑定只允许同值确认。
-   * @param input - 对话场景、业务引用、调用方读取的旧线程值及 App Server 实际线程。
-   * @returns 完成 CAS 后的规范对话身份元组。
-   * @throws 对话、活动回合、场景引用或 provider thread 比较值漂移时抛出错误。
-   */
-  async bindProviderThread(input: {
-    allowReplace?: boolean;
-    conversationTurnId: string;
-    conversationId: string;
-    expectedProviderThreadId: null | string;
-    providerThreadId: string;
-    scene: LlmConversationScene;
-    sceneRefId: null | string;
-  }) {
-    return this.conversationRepository.manager.transaction(async (manager) => {
-      const conversationRepository = manager.getRepository(
-        AdminLlmConversationEntity,
-      );
-      const conversation = await conversationRepository.findOne({
-        lock: { mode: 'pessimistic_write' },
-        where: { id: input.conversationId, isDeleted: false },
-      });
-      if (
-        !conversation ||
-        conversation.activeTurnId !== input.conversationTurnId ||
-        conversation.scene !== input.scene ||
-        conversation.sceneRefId !== input.sceneRefId ||
-        conversation.providerThreadId !== input.expectedProviderThreadId
-      ) {
-        throwVbenError('大模型对话身份不匹配', HttpStatus.CONFLICT);
-      }
-      if (
-        input.allowReplace === true &&
-        conversation.providerThreadId !== input.providerThreadId
-      ) {
-        conversation.providerThreadId = input.providerThreadId;
-      } else {
-        conversation.providerThreadId = this.resolveProviderThreadId(
-          conversation,
-          input.providerThreadId,
-        );
-      }
-      await conversationRepository.save(conversation);
-      return {
-        activeTurnId: conversation.activeTurnId,
-        conversationId: conversation.id,
-        providerThreadId: conversation.providerThreadId,
-        scene: conversation.scene,
-        sceneRefId: conversation.sceneRefId,
-      };
-    });
-  }
-
-  /**
-   * 仅软删除无活动回合的普通对话；业务绑定或生成中的对话保持失败关闭。
+   * 仅软删除无活动回合的通用对话。
    * @param id - 对话 Snowflake ID。
    * @returns 被删除的对话标识。
    */
   async remove(id: string) {
     const conversation = await this.requireConversation(id);
-    if (conversation.scene !== 'general') {
-      throwVbenError(
-        '业务绑定对话必须从对应业务任务进入，不能单独删除',
-        HttpStatus.CONFLICT,
-      );
-    }
     if (conversation.activeTurnId) {
       throwVbenError('生成中的对话不能删除', HttpStatus.CONFLICT);
     }
     await this.conversationRepository.update({ id }, { isDeleted: true });
     return { id };
-  }
-
-  /**
-   * 按业务场景引用查找唯一的未删除 LLM 对话。
-   * @param scene - 非通用业务场景。
-   * @param sceneRefId - 业务对象稳定标识。
-   * @returns 已存在的唯一场景对话；未创建时返回 null。
-   */
-  private findSceneConversation(
-    scene: LlmConversationScene,
-    sceneRefId: string,
-  ) {
-    return this.conversationRepository.findOne({
-      where: { isDeleted: false, scene, sceneRefId },
-    });
   }
 
   /**
@@ -493,7 +312,6 @@ export class LlmConversationService {
       for await (const event of adapter.stream({
         clientMessageId: body.clientMessageId,
         config: prepared.runtime.adapterConfig,
-        context: this.streamContext(prepared.conversation, prepared.turnId),
         messages: prepared.history,
         model: prepared.model,
         providerThreadId,
@@ -732,27 +550,6 @@ export class LlmConversationService {
   }
 
   /**
-   * 将非通用对话投影为供应商适配器场景上下文。
-   * @param conversation - 当前持久化对话。
-   * @param conversationTurnId - API 已锁定的活动回合标识。
-   * @returns 业务场景上下文；通用对话返回 undefined。
-   */
-  private streamContext(
-    conversation: AdminLlmConversationEntity,
-    conversationTurnId: string,
-  ) {
-    if (conversation.scene === 'general' || !conversation.sceneRefId) {
-      return undefined;
-    }
-    return {
-      conversationTurnId,
-      conversationId: conversation.id,
-      scene: conversation.scene,
-      sceneRefId: conversation.sceneRefId,
-    };
-  }
-
-  /**
    * 限制单次助手正文与思考累计长度，避免异常上游耗尽内存。
    * @param reasoningContent - 已累计的思考文本。
    * @param content - 已累计的最终回答文本。
@@ -771,7 +568,7 @@ export class LlmConversationService {
    */
   private async requireConversation(id: string) {
     const conversation = await this.conversationRepository.findOne({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, scene: 'general' },
     });
     if (!conversation) {
       throwVbenError('大模型对话不存在', HttpStatus.NOT_FOUND);

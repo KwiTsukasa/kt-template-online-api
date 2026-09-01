@@ -9,9 +9,7 @@ WHERE table_schema = DATABASE()
     'media_governance_descriptor_revision',
     'media_governance_run',
     'media_governance_event',
-    'media_governance_agent_session',
-    'media_governance_metadata_exception',
-    'media_governance_operator_decision',
+    'media_scrape_validation',
     'media_governance_outbox',
     'media_governance_series',
     'media_governance_work',
@@ -38,9 +36,10 @@ SELECT
 FROM media_governance_task;
 
 SELECT
-  COUNT(*) AS agent_session_count,
-  COALESCE(MAX(last_sequence), 0) AS max_agent_sequence
-FROM media_governance_agent_session;
+  COUNT(*) AS scrape_validation_count,
+  SUM(status = 'pending') AS pending_scrape_validation_count,
+  SUM(status = 'issues') AS scrape_issue_count
+FROM media_scrape_validation;
 
 SELECT
   COUNT(*) AS canonical_series_count,
@@ -142,19 +141,21 @@ SELECT
 FROM media_governance_rss_subscription;
 
 SELECT
-  COUNT(*) AS llm_conversation_column_count
+  COUNT(*) AS legacy_media_agent_table_count
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name IN (
+    'media_governance_agent_session',
+    'media_governance_metadata_exception',
+    'media_governance_operator_decision'
+  );
+
+SELECT
+  COUNT(*) AS legacy_media_llm_column_count
 FROM information_schema.columns
 WHERE table_schema = DATABASE()
   AND table_name = 'media_governance_task'
   AND column_name = 'llm_conversation_id';
-
-SELECT
-  COUNT(*) AS llm_conversation_unique_index_count
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name = 'media_governance_task'
-  AND index_name = 'uk_media_governance_task_llm_conversation'
-  AND non_unique = 0;
 
 SELECT
   COUNT(*) AS nullable_descriptor_manifest_sha256_columns

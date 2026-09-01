@@ -397,32 +397,6 @@ export class LlmConfigService {
   }
 
   /**
-   * 按供应商选择当前默认或最近更新的启用连接，供媒体治理等内部业务复用同一配置。
-   * @param provider - 需要解析运行连接的供应商。
-   * @returns 当前供应商的数据库实体与适配器运行配置。
-   */
-  async runtimeForProvider(
-    provider: LlmProvider,
-  ): Promise<LlmRuntimeConfigRecord> {
-    const entity = await this.repository
-      .createQueryBuilder('config')
-      .addSelect('config.apiKeySecret')
-      .where('config.provider = :provider', { provider })
-      .andWhere('config.enabled = :enabled', { enabled: true })
-      .andWhere('config.isDeleted = :isDeleted', { isDeleted: false })
-      .orderBy('config.isDefault', 'DESC')
-      .addOrderBy('config.updateTime', 'DESC')
-      .getOne();
-    if (!entity) {
-      throwVbenError(
-        `尚未配置启用的 ${LLM_PROVIDER_CATALOG[provider].label} 连接`,
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    return this.toRuntime(entity);
-  }
-
-  /**
    * 将已加载密文的启用实体转换为单次适配器运行配置。
    * @param entity - 已显式加载 API Key 密文的连接实体。
    * @returns 可安全传给供应商适配器的运行记录。

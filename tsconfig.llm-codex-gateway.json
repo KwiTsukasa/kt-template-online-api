@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "../../.kt-workspace/build/llm-codex-gateway",
+    "rootDir": "./src"
+  },
+  "include": ["src/apps/llm-codex-gateway/**/*.ts"]
+}

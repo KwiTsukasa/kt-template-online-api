@@ -9,7 +9,6 @@ function taskEvent(changeType: 'created' | 'source-updated', revision: number) {
     runId: null,
     runSequence: null,
     summary: {
-      agentPending: 0,
       attentionRequired: 0,
       blocked: 0,
       closed: 0,
@@ -17,7 +16,7 @@ function taskEvent(changeType: 'created' | 'source-updated', revision: number) {
       evidenceDriftCount: 0,
       governing: 0,
       healthLabel: '正常',
-      metadataAutoClosureRate: 0,
+      mechanicalClosureRate: 0,
       mixedSubtitleSeasonCount: 0,
       stagingResidualCount: 0,
       stuckRunCount: 0,

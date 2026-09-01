@@ -3,8 +3,8 @@ import * as path from 'node:path';
 import * as ts from 'typescript';
 
 const PRODUCTION_ROOTS = [
-  'src/apps/media-codex-agent-gateway',
   'src/modules/admin/media-governance',
+  'src/modules/admin/media-scrape-validation',
 ];
 const CHINESE_CHARACTER_PATTERN = /\p{Script=Han}/u;
 const FORBIDDEN_JSDOC_ENTRY_NAMES = new Set([

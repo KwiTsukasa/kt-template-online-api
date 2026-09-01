@@ -16,13 +16,6 @@ describe('MediaGovernanceService', () => {
     service = new MediaGovernanceService();
   });
 
-  it('keeps the production Agent callback gate closed for process-only tasks', () => {
-    expect(service.agentCallbackHealth()).toEqual({
-      persistenceMode: 'process-simulator',
-      status: 'not-ready',
-    });
-  });
-
   it('creates one TV task with independent S00 and normal-season units', async () => {
     const task = await service.create({
       mediaType: 'tv',
@@ -59,7 +52,6 @@ describe('MediaGovernanceService', () => {
     });
     expect(service.detail(task.id).id).toBe(task.id);
     expect(service.summary()).toMatchObject({
-      agentPending: 0,
       attentionRequired: 0,
       blocked: 0,
       closed: 0,
@@ -77,7 +69,6 @@ describe('MediaGovernanceService', () => {
       discardAllowed: true,
       discardReasonLabel: null,
       gateReasonLabel: '无阻塞',
-      metadataStatusLabel: '待校验',
       runStateLabel: '草稿',
       sourceHealthLabel: '未检查',
       stageLabel: '接收资料',
@@ -410,10 +401,9 @@ describe('MediaGovernanceService', () => {
         parsed.infoHash,
       ),
     ).toBe(true);
-    const [upgraded] = await service.upgradeRssTorrentDescriptors(
-      task.id,
-      [{ descriptor: RSS_TORRENT_FIXTURE, sourceId: source.id }],
-    );
+    const [upgraded] = await service.upgradeRssTorrentDescriptors(task.id, [
+      { descriptor: RSS_TORRENT_FIXTURE, sourceId: source.id },
+    ]);
 
     expect(upgraded).toMatchObject({
       descriptorRevision: 2,
@@ -661,50 +651,18 @@ describe('MediaGovernanceService', () => {
     });
     task.stage = 'metadata';
     task.runState = 'blocked';
-    task.metadataStatus = 'requires-agent';
-    task.agentSession = {
-      capsuleSha256: 'a'.repeat(64),
-      checkpointSha256: 'b'.repeat(64),
-      currentActionLabel: '等待人工处理',
-      currentUnitId: task.units[0]!.id,
-      lastHeartbeatLabel: '刚刚',
-      lastSequence: 3,
-      pendingPlanSha256: null,
-      policyBoundaryLabel: '五层边界已启用',
-      policySha256: 'c'.repeat(64),
-      policyVersion: 'media-agent-policy-v1',
-      status: 'needs-operator',
-      statusLabel: '需要人工处理',
-      threadId: '019ff01b-7f9a-7301-82aa-12cd0c3ce3ed',
-    };
-    task.units[0]!.metadataProjection = {
-      identityRefreshAttempts: 1,
-      missingA: ['identity.provider'],
-      missingB: ['season.poster'],
-      missingC: [],
-      repairAttempts: 2,
-      validBFallbacks: ['season.poster'],
-    };
 
     await expect(
       service.removeSource(task.id, source.id, { expectedRevision: 2 }),
     ).resolves.toMatchObject({
-      agentSession: null,
-      metadataStatus: 'pending',
       revision: 3,
       runState: 'draft',
       sources: [],
       stage: 'intake',
       units: [
         expect.objectContaining({
-          metadataProjection: {
-            identityRefreshAttempts: 0,
-            missingA: [],
-            missingB: [],
-            missingC: [],
-            repairAttempts: 0,
-            validBFallbacks: [],
-          },
+          evidenceSha256: null,
+          localAcceptedAt: null,
         }),
       ],
     });

@@ -78,7 +78,6 @@ const TERMINAL_EVENT_KEYS = new Set([
   'eventType',
   'manifest',
   'manifestSha256',
-  'metadata',
   'observedAt',
   'payloadFiles',
   'progress',

@@ -130,40 +130,6 @@ describe('LlmConfigService', () => {
     });
   });
 
-  it('resolves the enabled Codex connection for internal media-governance use', async () => {
-    const entity = {
-      apiKeySecret: null,
-      baseUrl: 'http://127.0.0.1:48087/internal/llm-codex',
-      enabled: true,
-      id: '2041700000000100002',
-      isDeleted: false,
-      provider: 'codex',
-    } as unknown as AdminLlmConfigEntity;
-    const builder = {
-      addOrderBy: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue(entity),
-      orderBy: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-    };
-    const service = new LlmConfigService(
-      { createQueryBuilder: jest.fn(() => builder) } as never,
-      new ConfigService(),
-      tools as never,
-      {} as never,
-    );
-
-    await expect(service.runtimeForProvider('codex')).resolves.toMatchObject({
-      adapterConfig: {
-        apiKey: '',
-        baseUrl: 'http://127.0.0.1:48087/internal/llm-codex',
-        provider: 'codex',
-      },
-      entity: { id: '2041700000000100002', provider: 'codex' },
-    });
-  });
-
   it('returns normalized live models and validates every requested model against a fresh list', async () => {
     const fetchModels = jest.fn().mockResolvedValue([
       {

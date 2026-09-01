@@ -40,8 +40,6 @@ describe('MediaGovernanceExecutionEnvelope', () => {
       'governance.preflight',
       'governance.plan',
       'governance.execute',
-      'metadata.verify',
-      'metadata.repair',
       'acceptance.verify',
       'canary.torrent',
       'canary.magnet',

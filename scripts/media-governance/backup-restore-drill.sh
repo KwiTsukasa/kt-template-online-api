@@ -13,7 +13,7 @@ execute=false
 restore_created=false
 series_first_schema=true
 
-tables=(
+legacy_series_first_tables=(
   media_governance_task
   media_governance_unit
   media_governance_source
@@ -35,11 +35,33 @@ tables=(
   media_governance_rss_item
 )
 
+mechanical_tables=(
+  media_governance_task
+  media_governance_unit
+  media_governance_source
+  media_governance_descriptor_revision
+  media_governance_run
+  media_governance_event
+  media_scrape_validation
+  media_governance_outbox
+  media_governance_series
+  media_governance_work
+  media_governance_work_external_ref
+  media_governance_series_external_ref
+  media_governance_season
+  media_governance_episode
+  media_governance_task_episode_binding
+  media_governance_rss_subscription
+  media_governance_rss_item
+)
+
+tables=("${mechanical_tables[@]}")
+
 print_help() {
   cat <<'EOF'
 Usage: backup-restore-drill.sh --source-database NAME --restore-database NAME --output-directory PATH [options]
 
-Back up the legacy seventeen or Series-first nineteen media-governance tables, restore them into a new isolated
+Back up the legacy seventeen/nineteen or mechanical seventeen media tables, restore them into a new isolated
 database, compare row counts plus Task/Run/Event identity snapshots, and remove
 only the isolated database created by this run. The default mode is plan-only.
 
@@ -169,23 +191,34 @@ drop_created_restore_database() {
 
 trap drop_created_restore_database EXIT
 
-expected_table_count=${#tables[@]}
-table_literals=$(printf "'%s'," "${tables[@]}")
-table_literals=${table_literals%,}
-source_table_count=$(run_mysql_query "$source_database" "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ($table_literals);")
-legacy_table_count=$((expected_table_count - 2))
-if [[ $source_table_count == "$legacy_table_count" ]]; then
+table_count_for() {
+  local -n candidate_tables=$1
+  local candidate_literals
+  candidate_literals=$(printf "'%s'," "${candidate_tables[@]}")
+  candidate_literals=${candidate_literals%,}
+  run_mysql_query "$source_database" "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ($candidate_literals);"
+}
+
+legacy_tables=()
+for table in "${legacy_series_first_tables[@]}"; do
+  if [[ $table == media_governance_work || $table == media_governance_work_external_ref ]]; then
+    continue
+  fi
+  legacy_tables+=("$table")
+done
+
+mechanical_table_count=$(table_count_for mechanical_tables)
+legacy_series_first_table_count=$(table_count_for legacy_series_first_tables)
+legacy_table_count=$(table_count_for legacy_tables)
+if [[ $legacy_series_first_table_count == "${#legacy_series_first_tables[@]}" ]]; then
+  tables=("${legacy_series_first_tables[@]}")
+elif [[ $legacy_table_count == "${#legacy_tables[@]}" ]]; then
   series_first_schema=false
-  legacy_tables=()
-  for table in "${tables[@]}"; do
-    if [[ $table == media_governance_work || $table == media_governance_work_external_ref ]]; then
-      continue
-    fi
-    legacy_tables+=("$table")
-  done
   tables=("${legacy_tables[@]}")
-elif [[ $source_table_count != "$expected_table_count" ]]; then
-  fail "source media-governance table count is $source_table_count, expected $legacy_table_count or $expected_table_count"
+elif [[ $mechanical_table_count == "${#mechanical_tables[@]}" ]]; then
+  tables=("${mechanical_tables[@]}")
+else
+  fail "source media table set is incomplete: mechanical=$mechanical_table_count/${#mechanical_tables[@]}, legacy-series=$legacy_series_first_table_count/${#legacy_series_first_tables[@]}, legacy=$legacy_table_count/${#legacy_tables[@]}"
 fi
 expected_table_count=${#tables[@]}
 

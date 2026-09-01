@@ -7,7 +7,6 @@ import {
   IsIn,
   IsInt,
   IsOptional,
-  IsObject,
   IsString,
   Matches,
   Max,
@@ -20,10 +19,6 @@ import {
   MEDIA_GOVERNANCE_EXECUTOR_ACTIONS,
   type MediaGovernanceExecutorAction,
 } from './media-governance-executor.contract';
-import {
-  MEDIA_CODEX_AGENT_TOOLS,
-  type MediaCodexAgentTool,
-} from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export const MEDIA_GOVERNANCE_MEDIA_TYPES = [
@@ -181,11 +176,6 @@ export class MediaGovernanceTaskPageQueryDto {
   @IsOptional()
   @IsString()
   gateReason?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  metadataStatus?: string;
 }
 
 export class MediaGovernanceRevisionCommandDto {
@@ -246,26 +236,6 @@ export class MediaGovernanceTaskIdentityUpdateDto extends MediaGovernanceRevisio
   @MaxLength(200)
   @Matches(/\S/)
   titleHint?: string;
-}
-
-export class MediaGovernanceCatalogIdentityRestoreDto extends MediaGovernanceRevisionCommandDto {
-  @ApiProperty({
-    description: '从密封历史目录恢复的用户主资料库编号',
-    type: MediaGovernanceProviderRefDto,
-  })
-  @ValidateNested()
-  @Type(() => MediaGovernanceProviderRefDto)
-  providerRef: MediaGovernanceProviderRefDto;
-
-  @ApiProperty({
-    description: '从密封历史目录恢复的首播或上映年份',
-    maximum: MAX_RELEASE_YEAR,
-    minimum: 1888,
-  })
-  @IsInt()
-  @Min(1888)
-  @Max(MAX_RELEASE_YEAR)
-  releaseYear: number;
 }
 
 export class MediaGovernanceDescriptorRedeemDto {
@@ -428,84 +398,6 @@ export class MediaGovernanceExecutorWriteBoundariesDto {
   ui: number;
 }
 
-export class MediaGovernanceExecutorMetadataUnitDto {
-  @IsBoolean()
-  accepted: boolean;
-
-  @IsArray()
-  @ArrayMaxSize(32)
-  @IsString({ each: true })
-  @MaxLength(160, { each: true })
-  missingA: string[];
-
-  @IsArray()
-  @ArrayMaxSize(32)
-  @IsString({ each: true })
-  @MaxLength(160, { each: true })
-  missingB: string[];
-
-  @IsArray()
-  @ArrayMaxSize(32)
-  @IsString({ each: true })
-  @MaxLength(160, { each: true })
-  missingC: string[];
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  unitId: string;
-}
-
-export class MediaGovernanceExecutorMetadataIdentityDto {
-  @IsIn(MEDIA_GOVERNANCE_PROVIDERS)
-  provider: MediaGovernanceProvider;
-
-  @IsString()
-  @Matches(PROVIDER_ID_PATTERN)
-  providerId: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  providerTitle?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1870)
-  @Max(MAX_RELEASE_YEAR)
-  releaseYear?: null | number;
-}
-
-export class MediaGovernanceExecutorMetadataDto {
-  @IsBoolean()
-  canAccept: boolean;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => MediaGovernanceExecutorMetadataIdentityDto)
-  identity?: MediaGovernanceExecutorMetadataIdentityDto;
-
-  @IsInt()
-  @Min(0)
-  @Max(2)
-  repairAttempts: number;
-
-  @IsIn(['media-admin-metadata-verification-v1'])
-  schemaVersion: 'media-admin-metadata-verification-v1';
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(100)
-  @ValidateNested({ each: true })
-  @Type(() => MediaGovernanceExecutorMetadataUnitDto)
-  units: MediaGovernanceExecutorMetadataUnitDto[];
-
-  @ValidateNested()
-  @Type(() => MediaGovernanceExecutorWriteBoundariesDto)
-  writeBoundaries: MediaGovernanceExecutorWriteBoundariesDto;
-}
-
 export class MediaGovernanceExecutorAcceptanceDto {
   @IsInt()
   @Min(0)
@@ -572,11 +464,6 @@ export class MediaGovernanceExecutorEventDto {
   @IsOptional()
   @Matches(/^[a-f0-9]{64}$/)
   manifestSha256?: string;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => MediaGovernanceExecutorMetadataDto)
-  metadata?: MediaGovernanceExecutorMetadataDto;
 
   @IsOptional()
   @IsArray()
@@ -771,148 +658,4 @@ export class MediaGovernanceSubtitleContractDto extends MediaGovernanceRevisionC
   @IsString()
   @MaxLength(96)
   sourceId: string;
-}
-
-export class MediaGovernanceOperatorDecisionDto extends MediaGovernanceRevisionCommandDto {
-  @ApiProperty({ maxLength: 160 })
-  @IsString()
-  @MaxLength(160)
-  selectedCandidateId: string;
-
-  @ApiProperty({ maxLength: 400 })
-  @IsString()
-  @MaxLength(400)
-  @Matches(/\S/)
-  reason: string;
-}
-
-export class MediaGovernanceAgentSessionQueryDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  afterSequence = 0;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(200)
-  limit = 200;
-}
-
-export class MediaGovernanceAgentToolCallDto {
-  @IsObject()
-  arguments: Record<string, unknown>;
-
-  @Matches(/^[a-f0-9]{64}$/)
-  capsuleSha256: string;
-
-  @Matches(/^[a-f0-9]{64}$/)
-  manifestSha256: string;
-
-  @Matches(/^[a-f0-9]{64}$/)
-  policySha256: string;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  taskId: string;
-
-  @IsInt()
-  @Min(1)
-  taskRevision: number;
-
-  @IsIn(MEDIA_CODEX_AGENT_TOOLS)
-  tool: MediaCodexAgentTool;
-}
-
-export class MediaGovernanceLlmConversationContextDto {
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,95}$/)
-  clientMessageId: string;
-
-  @IsString()
-  @MaxLength(20_000)
-  @Matches(/\S/)
-  content: string;
-
-  @IsString()
-  @Matches(/^[1-9]\d{0,23}$/)
-  conversationId: string;
-
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  conversationTurnId: string;
-
-  @IsString()
-  @MaxLength(200)
-  @Matches(/\S/)
-  model: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  providerThreadId: null | string;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  taskId: string;
-}
-
-export class MediaGovernanceLlmConversationResultDto {
-  @IsString()
-  @Matches(/^[1-9]\d{0,23}$/)
-  conversationId: string;
-
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  conversationTurnId: string;
-
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  providerThreadId: string;
-
-  @IsObject()
-  result: Record<string, unknown>;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  taskId: string;
-}
-
-export class MediaGovernanceLlmProviderThreadBindDto {
-  @IsString()
-  @Matches(/^[1-9]\d{0,23}$/)
-  conversationId: string;
-
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  conversationTurnId: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  expectedProviderThreadId: null | string;
-
-  @IsString()
-  @MaxLength(128)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
-  providerThreadId: string;
-
-  @IsOptional()
-  @IsBoolean()
-  replaceProviderThread?: boolean;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  taskId: string;
 }

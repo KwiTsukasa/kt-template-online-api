@@ -35,5 +35,11 @@ describe('Bot Adapter migration deployment contract', () => {
     expect(dockerfile).toContain(
       'sql/media-governance-series-delete-v1-verify.sql',
     );
+    expect(dockerfile).toContain(
+      'sql/media-governance-mechanical-scrape-split.sql',
+    );
+    expect(dockerfile).toContain(
+      'sql/media-governance-mechanical-scrape-split-verify.sql',
+    );
   });
 });

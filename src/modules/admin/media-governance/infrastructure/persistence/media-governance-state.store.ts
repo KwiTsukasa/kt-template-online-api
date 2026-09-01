@@ -11,11 +11,8 @@ import { Injectable } from '@nestjs/common';
 import type { MediaGovernanceExecutorEventDto } from '@/modules/admin/media-governance/contract/media-governance.dto';
 import { readMediaGovernanceCanonicalReplacement } from '@/modules/admin/media-governance/contract/media-governance-plan.contract';
 import {
-  MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceEventEntity,
-  MediaGovernanceMetadataExceptionEntity,
-  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceSourceEntity,
@@ -108,8 +105,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     private readonly unitRepository: Repository<MediaGovernanceUnitEntity>,
     @InjectRepository(MediaGovernanceSourceEntity)
     private readonly sourceRepository: Repository<MediaGovernanceSourceEntity>,
-    @InjectRepository(MediaGovernanceAgentSessionEntity)
-    private readonly agentSessionRepository: Repository<MediaGovernanceAgentSessionEntity>,
     @InjectRepository(MediaGovernanceDescriptorRevisionEntity)
     private readonly descriptorRevisionRepository: Repository<MediaGovernanceDescriptorRevisionEntity>,
     @InjectRepository(MediaGovernanceEventEntity)
@@ -133,11 +128,10 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
    */
   async loadTasks(): Promise<MediaGovernanceStoredTask[]> {
     try {
-      const [tasks, units, sources, sessions, descriptors] = await Promise.all([
+      const [tasks, units, sources, descriptors] = await Promise.all([
         this.taskRepository.find({ order: { createTime: 'DESC' } }),
         this.unitRepository.find(),
         this.sourceRepository.find(),
-        this.agentSessionRepository.find(),
         this.descriptorRevisionRepository.find(),
       ]);
       this.ready = true;
@@ -146,7 +140,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
           task,
           units.filter((unit) => unit.taskId === task.id),
           sources.filter((source) => source.taskId === task.id),
-          sessions.find((session) => session.taskId === task.id) ?? null,
           descriptors,
         ),
       );
@@ -179,18 +172,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
   ) {
     const unitRepository = manager.getRepository(MediaGovernanceUnitEntity);
     const sourceRepository = manager.getRepository(MediaGovernanceSourceEntity);
-    const units = (
-      await unitRepository.find({ where: { taskId: task.id } })
-    ).filter((unit) => unit.taskId === task.id);
     const sources = (
       await sourceRepository.find({ where: { taskId: task.id } })
     ).filter((source) => source.taskId === task.id);
-    const metadataExceptionRepository = manager.getRepository(
-      MediaGovernanceMetadataExceptionEntity,
-    );
-    for (const unit of units) {
-      await metadataExceptionRepository.delete({ unitId: unit.id });
-    }
     const descriptorRepository = manager.getRepository(
       MediaGovernanceDescriptorRevisionEntity,
     );
@@ -198,12 +182,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       await descriptorRepository.delete({ sourceId: source.id });
     }
 
-    await manager
-      .getRepository(MediaGovernanceOperatorDecisionEntity)
-      .delete({ taskId: task.id });
-    await manager
-      .getRepository(MediaGovernanceAgentSessionEntity)
-      .delete({ taskId: task.id });
     await manager
       .getRepository(MediaGovernanceOutboxEntity)
       .delete({ taskId: task.id });
@@ -595,7 +573,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       event.eventType === 'run-succeeded' &&
       task.stage === 'closed' &&
       task.runState === 'succeeded' &&
-      task.metadataStatus === 'verified' &&
       task.activeRunId === null &&
       task.closedAt !== null &&
       task.closedMode !== null &&
@@ -649,7 +626,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     const stateInvalid =
       replaced.stage !== 'closed' ||
       replaced.runState !== 'succeeded' ||
-      replaced.metadataStatus !== 'verified' ||
       replaced.activeRunId !== null ||
       replaced.closedAt === null ||
       replaced.closedMode === null;
@@ -860,12 +836,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         throw new Error('media-governance-plan-grant-invalid');
       }
       if (
-        ![
-          'acceptance.verify',
-          'governance.execute',
-          'metadata.repair',
-          'metadata.verify',
-        ].includes(envelope.action) ||
+        !['acceptance.verify', 'governance.execute'].includes(
+          envelope.action,
+        ) ||
         envelope.taskId !== input.taskId
       ) {
         throw new Error('media-governance-plan-grant-invalid');
@@ -948,9 +921,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     const descriptorRepository = manager.getRepository(
       MediaGovernanceDescriptorRevisionEntity,
     );
-    const sessionRepository = manager.getRepository(
-      MediaGovernanceAgentSessionEntity,
-    );
     let closedAt = null;
     if (task.closedAt) closedAt = new Date(task.closedAt);
     await taskRepository.save(
@@ -963,10 +933,8 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         governanceProfile: task.governanceProfile,
         id: task.id,
         inputSnapshotSha256: task.inputSnapshotSha256,
-        llmConversationId: task.llmConversationId,
         mediaType: task.mediaType,
         metadataIdentity: task.metadataIdentity,
-        metadataStatus: task.metadataStatus,
         nextCommandLabel: task.nextCommandLabel,
         operationKind: task.operationKind,
         progressProjection: task.progress,
@@ -991,15 +959,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     const staleUnits = persistedUnits.filter(
       (unit) => !declaredUnitIds.has(unit.id),
     );
-    for (const unit of staleUnits) {
-      await manager
-        .getRepository(MediaGovernanceMetadataExceptionEntity)
-        .delete({ unitId: unit.id });
-      await manager
-        .getRepository(MediaGovernanceOperatorDecisionEntity)
-        .delete({ taskId: task.id, unitId: unit.id });
-      await unitRepository.delete({ id: unit.id });
-    }
+    for (const unit of staleUnits) await unitRepository.delete({ id: unit.id });
     if (task.units.length > 0) {
       await unitRepository.save(
         task.units.map((unit) => {
@@ -1012,7 +972,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
             expectedEpisodeNumbers: unit.expectedEpisodeNumbers.map(String),
             id: unit.id,
             localAcceptedAt,
-            metadataProjection: unit.metadataProjection,
             seasonNumber: unit.seasonNumber,
             subtitleContract: unit.subtitleContract,
             taskId: task.id,
@@ -1070,31 +1029,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         }),
       );
     }
-    if (task.llmConversationId) {
-      await sessionRepository.delete({ taskId: task.id });
-    } else if (task.agentSession) {
-      await sessionRepository.save(
-        sessionRepository.create({
-          capsuleSha256: task.agentSession.capsuleSha256,
-          checkpointSha256: task.agentSession.checkpointSha256,
-          currentActionLabel: task.agentSession.currentActionLabel,
-          currentUnitId: task.agentSession.currentUnitId,
-          id: `${task.id}-agent-session`,
-          lastHeartbeatAt: new Date(),
-          lastSequence: task.agentSession.lastSequence,
-          pendingPlanSha256: task.agentSession.pendingPlanSha256,
-          policyBoundaryLabel: task.agentSession.policyBoundaryLabel,
-          policySha256: task.agentSession.policySha256,
-          policyVersion: task.agentSession.policyVersion,
-          status: task.agentSession.status,
-          statusLabel: task.agentSession.statusLabel,
-          taskId: task.id,
-          threadId: task.agentSession.threadId,
-        }),
-      );
-    } else {
-      await sessionRepository.delete({ taskId: task.id });
-    }
   }
 
   /**
@@ -1102,25 +1036,21 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
    * @param task - 用于将任务实体及关联实体恢复为内存治理任务的领域对象，包含 `closedMode`、`stage`、`activeRunId`、`closedAt` 字段。
    * @param units - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `units` 值。
    * @param sources - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `sources` 值。
-   * @param session - 待读取、续期或持久化的将任务实体及关联实体恢复为内存治理任务会话。
    * @param descriptors - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `descriptors` 值。
-   * @returns 包含标准 conversation 绑定且不恢复旧 Agent session 身份的治理任务。
+   * @returns 恢复后的纯机械媒体治理任务。
    */
   private restoreTask(
     task: MediaGovernanceTaskEntity,
     units: MediaGovernanceUnitEntity[],
     sources: MediaGovernanceSourceEntity[],
-    session: MediaGovernanceAgentSessionEntity | null,
     descriptors: MediaGovernanceDescriptorRevisionEntity[],
   ): MediaGovernanceStoredTask {
     let closedMode = task.closedMode as MediaGovernanceTask['closedMode'];
     const closedModeMissing = closedMode === null || closedMode === undefined;
     if (closedModeMissing && task.stage === 'closed') {
       closedMode = 'automatic';
-      if (session?.status === 'succeeded') closedMode = 'agent_verified';
     }
     return {
-      agentSession: null,
       activeRunId: task.activeRunId,
       closedAt: task.closedAt?.toISOString() ?? null,
       closedMode,
@@ -1129,12 +1059,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         task.governanceProfile as MediaGovernanceTask['governanceProfile'],
       id: task.id,
       inputSnapshotSha256: task.inputSnapshotSha256,
-      llmConversationId: task.llmConversationId ?? null,
       mediaType: task.mediaType as MediaGovernanceTask['mediaType'],
       metadataIdentity:
         task.metadataIdentity as MediaGovernanceTask['metadataIdentity'],
-      metadataStatus:
-        task.metadataStatus as MediaGovernanceTask['metadataStatus'],
       nextCommandLabel: task.nextCommandLabel,
       operationKind: task.operationKind as MediaGovernanceTask['operationKind'],
       progress: {
@@ -1240,9 +1167,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
   }
 
   /**
-   * 将治理单元实体恢复为领域单元，并补齐旧数据默认投影。
+   * 将治理单元实体恢复为纯机械领域单元。
    * @param unit - 用于restoreUnit的领域对象，包含 `evidenceSha256`、`expectedEpisodeNumbers`、`id`、`localAcceptedAt` 字段。
-   * @returns 包含 `evidenceSha256`、`expectedEpisodeNumbers`、`id`、`localAcceptedAt`、`metadataProjection` 字段的restoreUnit。
+   * @returns 包含机械验收证据、期望集号和字幕合同的治理单元。
    */
   private restoreUnit(unit: MediaGovernanceUnitEntity): MediaGovernanceUnit {
     return {
@@ -1250,14 +1177,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       expectedEpisodeNumbers: unit.expectedEpisodeNumbers.map(Number),
       id: unit.id,
       localAcceptedAt: unit.localAcceptedAt?.toISOString() ?? null,
-      metadataProjection:
-        (unit.metadataProjection as MediaGovernanceUnit['metadataProjection']) ?? {
-          missingA: [],
-          missingB: [],
-          missingC: [],
-          repairAttempts: 0,
-          validBFallbacks: [],
-        },
       seasonNumber: unit.seasonNumber,
       subtitleContract:
         unit.subtitleContract as MediaGovernanceUnit['subtitleContract'],

@@ -7,7 +7,7 @@ describe('media governance intake menu seed', () => {
     'utf8',
   );
 
-  it('registers the series/task/Agent routes and the complete permission set', () => {
+  it('registers mechanical governance and independent scraping routes', () => {
     expect(sql).toContain("'MediaGovernance'");
     expect(sql).toContain("'/media/governance/series'");
     expect(sql).toContain("'/media/governance/series/list'");
@@ -19,23 +19,19 @@ describe('media governance intake menu seed', () => {
     expect(sql).toContain("'Media:Governance:List'");
     expect(sql).toContain("'Media:Governance:Create'");
     expect(sql).toContain("'Media:Governance:Delete'");
-    expect(sql).toContain("'/media/governance/agent-queue'");
-    expect(sql).toContain("'MediaGovernanceAgentSession'");
-    expect(sql).toContain("'/media/governance/tasks/:taskId/agent'");
-    expect(sql).toContain("'/media/governance/agent-session/index'");
-    expect(sql).toContain('"hideInMenu":true');
-    expect(sql).toContain('"hideInTab":true');
+    expect(sql).toContain("'MediaScrapeValidation'");
+    expect(sql).toContain("'/media/scrape-validation'");
+    expect(sql).toContain("'/media/scrape-validation/list'");
     for (const permission of [
       'Media:Governance:SourceUpload',
       'Media:Governance:Download',
       'Media:Governance:Run',
-      'Media:Governance:AgentStart',
-      'Media:Governance:AgentOperate',
-      'Media:Governance:OperatorDecision',
       'Media:Governance:Evidence',
     ]) {
       expect(sql).toContain(`'${permission}'`);
     }
+    expect(sql).toContain("'MediaGovernanceAgentQueue'");
+    expect(sql).toContain('`is_deleted` = 1');
   });
 
   it('grants the demo only to active super roles', () => {

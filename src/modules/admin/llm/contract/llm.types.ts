@@ -14,7 +14,7 @@ export type LlmConnectionStatus =
 
 export type LlmMessageRole = 'assistant' | 'user';
 
-export type LlmConversationScene = 'general' | 'media-governance';
+export type LlmConversationScene = 'general';
 
 export type LlmMessageStatus =
   | 'completed'
@@ -137,12 +137,6 @@ export type LlmNormalizedStreamEvent =
 export interface LlmStreamRequest {
   clientMessageId: string;
   config: LlmAdapterConfig;
-  context?: {
-    conversationTurnId: string;
-    conversationId: string;
-    scene: Exclude<LlmConversationScene, 'general'>;
-    sceneRefId: string;
-  };
   messages: LlmAdapterMessage[];
   model: string;
   providerThreadId?: null | string;

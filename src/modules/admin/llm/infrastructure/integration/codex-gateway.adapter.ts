@@ -9,7 +9,7 @@ import type {
   LlmProvider,
   LlmStreamRequest,
 } from '../../contract/llm.types';
-import { LLM_CODEX_INTERNAL_HEADER } from '@/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
+import { LLM_CODEX_INTERNAL_HEADER } from '@/apps/llm-codex-gateway/domain/llm-codex-runtime.contract';
 import { parseSseStream } from './llm-sse';
 import {
   LlmModelDiscoveryError,
@@ -95,12 +95,6 @@ export class CodexGatewayAdapter extends LlmProviderAdapter {
       body.reasoningEffort = request.reasoningEffort;
     }
     if (request.serviceTier) body.serviceTier = request.serviceTier;
-    if (request.context) {
-      body.conversationId = request.context.conversationId;
-      body.conversationTurnId = request.context.conversationTurnId;
-      body.scene = request.context.scene;
-      body.sceneRefId = request.context.sceneRefId;
-    }
     let upstream: Readable;
     try {
       const response = await axios.post<Readable>(

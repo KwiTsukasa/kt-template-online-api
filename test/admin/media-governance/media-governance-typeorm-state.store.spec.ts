@@ -1,10 +1,7 @@
 import type { DeepPartial } from 'typeorm';
 import {
-  MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceEventEntity,
-  MediaGovernanceMetadataExceptionEntity,
-  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceSourceEntity,
@@ -18,7 +15,7 @@ import {
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
 import { MediaGovernanceTypeOrmStateStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
 import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
-import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import { sha256MediaGovernanceJson as sha256Json } from '../../../src/modules/admin/media-governance/contract/media-governance-hash';
 
 class MemoryRepository<T extends { id: string }> {
   lastFindOptions: unknown;
@@ -145,33 +142,25 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     });
   });
 
-  it('writes Task, Unit, Agent session and event in one transaction projection', async () => {
+  it('writes Task, Unit and event in one transaction projection', async () => {
     const tasks = new MemoryRepository<MediaGovernanceTaskEntity>();
     const units = new MemoryRepository<MediaGovernanceUnitEntity>();
     const sources = new MemoryRepository<MediaGovernanceSourceEntity>();
-    const sessions = new MemoryRepository<MediaGovernanceAgentSessionEntity>();
     const events = new MemoryRepository<MediaGovernanceEventEntity>();
     const outbox = new MemoryRepository<MediaGovernanceOutboxEntity>();
     const runs = new MemoryRepository<MediaGovernanceRunEntity>();
     const descriptors =
       new MemoryRepository<MediaGovernanceDescriptorRevisionEntity>();
-    const metadataExceptions =
-      new MemoryRepository<MediaGovernanceMetadataExceptionEntity>();
-    const operatorDecisions =
-      new MemoryRepository<MediaGovernanceOperatorDecisionEntity>();
     const taskEpisodeBindings =
       new MemoryRepository<MediaGovernanceTaskEpisodeBindingEntity>();
     const repositories = new Map<unknown, MemoryRepository<{ id: string }>>([
       [MediaGovernanceTaskEntity, tasks],
       [MediaGovernanceUnitEntity, units],
       [MediaGovernanceSourceEntity, sources],
-      [MediaGovernanceAgentSessionEntity, sessions],
       [MediaGovernanceEventEntity, events],
       [MediaGovernanceOutboxEntity, outbox],
       [MediaGovernanceRunEntity, runs],
       [MediaGovernanceDescriptorRevisionEntity, descriptors],
-      [MediaGovernanceMetadataExceptionEntity, metadataExceptions],
-      [MediaGovernanceOperatorDecisionEntity, operatorDecisions],
       [MediaGovernanceTaskEpisodeBindingEntity, taskEpisodeBindings],
     ]);
     const dataSource = {
@@ -187,7 +176,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       tasks as never,
       units as never,
       sources as never,
-      sessions as never,
       descriptors as never,
       events as never,
       outbox as never,
@@ -199,21 +187,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       seasonNumbers: ['S01'],
       titleHint: 'TypeORM 状态仓库测试',
     });
-    task.agentSession = {
-      capsuleSha256: 'c'.repeat(64),
-      checkpointSha256: 'd'.repeat(64),
-      currentActionLabel: '正在验证持久化',
-      currentUnitId: task.units[0].id,
-      lastHeartbeatLabel: '刚刚',
-      lastSequence: 7,
-      pendingPlanSha256: null,
-      policyBoundaryLabel: '五层边界已启用',
-      policySha256: 'b'.repeat(64),
-      policyVersion: 'media-agent-policy-v1',
-      status: 'running',
-      statusLabel: 'Agent 正在治理',
-      threadId: 'thread-typeorm-store-0001',
-    };
     await store.saveTask(task);
 
     task.workItemId = await store.reserveWorkItemId(task.id);
@@ -221,37 +194,16 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     await expect(store.reserveWorkItemId(task.id)).resolves.toBe('media-063');
 
     expect(tasks.rows.get(task.id)).toMatchObject({
-      metadataStatus: 'pending',
       progressProjection: { percent: 0 },
       revision: 1,
     });
     expect(units.rows.size).toBe(1);
-    expect([...sessions.rows.values()][0]).toMatchObject({
-      lastSequence: 7,
-      taskId: task.id,
-      threadId: 'thread-typeorm-store-0001',
-    });
     expect(events.rows.size).toBe(0);
     await expect(store.loadTasks()).resolves.toEqual([
       expect.objectContaining({
-        agentSession: null,
         id: task.id,
       }),
     ]);
-
-    task.llmConversationId = '2041700000000190001';
-    await store.saveTask(task);
-    expect(sessions.rows.size).toBe(0);
-    expect(tasks.rows.get(task.id)).toMatchObject({
-      llmConversationId: '2041700000000190001',
-    });
-    await expect(store.loadTasks()).resolves.toEqual([
-      expect.objectContaining({
-        agentSession: null,
-        llmConversationId: '2041700000000190001',
-      }),
-    ]);
-    task.agentSession = null;
 
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'subtitleless_media',
@@ -453,14 +405,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       'duplicate',
     );
 
-    await metadataExceptions.save({
-      id: 'metadata-exception-delete-fixture',
-      unitId: task.units[0].id,
-    } as MediaGovernanceMetadataExceptionEntity);
-    await operatorDecisions.save({
-      id: 'operator-decision-delete-fixture',
-      taskId: task.id,
-    } as MediaGovernanceOperatorDecisionEntity);
     await taskEpisodeBindings.save({
       id: 'media-task-binding-delete-fixture',
       taskId: task.id,
@@ -499,9 +443,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
         persistedSourceIds.has(row.sourceId),
       ),
     ).toBe(false);
-    expect(
-      [...sessions.rows.values()].some((row) => row.taskId === task.id),
-    ).toBe(false);
     expect([...runs.rows.values()].some((row) => row.taskId === task.id)).toBe(
       false,
     );
@@ -511,8 +452,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     expect(
       [...outbox.rows.values()].some((row) => row.taskId === task.id),
     ).toBe(false);
-    expect(metadataExceptions.rows.size).toBe(0);
-    expect(operatorDecisions.rows.size).toBe(0);
     expect(
       [...taskEpisodeBindings.rows.values()].some(
         (row) => row.taskId === task.id,
@@ -545,16 +484,11 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     const tasks = new MemoryRepository<MediaGovernanceTaskEntity>();
     const units = new MemoryRepository<MediaGovernanceUnitEntity>();
     const sources = new MemoryRepository<MediaGovernanceSourceEntity>();
-    const sessions = new MemoryRepository<MediaGovernanceAgentSessionEntity>();
     const events = new MemoryRepository<MediaGovernanceEventEntity>();
     const outbox = new MemoryRepository<MediaGovernanceOutboxEntity>();
     const runs = new MemoryRepository<MediaGovernanceRunEntity>();
     const descriptors =
       new MemoryRepository<MediaGovernanceDescriptorRevisionEntity>();
-    const metadataExceptions =
-      new MemoryRepository<MediaGovernanceMetadataExceptionEntity>();
-    const operatorDecisions =
-      new MemoryRepository<MediaGovernanceOperatorDecisionEntity>();
     const taskEpisodeBindings =
       new MemoryRepository<MediaGovernanceTaskEpisodeBindingEntity>();
     const works = new MemoryRepository<MediaGovernanceWorkEntity>();
@@ -562,13 +496,10 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       [MediaGovernanceTaskEntity, tasks],
       [MediaGovernanceUnitEntity, units],
       [MediaGovernanceSourceEntity, sources],
-      [MediaGovernanceAgentSessionEntity, sessions],
       [MediaGovernanceEventEntity, events],
       [MediaGovernanceOutboxEntity, outbox],
       [MediaGovernanceRunEntity, runs],
       [MediaGovernanceDescriptorRevisionEntity, descriptors],
-      [MediaGovernanceMetadataExceptionEntity, metadataExceptions],
-      [MediaGovernanceOperatorDecisionEntity, operatorDecisions],
       [MediaGovernanceTaskEpisodeBindingEntity, taskEpisodeBindings],
       [MediaGovernanceWorkEntity, works],
     ]);
@@ -589,7 +520,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       closedMode: 'bounded_repair',
       id: 'media-task-homecoming-current',
       mediaType: 'movie',
-      metadataStatus: 'verified',
       providerRef: { provider: 'bangumi', providerId: '178607' },
       releaseYear: 2017,
       revision: 24,
@@ -619,7 +549,6 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       closedMode: 'automatic',
       id: 'media-task-homecoming-remux',
       mediaType: 'movie',
-      metadataStatus: 'verified',
       providerRef: { provider: 'bangumi', providerId: '178607' },
       releaseYear: 2017,
       runState: 'succeeded',

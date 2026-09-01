@@ -269,311 +269,85 @@ OpenAI-compatible Models API，Anthropic 使用官方 Models API 的 `after_id` 
 发送前 API 再次校验模型及所选推理强度/速度档位；非法组合在建立流前返回 400，模型发现
 失败或返回空目录时失败关闭，不回退配置表中的静态列表。
 
-媒体治理不再配置第二套 Codex 地址、密钥、模型或消息接口。调用 `agent/start` 时，API
-从当前启用的 Admin Codex 连接创建一条 `scene=media-governance` 的标准 LLM conversation，
-Task 只持久化唯一 `llmConversationId`；模型选择、消息、流式终态、实际模型和底层
-`providerThreadId` 均由 LLM conversation 统一管理。媒体入口跳转到同一个标准 LLM 对话页，
-续聊只使用 `/llm/conversations/:id/messages/stream`，不存在媒体专用非流式或第二消息路由。
-类型化治理工具、Task revision、密封计划和人工候选仍由媒体领域校验。Codex 网关统一使用
-`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 与启用网络和 live Web
-Search 的 `llm-codex` 权限档。
-
-媒体场景的结构化结果包含完整 `answer` 与短 `summary`：`answer` 作为标准 Assistant 消息流式展示，`summary/status/planSha256` 只用于 Task 投影。Gateway 每轮从 API 当前 Task 取得 `availableActions`，并只允许阶段门声明的工具；4xx/409/超时必须向模型返回非空、脱敏的稳定失败码。策略 v3 新增受 revision、胶囊、scene/provider-thread CAS 与既有业务服务共同约束的身份确认、磁链来源、分页清单、自动映射、探针、下载、治理、元数据和验收工具。TV 自动映射接受 `SxxExx`、根目录纯数字方括号，或根目录中唯一的发布标点分隔 1–3 位集号；电影多视频清单只有在最大文件不少于 512 MiB、其余均不超过 64 MiB，且最大文件至少为第二大文件 8 倍时才自动判为正片。任何集号歧义或电影主次不满足门槛都返回 409，不猜测选择。任一写工具成功后必须结束本轮，由下一轮读取新 revision；浏览器、模型和 Gateway 都不能直接写数据库、qBittorrent 或正式媒体目录。
-
-`provider.metadata.read` 的 TMDB 搜索最多使用两条独立、禁用连接复用的有界请求；不可用时返回 `lookupAvailable=false`。模型通过 live Web Search 提供显式 TMDB ID 后，`media.identity.confirm` 仍会独立请求固定官方详情页并核对媒体类型与发行年份，不能把搜索结果或自由文本直接当作可写身份。
+媒体治理 Task 不创建或绑定 LLM/Codex conversation；普通 Codex 对话仅由通用 LLM 模块管理，与媒体治理状态和操作无关。
 
 ## Admin 与基础后台
 
-### 媒体治理 API/Admin 生产链路
+### 媒体治理与 NAS 刮削校验
 
-目录和执行严格按 `Series → Work → Season/Episode → Task` 分层。Task 根资源只提供查询与执行，
-不存在根级创建、身份编辑、身份恢复或 Task-to-Series reconcile 路由。所有新 Task 必须从既有
-Work 派生不可变的 `seriesId/workId/operationKind` 与 catalog 身份。
+媒体治理 Task 只负责纯机械流程：
 
-| 方法     | 路径                                                               | 说明                                                              |
-| -------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `GET`    | `/media-governance/tasks/page`                                     | 分页和语义过滤纯执行任务                                          |
-| `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合                                 |
-| `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                                              |
-| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行任务并清除绑定账本                                |
-| `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                                                  |
-| `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件                                    |
-| `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                                            |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源                                  |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成来源清单；磁链最长 120 秒                                     |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                                            |
-| `PUT`    | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同                                        |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载                                 |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                                                  |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理                                |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传活动 Run，或创建失联恢复 Run                                  |
-| `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理                                  |
-| `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份                            |
-| `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验                                         |
-| `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复                                |
-| `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理                                        |
-| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 创建并绑定唯一的本地 Codex LLM 对话                               |
-| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询由 LLM 对话派生的只读治理投影                                 |
-| `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                                            |
-| `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要                                      |
-| `GET`    | `/media-governance/events/stream`                                  | 订阅 task-changed/catalog-changed 与 replay/snapshot-required SSE |
+1. 固化 Series / Work / Season / Episode 身份；
+2. 绑定来源、逐文件映射与下载任务；
+3. 在隔离目录完成下载；
+4. 按固化身份归一化目录与文件名；
+5. 运行机械文件验收并关闭 Task。
 
-Series-first 目录接口先创建系列及主 Work，再在同一 Series 下增加 TV、电影或剧场版 Work。
-Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。`workType` 同时约束两个资料源：TV 使用 Bangumi `type=2/platform=TV` 与 TMDB TV，电影使用 Bangumi `type=6/platform=电影` 与 TMDB Movie，剧场版使用 Bangumi `type=2/platform=剧场版` 与 TMDB Movie。Bangumi 搜索的 `meta_tags` 只作上游缩小，API 仍逐项核对 `type + platform`，选中后详情核验再次执行同一合同。
-非 TV Work 在事务行锁内最多保留一个未闭环 Task；已有闭环 Task 时，下一个 Work Task 是唯一升级候选。
-`governance/start` 会把同 Work 唯一闭环 Task 的计划摘要、revision、work item 与规范视频证据密封为
-`canonicalReplacement`。NAS 在 trim.media 停服窗口用候选/旧目标双 hardlink 保护的原子 rename
-执行替换，普通 `move` 遇到既有目标仍返回冲突。候选独立验收成功时，API 在保存候选 Task、Run、
-Event 的同一事务中删除被替换 Task 的完整账本；验收前失败只回滚文件，不提前隐藏或删除旧 Task。
-电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
+治理 Task 不读取、不等待也不投影 NAS 刮削状态。NFO、海报、资料库关联和
+trim.media 可见性由独立的 `media-scrape-validation` 模块校验；其
+`pending/running/healthy/issues` 状态、缺项或服务异常都不会重开治理 Task，
+也不会阻止文件进入 NAS、正常扫描以外的直接播放或后续观看。
 
-| 方法     | 路径                                                                                                                      | 说明                                         |
-| -------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `GET`    | `/media-governance/series/page`                                                                                           | 分页查询 Series/Work/季集/执行聚合           |
-| `GET`    | `/media-governance/series/identity-candidates`                                                                            | 按关键词和 Work 类型搜索官方身份候选         |
-| `POST`   | `/media-governance/series`                                                                                                | 原子创建 Series 与唯一主 Work                |
-| `DELETE` | `/media-governance/series/:seriesId?expectedRevision=`                                                                    | 仅删除无 Season/Episode/Task/绑定/RSS 的空壳 |
-| `POST`   | `/media-governance/series/:seriesId/works`                                                                                | 向既有 Series 添加已核验 Work                |
-| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons`                                                                | 为 TV Work 创建连续 Season/Episode           |
-| `POST`   | `/media-governance/series/:seriesId/works/:workId/tasks`                                                                  | 从 Work 派生一次 source-intake Task          |
-| `GET`    | `/media-governance/series/history-classification`                                                                         | 只读核对历史 Task 的 Work 归类状态           |
-| `GET`    | `/media-governance/series/rss-discovery/identity-candidates`                                                              | 按关键词查询 RSS 使用的 TV 身份候选          |
-| `GET`    | `/media-governance/series/:seriesId`                                                                                      | 查询 Series、Works、季、Task 与 RSS          |
-| `GET`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`                                         | 分页查询 Work Episode 与 Task/来源绑定       |
-| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`                                     | 在一个 Work Task 内创建 1–16 条按集磁链来源  |
-| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search`                             | 按 Work/Season 聚合固定来源和发布组 RSS      |
-| `POST`   | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`                                | 创建 Work-scoped 按季 RSS 订阅               |
-| `PUT`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context`        | 清理错误 Task 后迁移订阅上下文并重置条目     |
-| `PUT`    | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context-repair` | 保留未密封 RSS Task/来源/条目并合并误建 Work |
-| `PUT`    | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                                                        | 按 revision 启停 RSS                         |
-| `POST`   | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                                                         | 立即轮询、去重并按集创建 Work-bound Task     |
-| `GET`    | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                                                        | 分页查询 RSS 条目处理历史                    |
+#### 媒体治理 Task
 
-Series 删除使用独立 `Media:Governance:Delete` 权限和客户端已读取的 revision。服务端在同一事务中锁定 Series、Work、Task、Season/Episode、绑定、RSS 与资料引用范围；只允许级联删除 Work/Series 资料引用和空 Work，任一执行或订阅事实存在时固定返回 `409`。权限由 `media-governance-series-delete-v1.sql` 幂等注册并只授予活动 `super`，对应 verify 脚本检查身份唯一、无冲突、无重复和无非 super 授权。
+| Method   | Path                                                              | Purpose                            |
+| -------- | ----------------------------------------------------------------- | ---------------------------------- |
+| `GET`    | `/media-governance/tasks/page`                                    | 查询机械治理 Task                  |
+| `GET`    | `/media-governance/tasks/summary`                                 | 查询下载、治理、机械验收与阻塞摘要 |
+| `GET`    | `/media-governance/tasks/:taskId`                                 | 查询 Task 详情                     |
+| `POST`   | `/media-governance/tasks`                                         | 创建未绑定 Work 的兼容草稿         |
+| `DELETE` | `/media-governance/tasks/:taskId`                                 | 删除尚未产生执行证据的草稿         |
+| `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                  | 添加磁链来源                       |
+| `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                 | 添加 torrent 来源                  |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`       | 检查来源清单                       |
+| `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/selection`     | 密封逐文件映射                     |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime` | 探测来源可用性                     |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/start`                 | 启动隔离下载                       |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                 | 暂停下载                           |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                | 恢复下载                           |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                | 取消下载                           |
+| `POST`   | `/media-governance/tasks/:taskId/governance/start`                | 启动目录与文件名归一化             |
+| `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`      | 按当前固化身份重排目录             |
+| `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`               | 运行机械文件验收                   |
+| `GET`    | `/media-governance/tasks/:taskId/evidence`                        | 查询机械验收证据                   |
+| `GET`    | `/media-governance/events/stream`                                 | 订阅 Task 与目录事件               |
 
-RSS 来源发现严格分为身份候选与来源聚合两个阶段：用户必须先从 Bangumi/TMDB 候选中选择身份，
-服务端再次核验该身份后才并行查询 Mikan、Bangumi.moe、Nyaa、ACG.RIP、动漫花园、AniBT、
-Shana Project、nekoBT 和 SubsPlease。单个来源失败只进入该来源状态，不丢弃其他来源结果；
-没有可证明发布组的条目不会伪造“未识别发布组”。Mikan 会从精确番组页发现全部字幕组 RSS，
-分批读取每个子组 Feed 的真实条目，再回填条目数、最近发布时间、样例和专属订阅地址，
-不能仅凭 RSS 地址存在就显示空统计。ACG.RIP、动漫花园等旧查询接口若拒绝完整长标题，
-服务端最多再尝试一次从已核验标题尾部提取的短别名；返回条目仍必须通过完整身份别名过滤，
-短词只解决上游查询兼容性，不能放宽身份边界。
+`governance.execute` 成功后只会进入 `acceptance.verify`；验收成功即以
+`closedMode=mechanical` 关闭。治理执行合同不再接受
+`metadata.verify`、`metadata.repair` 或任何 Agent/Codex 动作。
+迁移前停在 `metadata` 的 Task 启动时会丢弃旧刮削缺项投影，并迁移到机械验收；
+缺少密封计划时返回治理阻断态，不会转入本地 Codex。
 
-创建订阅必须携带第一阶段选中的资料来源、编号和可选年份；API 会再次读取 Bangumi/TMDB
-官方详情，并把用户在当前 Season 明确确认的身份写入订阅及 Work/Series `catalog-evidence`。
-若该 provider 身份已属于另一 Work 则返回 409；订阅会持久化 provider、编号、标题和年份，
-后续 `rss-intake-auto` Task 使用这组精确身份，而不是回退成 Work canonical。同一 Series/Feed
-不重复建订阅；普通错误上下文在旧 Task 清理后使用 revision 绑定的 context 路由并把条目重置为
-`discovered`。如果错误上下文已经产生未密封 Task，context-repair 还必须精确提交源 Work、订阅
-revision 和完整 Task revision 清单，并确认全部 active Run 为零；事务保持 Task/Source/RSS item ID，
-把 Unit、来源季号和 Episode Binding 迁到目标 Season，移动资料引用后仅删除已空源 Work。
-轮询可重新处理没有 `taskId/sourceId` 的 `discovered/ignored/failed` item；
-已入队条目仍保持幂等跳过。
-默认集号解析支持发布名中的 ` - 41`、`E41` 和 `S01E41`；`SxxEyy` 只把 `yy` 作为当前
-canonical Season 的绝对 Episode 号，避免紧凑命名因为 `E` 前无单词边界而被误记为 ignored。
-同批 RSS Task 会先检查全部来源清单，再执行自动映射。仅当全部主来源都有视频、没有 sidecar
-字幕且视频名带明确内封标记时，服务端才把错误的 `bundled_sidecar_media` 原子纠偏为
-`embedded_subtitle_media`；合同校验失败时原来源选择保持不变，旧的精确映射阻塞可由状态机重试。
-Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
-BTIH 并把原始 torrent 字节写入私有描述符存储后，再创建最多 16 集的 Task；探针和下载直接复用
-该描述符，不再从裸磁链重新等待 metadata。历史已入队 magnet 来源在同 Feed 轮询时按
-Task/Source/BTIH 一次提交原地升级，Task、Source、RSS item 与 Episode Binding ID 均保持不变。
-`operationKind=rss-intake-auto` 的 Task 会由 API 状态机逐来源
-自动完成清单检查、保守视频/简中字幕映射和运行时探针；全部来源可下载时自动派发隔离下载，
-无法安全映射或任一探针失败时停止在带明确原因的人工复核态，不再要求每个来源手点同一按钮。
-下载 Run 在启动阶段先单次兑换并校验全部来源描述符，再进入可能耗时的逐来源 qBittorrent 流程；
-后续来源不会因前一来源下载超过 envelope TTL 而失效。失效或重复 descriptor grant 返回 409，
-执行器不将其误判为 5xx 暂态重试。
-成功创建 Binding 后发布 `catalog-changed`，Series 详情与当前 Episode 页通过 SSE 回读权威
-快照，不需要浏览器手工刷新。
+#### 独立 NAS 刮削校验
 
-Season 事实使用 `episodeStart + episodeCount` 表示连续集号区间；`episodeStart`
-省略时为 `1`。这允许同一系列保留 S02 `E25–E47`、S03 `E48–E59` 等资料库原始连续编号，
-批量磁链、RSS、Episode 分页和历史 Task 归类均按该闭区间校验，不做隐式偏移换算。
-历史分类接口完全只读，只按精确 `provider + namespace + providerId`、既有 Work 上下文、
-Task Unit 和来源映射判断 `classified / classifiable / pending`，并返回稳定原因。普通 TV Task
-仅在 `metadataStatus=verified`、主媒体 `manifestState=inspected` 且 Unit/视频映射完全一致时
-进入目录同步；同步目标必须是 Task 已绑定 Work 中已经存在的 Season/Episode，不会从 Task
-自动创建或合并 Series/Work。精确身份跨 Work、Season 缺失、集号有洞或映射不完整时零写；
-服务启动会补偿扫描已验证任务并只恢复合法的既有 Work 绑定。事务不修改 Task revision、Run、
-来源、密封计划或下载状态；提交后在 `/media-governance/events/stream` 发布携完整 SeriesCard 的
-`catalog-changed`。
+| Method | Path                                                      | Purpose                         |
+| ------ | --------------------------------------------------------- | ------------------------------- |
+| `GET`  | `/media-scrape-validation/page`                           | 分页查询刮削校验记录            |
+| `GET`  | `/media-scrape-validation/:validationId`                  | 查询校验详情和缺项              |
+| `POST` | `/media-scrape-validation/:validationId/recheck`          | 按校验自身 revision 重新排队    |
+| `GET`  | `/internal/media-scrape-validation/health`                | 查询内部队列健康状态            |
+| `POST` | `/internal/media-scrape-validation/claims/next`           | 由 NAS 执行器领取最早待处理记录 |
+| `POST` | `/internal/media-scrape-validation/:validationId/results` | 回传 NFO、海报和资料库关联结论  |
 
-`GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
-`evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文
-`healthLabel`。失联 Run 只统计数据库生产 Task 中 queued/running 状态与 `activeRunId`
-不一致，或执行器 `observedAt` 超过既有 10 分钟无增量窗口的任务；暂停并保留原 Run 的
-blocked 下载不会误报。closed Task 仍有 Unit 缺 `localAcceptedAt` 或 `evidenceSha256`
-时计入证据漂移。没有持续 NAS 观测源时 `stagingResidualCount=null`，不得解释为 0；
-正式独立验收仍要求回调中的实际 `stagingResiduals=0`。
+机械验收事务提交后，API 异步写入只读治理快照。登记或校验失败会被隔离在
+`media_scrape_validation`，不会回写 Task 的 `stage/runState/gateReason`。
+内部执行器仍使用定长私有密钥；浏览器不能调用 claim/result。
 
-`probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
-无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`；该唯一降级原因
-保留为速度警告并允许 `downloads/start` 继续，其他降级、证据不足和不可用原因仍失败关闭。
-磁链 `source.inspect` 与该运行时健康探针相互独立：清单获取每 5 秒产生一次
-`peer-progress`，120 秒仍无元数据即返回 `magnet_metadata_unavailable`，清除 active Run
-并把任务保持在可换源、可改身份、已有清单时可重编映射、无成果时可删除的 intake 阶段。
-种子清单不会把 `attr=p` 的 padding 传输项暴露为可治理文件，并按 qBittorrent Web API
-的用户可见顺序连续编号；API 与 qBittorrent 因此使用同一 file index 和 manifest 摘要。
+#### 持久化、迁移与运行时所有权
 
-NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 Admin 权限不能访问：
+新安装由 `sql/media-governance-init.sql` 创建 17 张机械治理、Series/Work/RSS
+和独立刮削表。`sql/media-governance-mechanical-scrape-split.sql` 是显式备份门禁的
+升级脚本：先为已机械关闭 Task 补建刮削记录，再移除媒体 Agent session、人工决策、
+元数据例外表以及 Task/Unit 上的旧刮削字段。该脚本必须走标准数据库备份和发布流程，
+并由现有 `migrate-media-governance-series-work` initContainer 执行配套固定计数校验；
+任一遗留列、孤立记录或已关闭 Task 漏回填都会阻止新 API 启动。
 
-| 方法   | 路径                                                     | 说明                           |
-| ------ | -------------------------------------------------------- | ------------------------------ |
-| `GET`  | `/internal/media-governance/executor/health`             | 核对数据库回调状态仓是否 ready |
-| `POST` | `/internal/media-governance/executor/events`             | 按 Run 连续序号提交语义事件    |
-| `POST` | `/internal/media-governance/executor/descriptors/redeem` | 单次兑换密封来源描述           |
-| `POST` | `/internal/media-governance/executor/plans/redeem`       | 单次兑换 Schema 1.2.0 密封计划 |
+NAS executor 所需的 manifest、事务备份、目录合同、字幕、回滚与 trim 官方 API helper
+源码统一位于 `scripts/media-governance/runtime/`，由 API 项目的 package 命令测试和
+发布。`ci/media-governance-executor/build-release.sh` 只从该 API 路径取源；
+`mcp/ktWorkflow` 不再注册媒体工具，也不保存媒体/trim 脚本、ledger 或媒体能力档。
 
-全部接口要求 Admin JWT 和对应的 `Media:Governance:*` 权限，响应使用
-`Cache-Control: no-store`；增量 SQL 初始只把菜单和九个权限授予启用中的 `super`。
-所有命令请求必须携带 `expectedRevision`，陈旧版本返回 409 且不执行。TV 至少声明一个
-`Sxx` 季号，特别篇/番外篇使用 `S00`；Movie/Theatrical 不填写季号。`providerRef` 和
-`releaseYear` 是带格式校验和中文引导的身份消歧字段；创建时可暂缺，下载前可通过
-`PUT /identity` 绑定当前 revision 修正作品名、媒体类型、季号、`providerRef` 或年份，
-且至少提供一项。该操作只接受
-`intake` 的 `draft/blocked` 任务，保留已有来源及健康/阻塞状态；下载、治理、Agent、载荷
-或计划任一已经开始后失败关闭。`workItemId` 是内部账本与
-本地事务身份：导入存量任务时可显式绑定；未来新任务省略时，API 会在首次本地治理前
-通过数据库互斥锁从 `media-063` 起分配且永久复用，不要求操作员填写。
-下载取消只终止当前密封 Run，不在失败路径直接删除载荷；Run 返回可验证终态后，来源
-移除命令才会停用精确描述版本、执行 `source.cleanup` 并删除对应来源投影。在载荷密封和
-治理计划生成前，低速来源即使已分配本地账本身份或被字幕合同引用，也可在取消下载后精确移除；
-完成清理时同步解除对应字幕合同并重算预期集号。活动 Run、已生成载荷密封或治理计划的任务仍拒绝移除来源；仅对无作品编号、无载荷/计划、无元数据身份且无单元验收证据的旧版 `requires-agent` 残留，允许清理最后一个来源并同步清空旧 Agent 会话，使其回到可删除空草稿。
-另有一个严格的治理前回退例外：Task 必须停在 `governance/blocked`，进度固定为 5 阶段中的
-`completedItems<=1`，且 Unit 尚无验收/元数据成果。此时来源移除会先执行类型化
-`source.cleanup`，成功后清空旧 `payloadSeal/sealedPlan/sealedPlanSha256`、保留原
-`workItemId` 并回到 intake；已进入第 2 阶段的备份或正式事务仍拒绝回退。
-
-同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
-来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的
-合同；主媒体与所有补充字幕来源均完成清单检查和运行时探针后才允许启动下载。
-下载 Run 已失联且活动 Run 已清空时，调用 `downloads/resume` 或再次调用 `downloads/start` 会密封
-`source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
-staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
-状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
-状态仓恢复历史来源时，若 Source 的当前 objectId+SHA 精确命中同 Source 的较新 descriptor
-revision，则采用该真实 revision 并在下一次原子任务保存中核平；不按 objectId 猜跨来源记录，
-也不直接修改数据库。这避免已存在 r2 对象时把 r1 更新为同一唯一对象导致续传 500。
-首次 `source.download` 若已有部分已验证载荷后才因旧策略返回 `download_stalled`，API 会在该
-失败终态持久化后按最新 revision 自动预约唯一一次 `source.resume`；零载荷失败和
-`source.resume` 再次失败均不自动重试。新执行器对首次与恢复 Run 统一以已验证载荷事实关闭
-no-data 门，临时 peer 空窗不会重建 owner 或丢弃 fastresume。
-本地计划密封失败会生成新 revision 并保持原载荷不变；修正映射、字幕合同或内部身份
-后，可用该 revision 重试治理启动，不会重放下载。
-本地治理 Run 失败后，完整的最长 400 字符失败摘要写入事件记录，Task 的 `gateReason`
-只保留前 160 字符以符合持久化列契约。Task 处于 `governance/blocked`、无活动 Run 且
-原 payload/计划摘要仍密封时，可用当前 revision 再次调用 `governance/start`；API 复用
-原计划，但生成新的 Run、revision 和 replay key，不复用已消费事务键，也不重放下载。
-执行器会优先提取版本化工具返回的结构化 `error`，避免 Python traceback 挤掉
-`gateReason` 中真正的失败原因。除原 Run 续传外，每个新动作入队时都重置自己的进度，
-不得继承上一阶段的 100%；元数据证据返回唯一身份后，`identityPreview` 同步投影该
-provider/年份并标记为“元数据身份已验证”。成功终态无论是否携带额外进度事件，都会
-投影为 `100% / 已完成`；启动恢复时会以同一源码合同纠正历史成功任务的陈旧终态进度。
-`metadata/verify` 或 `acceptance/verify` 的 NAS 执行失败也可用失败后的当前 revision 重试；
-仅在对应阶段、无活动 Run、密封计划仍在且元数据状态未被改写时接受，并生成新的 Run、
-revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若所有 Unit 的 A 级缺口
-严格只有 `identity.provider/providerId`、尚未执行元数据修复且没有 C 级缺口，可从同一
-密封计划重新采集元数据事实，不会重跑下载或重做本地事务。延迟身份刷新每个 Unit
-最多一次，次数持久化为 `metadataProjection.identityRefreshAttempts`；刷新后仍缺身份
-时 `/metadata/verify` 拒绝第三次相同尝试，并由 Agent 的类型化身份修正收口。确定性
-刷新与任意阶段 Agent 入口互不覆盖；普通元数据缺口或独立验收仍按原门禁处理。
-升级前已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。
-普通元数据缺口投影若已为每个 Unit 绑定成功核验证据，且 Task 仍持有同一密封计划、无活动 Run、`gateReason` 为明确元数据缺口，则可用当前 revision 重新调用 `/metadata/verify`。该重采集只替换 A/B/C 事实投影，不执行媒体写入，也不绕过已用完的延迟身份刷新门禁。
-
-媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 从用户已确认的 Work 派生主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但不得改写 Task 的 Work 派生 `providerRef/releaseYear`。管理端从 Series 详情进入 Task，Task 列表只展示执行语义与状态。
-
-Work canonical provider 为 TMDB 时，新 Task 在创建快照中直接携带该二级身份；RSS 仍把用户所选
-Bangumi/TMDB 篇章保存为 catalog。显式 `catalogIdentity` 且 `metadataIdentity=null` 的历史计划
-只允许从飞牛规范路径唯一映射、季集一致并经官方 TMDB 页面复核的身份自动绑定。执行器没有返回
-身份时，API 不得再用 `task.providerRef` 回填 `metadataIdentity`；升级前仅在计划显式空二级身份、
-旧 Task 身份与 catalog 完全相等且 Unit A 缺口恰为 provider/providerId 时，一次性清除污染并复核。
-
-所有后继唯一的元数据 Task 都进入服务端确定性自动续跑，而不是由 Admin 或 LLM 逐段调用阶段接口：
-普通治理成功直接核验，延后 provider 身份最多复核一次，A/C 为空且 B 可修复时执行最多两次 repair，
-随后复核并进入独立验收。Agent 身份修正仍额外要求 amendment 与当前二级身份精确一致。每个终态先
-按原 Run 序号持久化，再预约带新 revision/replay key 的下一 Run；失败、身份漂移、未知 A/C、次数
-耗尽或人工候选固定停止。API 启动只恢复无活动 Run 的精确持久化边界，`closed` Task 不重复运行。
-
-公开 Task API 不提供 `catalog-identity/restore` 或身份编辑器。历史身份折叠残留只有在 Series 下确认唯一 Work 后才能通过受控迁移补充 `seriesId/workId/operationKind`；电影与剧场版禁止标题近似自动归类。
-内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
-第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
-其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动
-补齐标签降级硬门禁。
-
-Task、Unit、来源、Run 和治理证据由 `media_governance_*` TypeORM 状态仓持久化；新媒体
-Task 的 Agent 绑定只保存 `llm_conversation_id`，消息和 Codex thread 分别由
-`admin_llm_message` 与 `admin_llm_conversation.provider_thread_id` 管理。旧的
-`media_governance_agent_session` 只用于读取历史任务；Task 获得 LLM 绑定后会删除对应
-旧 session 行。API 启动时按 `llmConversationId` 恢复派生的治理状态。正式下载、治理、元数据核验和独立
-验收先在数据库事务中密封 Run 与 Outbox，再通过
-`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
-和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
-地址或 secret 时失败关闭。执行器只兑换一次描述/计划授权，并按 Run 从序号 1 连续回调，
-重复序号幂等忽略，缺号和身份漂移拒绝。NAS executor 在调用 API 前先把每条事件写入连续
-journal；transport、408/425/429 与 5xx 按同一序号持续退避，因此 API `Recreate` 不会终止
-活动 qBittorrent。发送终态前还会把最终报告原子密封到固定 Codex Run 证据根。API 还会
-按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态；runner 已退出或失联时，
-状态请求携权威 `afterSequence`，executor 先按最多 256 条且不超过 4 MiB 分页补回连续
-非终态缺口；状态响应随后必须提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续
-序号，API 才在同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待
-下轮核对，绝不由 API 伪造失败事件。状态响应采用 8 MiB 有界读取，可恢复包含 732 项 `payloadFiles` 的
-大批量终态，同时继续拒绝超限或未密封响应。
-高频执行器回调先校验 Run、manifest 与连续序号，再原子追加 Redis 热层并立即发布包含
-`runId`、`runSequence` 与紧凑 Task patch 的 `task-changed`。普通 tick 不等待 MySQL；
-MySQL 最多每 10 秒、出现语义变化或进入终态时保存权威快照，终态会等待本实例已排队
-快照。下载 runner 每 1 秒采集 qBittorrent 进度，磁链清单检查仍按 5 秒/120 秒合同。
-SSE 仅在 API 有界内存窗内重放；游标超窗返回 `snapshot-required`，由 Admin 静默读取
-权威快照。Redis Stream 目前不是跨进程 SSE 历史重放接口。
-该 SSE 响应固定返回 `Cache-Control: no-store` 与 `X-Accel-Buffering: no`，让浏览器前的
-Nginx 立即转发每条业务事件，不能等缓冲区积满后批量送达。普通状态变更先提交数据库
-再发布 SSE。`agent/start` 只创建或返回该 Task 唯一的媒体场景 LLM conversation，并从
-Admin 当前启用的 Codex 连接取端点与初始模型；重复请求不会创建第二条业务对话。
-旧的 `MEDIA_CODEX_AGENT_GATEWAY_*` 与 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 不再参与运行
-决策。标准 LLM POST SSE 在每一轮把 conversation scene、Task ID、当前模型和用户消息交给
-统一 gateway；gateway 通过
-`POST /internal/media-governance/agent/llm-conversations/context` 读取当前 revision、
-manifest、policy 与 capsule，通过类型化工具回调读取事实，并在严格结构化结果完成后调用
-`POST /internal/media-governance/agent/llm-conversations/result` 更新治理投影。浏览器只消费
-标准 `start/reasoning-delta/text-delta/done/error` 事件，停止生成沿同一 Abort 链路中断
-Codex turn，不存在非流式回退。
-
-媒体 conversation 的规范身份固定为
-`conversationId + scene + sceneRefId + activeTurnId + providerThreadId`。Task 只保存
-`llmConversationId`，其余字段只以 `admin_llm_conversation` 为权威；context、provider thread
-绑定和 result 回调必须携带同一个 `activeTurnId`。gateway 取得 App Server thread 后必须先调用
-`POST /internal/media-governance/agent/llm-conversations/provider-thread`，API 在对话行锁内以
-`expectedProviderThreadId` 执行 CAS：常规只允许 `null -> actual` 或 `same -> same`；仅策略版本升级可显式执行一次 `old -> new`，绑定成功后才
-发送 `turn/start`。上一回合的迟到请求、错误 Task/scene/ref 或不同 thread 均返回 409，不能
-覆盖当前身份。旧 `media_governance_agent_session` 与 NAS 宿主 `task-sessions` 文件不会被恢复
-为标准 conversation；旧文件只可在新链路验收后按备份清单隔离清理。
-Gateway 可在内存中为 `candidateSummaries` 派生候选 ID，但 result 回调与助手消息 metadata
-只能传输 `answer/candidateSummaries/nextActionLabel/planSha256/status/summary` 六个输出 Schema 字段；
-`candidates` 等内部投影不得越过该边界。
-
-gateway 只监听 NAS 私有 k3d bridge 地址，统一根为 `/internal/llm-codex`；健康接口是
-`GET /internal/llm-codex/health`，实时模型接口是
-`GET /internal/llm-codex/models`，流接口是
-`POST /internal/llm-codex/chat/stream`，三者均使用 `x-kt-llm-gateway-secret`。模型接口
-通过独立 Unix-WebSocket 连接有界分页调用 App Server `model/list`，排除隐藏项并按发送
-模型 ID 去重。每次
-thread/start、thread/resume 和 turn/start 都必须命中 `llm-codex` 权限档、
-`networkAccess=true` 与 `approvalPolicy=never`，同时启用 live Web Search；媒体写边界
-继续由动态类型化工具、Task revision 和密封计划约束。App Server Unix socket 使用标准
-WebSocket HTTP Upgrade，wire JSON-RPC 省略 `jsonrpc` 字段，动态工具以下划线 wire 名映射
-回点号内部合同。可见消息、reasoning、终态 metadata、实际模型和底层 Codex thread 都写入
-同一 LLM conversation；媒体治理页面仅按 Task 的 `llmConversationId` 进入这条标准对话。
-结构化结果异常投影为失败；真实候选歧义保持 `needs-operator`，不能用
-`operator-decision` 绕过候选和密封计划校验。
-`turn/start` 的结构化输出 Schema 必须把 `properties` 中的每个字段同时列入
-`required`；无候选时返回空 `candidateSummaries`，不得以省略字段绕过严格 Schema。
-种子上传
-会在内存中解析 bencode、重新计算 v1 info hash，并拒绝路径穿越、绝对路径、重复
-路径、符号链接、可执行项、畸形和超量描述文件。磁链只接受有界 BTIH 身份。两类
-原始描述都只能写入 `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`（默认
-`kt-media-governance-private`），普通 `/minio/*` 查询、上传、下载和删除入口会拒绝
-该 Bucket；列表、日志、SSE 和普通证据只返回脱敏投影。
+普通 Admin LLM/Codex 对话仍属于通用 LLM 模块，与媒体治理 Task 无绑定关系。
 
 ### Auth / User
 
@@ -1120,22 +894,22 @@ Host 只接受已知安全通道名称，并精确匹配 `network_port_forward` 
 
 ## 初始化 SQL
 
-| 文件                                           | 用途                                                       |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `sql/vben-admin-init.sql`                      | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表  |
-| `sql/blog-init.sql`                            | 初始化本地 Blog 表                                         |
-| `sql/blog-menu.sql`                            | 初始化 Blog 管理菜单                                       |
-| `sql/bot-init.sql`                             | 初始化 Bot Adapter 表、插件命令和字典                      |
-| `sql/bot-adapter-protocol-v1.sql`              | 幂等迁移旧表、绑定与订阅键                                 |
-| `sql/bot-adapter-menu-v1.sql`                  | 迁移 Bot/Plugin Platform 菜单、权限与字典                  |
-| `sql/bot-adapter-protocol-v1-verify.sql`       | 只读验证 33 张新表及旧契约清零                             |
-| `sql/system-log-menu.sql`                      | 初始化系统日志菜单和权限                                   |
-| `sql/system-notice-menu.sql`                   | 初始化系统站内信表与菜单权限                               |
-| `sql/media-governance-intake-menu.sql`         | 增量注册仅 `super` 可见的媒体治理任务/Agent 菜单和九个权限 |
-| `sql/migrate-dict-to-admin-dict.sql`           | 旧 `dict` 迁移到 `admin_dict`                              |
-| `sql/migrate-component-to-admin-component.sql` | 旧 `component` 迁移到 `admin_component`                    |
-| `sql/fix-admin-menu-meta.sql`                  | 修复菜单 meta 被覆盖为空                                   |
-| `sql/fix-admin-user-zero-id.sql`               | 修复旧版本 `admin_user.id=0` 脏数据                        |
+| 文件                                           | 用途                                                      |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `sql/vben-admin-init.sql`                      | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表 |
+| `sql/blog-init.sql`                            | 初始化本地 Blog 表                                        |
+| `sql/blog-menu.sql`                            | 初始化 Blog 管理菜单                                      |
+| `sql/bot-init.sql`                             | 初始化 Bot Adapter 表、插件命令和字典                     |
+| `sql/bot-adapter-protocol-v1.sql`              | 幂等迁移旧表、绑定与订阅键                                |
+| `sql/bot-adapter-menu-v1.sql`                  | 迁移 Bot/Plugin Platform 菜单、权限与字典                 |
+| `sql/bot-adapter-protocol-v1-verify.sql`       | 只读验证 33 张新表及旧契约清零                            |
+| `sql/system-log-menu.sql`                      | 初始化系统日志菜单和权限                                  |
+| `sql/system-notice-menu.sql`                   | 初始化系统站内信表与菜单权限                              |
+| `sql/media-governance-intake-menu.sql`         | 增量注册仅 `super` 可见的机械治理与 NAS 刮削校验菜单      |
+| `sql/migrate-dict-to-admin-dict.sql`           | 旧 `dict` 迁移到 `admin_dict`                             |
+| `sql/migrate-component-to-admin-component.sql` | 旧 `component` 迁移到 `admin_component`                   |
+| `sql/fix-admin-menu-meta.sql`                  | 修复菜单 meta 被覆盖为空                                  |
+| `sql/fix-admin-user-zero-id.sql`               | 修复旧版本 `admin_user.id=0` 脏数据                       |
 
 ## 验证入口
 

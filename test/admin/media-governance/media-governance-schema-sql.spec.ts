@@ -38,17 +38,22 @@ describe('media governance production schema SQL', () => {
     resolve(process.cwd(), 'sql/media-governance-rss-context-v2-verify.sql'),
     'utf8',
   );
+  const mechanicalSplitSql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-mechanical-scrape-split.sql'),
+    'utf8',
+  );
 
-  it('creates exactly the nineteen task, Work catalog and RSS tables without menu writes', () => {
+  it('creates exactly the seventeen mechanical governance, scrape and catalog tables without menu writes', () => {
     const rssSubscriptionTable = initSql.match(
       /CREATE TABLE IF NOT EXISTS `media_governance_rss_subscription`[\s\S]+?ENGINE=InnoDB/iu,
     )?.[0];
     const episodeTable = initSql.match(
       /CREATE TABLE IF NOT EXISTS `media_governance_episode`[\s\S]+?ENGINE=InnoDB/iu,
     )?.[0];
-    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(19);
+    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(17);
     expect(initSql).toContain('`media_governance_task`');
-    expect(initSql).toContain('`media_governance_agent_session`');
+    expect(initSql).toContain('`media_scrape_validation`');
+    expect(initSql).not.toContain('`media_governance_agent_session`');
     expect(initSql).toContain('`media_governance_outbox`');
     expect(initSql).toContain('`media_governance_series`');
     expect(initSql).toContain('`media_governance_work`');
@@ -73,18 +78,15 @@ describe('media governance production schema SQL', () => {
   });
 
   it('seals the restart and callback idempotency columns', () => {
-    expect(initSql).toContain('`last_sequence` int NOT NULL DEFAULT 0');
-    expect(initSql).toContain(
-      'UNIQUE KEY `uk_media_governance_agent_task` (`task_id`)',
-    );
     expect(initSql).toContain(
       'UNIQUE KEY `uk_media_governance_event_task_run_sequence` (`task_id`, `run_id`, `sequence`)',
     );
     expect(initSql).toContain('`progress_projection` longtext NOT NULL');
-    expect(initSql).toContain('`llm_conversation_id` bigint DEFAULT NULL');
+    expect(initSql).not.toContain('`llm_conversation_id` bigint DEFAULT NULL');
     expect(initSql).toContain(
-      'UNIQUE KEY `uk_media_governance_task_llm_conversation` (`llm_conversation_id`)',
+      'UNIQUE KEY `uk_media_scrape_validation_task` (`task_id`)',
     );
+    expect(initSql).toContain('`issue_projection` longtext NOT NULL');
     expect(initSql).toContain('`sealed_input` longtext NOT NULL');
     expect(initSql).toContain('`selected_file_indices` longtext DEFAULT NULL');
     expect(initSql).toContain('`selected_file_mappings` longtext DEFAULT NULL');
@@ -92,14 +94,25 @@ describe('media governance production schema SQL', () => {
 
   it('provides bounded post-migration verification without modifying rows', () => {
     expect(verifySql).toContain('COUNT(*) AS table_count');
-    expect(verifySql).toContain('MAX(last_sequence)');
-    expect(verifySql).toContain('llm_conversation_unique_index_count');
+    expect(verifySql).toContain('pending_scrape_validation_count');
+    expect(verifySql).toContain('legacy_media_agent_table_count');
+    expect(verifySql).toContain('legacy_media_llm_column_count');
     expect(verifySql).toContain('canonical_identity_count');
     expect(verifySql).toContain('task_episode_identity_count');
     expect(verifySql).toContain('enabled_rss_subscription_count');
     expect(verifySql).toContain('season_episode_start_column_count');
     expect(verifySql).toContain('invalid_season_episode_range_count');
     expect(verifySql).not.toMatch(/INSERT|UPDATE|DELETE|ALTER|DROP/iu);
+  });
+
+  it('ships an explicit backup-gated migration for the mechanical and scrape split', () => {
+    expect(mechanicalSplitSql).toContain('media_scrape_validation');
+    expect(mechanicalSplitSql).toContain("task.`stage` = 'closed'");
+    expect(mechanicalSplitSql).toContain(
+      'DROP TABLE IF EXISTS `media_governance_agent_session`',
+    );
+    expect(mechanicalSplitSql).toContain('DROP COLUMN `metadata_status`');
+    expect(mechanicalSplitSql).toContain('DROP COLUMN `metadata_projection`');
   });
 
   it('upgrades existing slice-three tables idempotently before deployment', () => {

@@ -143,150 +143,6 @@ describe('LlmConversationService provider stream completion', () => {
     );
   });
 
-  it('passes media scene context and persists structured result metadata', async () => {
-    let observedContext: unknown;
-    const adapter = {
-      stream: async function* (request: {
-        context?: unknown;
-      }): AsyncGenerator<LlmNormalizedStreamEvent> {
-        observedContext = request.context;
-        yield { model: 'gpt-test', type: 'start' };
-        yield {
-          metadata: {
-            mediaGovernanceResult: {
-              status: 'conversation-response',
-              summary: '分析完成',
-            },
-          },
-          model: 'gpt-test',
-          type: 'done',
-        };
-      },
-    };
-    const service = new LlmConversationService(
-      {} as never,
-      {} as never,
-      {} as never,
-      { resolve: jest.fn(() => adapter) } as never,
-    );
-    const finalizeTurn = jest.fn().mockResolvedValue(undefined);
-    Reflect.set(service, 'finalizeTurn', finalizeTurn);
-    const consume = Reflect.get(service, 'consumeProviderStream').bind(
-      service,
-    ) as ConsumeStream;
-
-    for await (const _event of consume(
-      preparedTurn(true),
-      streamBody(),
-      new AbortController().signal,
-    )) {
-      void _event;
-    }
-
-    expect(observedContext).toEqual({
-      conversationId: '2041700000000190001',
-      conversationTurnId: 'turn-1',
-      scene: 'media-governance',
-      sceneRefId: 'media-task-001',
-    });
-    expect(finalizeTurn).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          mediaGovernanceResult: expect.objectContaining({
-            status: 'conversation-response',
-          }),
-        }),
-      }),
-    );
-  });
-
-  it('resolves the canonical scene identity and rejects a wrong Task or provider thread', async () => {
-    const conversation = {
-      activeTurnId: null,
-      id: '2041700000000190001',
-      isDeleted: false,
-      providerThreadId: 'thread-media-codex-001',
-      scene: 'media-governance',
-      sceneRefId: 'media-task-001',
-    };
-    const service = new LlmConversationService(
-      { findOne: jest.fn(async () => conversation) } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
-
-    await expect(
-      service.resolveIdentity({
-        conversationId: conversation.id,
-        providerThreadId: conversation.providerThreadId,
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).resolves.toEqual({
-      activeTurnId: null,
-      conversationId: conversation.id,
-      providerThreadId: conversation.providerThreadId,
-      scene: 'media-governance',
-      sceneRefId: conversation.sceneRefId,
-    });
-    await expect(
-      service.resolveIdentity({
-        conversationId: conversation.id,
-        scene: 'media-governance',
-        sceneRefId: 'media-task-wrong',
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ msg: '大模型对话身份不匹配' }),
-      status: 409,
-    });
-    await expect(
-      service.resolveIdentity({
-        conversationId: conversation.id,
-        providerThreadId: 'thread-media-codex-wrong',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({
-        msg: '大模型 provider thread 身份不匹配',
-      }),
-      status: 409,
-    });
-  });
-
-  it('keeps a media scene title bound to the Task instead of the first user prompt', async () => {
-    const conversation = {
-      id: '2041700000000190001',
-      isDeleted: false,
-      scene: 'media-governance',
-      sceneRefId: 'media-task-001',
-      title: '首条临时提示',
-    };
-    const save = jest.fn(async () => conversation);
-    const service = new LlmConversationService(
-      {
-        findOne: jest.fn(async () => conversation),
-        save,
-      } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
-
-    await expect(
-      service.updateSceneTitle({
-        conversationId: conversation.id,
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-        title: '死神BLEACH · 媒体治理',
-      }),
-    ).resolves.toMatchObject({ title: '死神BLEACH · 媒体治理' });
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(conversation.title).toBe('死神BLEACH · 媒体治理');
-  });
-
   it('hydrates the persisted provider thread into the first stream request after API restart', async () => {
     let observedProviderThreadId: null | string = null;
     const adapter = {
@@ -296,12 +152,12 @@ describe('LlmConversationService provider stream completion', () => {
         observedProviderThreadId = request.providerThreadId || null;
         yield {
           model: 'gpt-test',
-          providerThreadId: 'thread-media-codex-001',
+          providerThreadId: 'thread-llm-codex-001',
           type: 'start',
         };
         yield {
           model: 'gpt-test',
-          providerThreadId: 'thread-media-codex-001',
+          providerThreadId: 'thread-llm-codex-001',
           type: 'done',
         };
       },
@@ -319,8 +175,8 @@ describe('LlmConversationService provider stream completion', () => {
     const consume = Reflect.get(service, 'consumeProviderStream').bind(
       service,
     ) as ConsumeStream;
-    const prepared = preparedTurn(true);
-    prepared.conversation.providerThreadId = 'thread-media-codex-001';
+    const prepared = preparedTurn();
+    prepared.conversation.providerThreadId = 'thread-llm-codex-001';
 
     for await (const _event of consume(
       prepared,
@@ -330,11 +186,11 @@ describe('LlmConversationService provider stream completion', () => {
       void _event;
     }
 
-    expect(observedProviderThreadId).toBe('thread-media-codex-001');
+    expect(observedProviderThreadId).toBe('thread-llm-codex-001');
     expect(persistProviderThread).toHaveBeenCalledWith(
-      '2041700000000190001',
+      'conversation-1',
       'turn-1',
-      'thread-media-codex-001',
+      'thread-llm-codex-001',
     );
   });
 
@@ -343,7 +199,7 @@ describe('LlmConversationService provider stream completion', () => {
       activeTurnId: 'turn-1',
       id: '2041700000000190001',
       isDeleted: false,
-      providerThreadId: 'thread-media-codex-001',
+      providerThreadId: 'thread-llm-codex-001',
     };
     const save = jest.fn();
     const repository = {
@@ -375,150 +231,22 @@ describe('LlmConversationService provider stream completion', () => {
       persist(
         conversation.id,
         conversation.activeTurnId,
-        'thread-media-codex-wrong',
+        'thread-llm-codex-wrong',
       ),
     ).rejects.toThrow('llm-provider-thread-identity-mismatch');
     expect(save).not.toHaveBeenCalled();
-  });
-
-  it('rotates a provider thread only through the explicit policy-upgrade CAS path', async () => {
-    const conversation = {
-      activeTurnId: 'turn-policy-upgrade',
-      id: '2041700000000190001',
-      isDeleted: false,
-      providerThreadId: 'thread-policy-v2',
-      scene: 'media-governance',
-      sceneRefId: 'media-task-001',
-    };
-    const save = jest.fn(async () => conversation);
-    const service = new LlmConversationService(
-      {
-        manager: {
-          transaction: async (work: (manager: unknown) => Promise<unknown>) =>
-            work({
-              getRepository: () => ({
-                findOne: jest.fn(async () => conversation),
-                save,
-              }),
-            }),
-        },
-      } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
-
-    await expect(
-      service.bindProviderThread({
-        allowReplace: true,
-        conversationId: conversation.id,
-        conversationTurnId: conversation.activeTurnId,
-        expectedProviderThreadId: 'thread-policy-v2',
-        providerThreadId: 'thread-policy-v3',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).resolves.toMatchObject({ providerThreadId: 'thread-policy-v3' });
-    expect(conversation.providerThreadId).toBe('thread-policy-v3');
-    expect(save).toHaveBeenCalledTimes(1);
-  });
-
-  it('CAS-binds the first provider thread before any SSE start consumer or result callback', async () => {
-    const conversation = {
-      activeTurnId: 'turn-1',
-      id: '2041700000000190001',
-      isDeleted: false,
-      providerThreadId: null,
-      scene: 'media-governance',
-      sceneRefId: 'media-task-001',
-    };
-    const repository = {
-      findOne: jest.fn(async () => conversation),
-      manager: {
-        transaction: async (work: (manager: unknown) => Promise<unknown>) =>
-          work({
-            getRepository: () => ({
-              findOne: jest.fn(async () => conversation),
-              save: jest.fn(async () => conversation),
-            }),
-          }),
-      },
-    };
-    const service = new LlmConversationService(
-      repository as never,
-      {} as never,
-      {} as never,
-      {} as never,
-    );
-
-    await expect(
-      service.bindProviderThread({
-        conversationId: conversation.id,
-        conversationTurnId: 'turn-stale-previous',
-        expectedProviderThreadId: null,
-        providerThreadId: 'thread-media-codex-stale',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).rejects.toMatchObject({
-      response: { msg: '大模型对话身份不匹配' },
-      status: 409,
-    });
-    await expect(
-      service.bindProviderThread({
-        conversationId: conversation.id,
-        conversationTurnId: 'turn-stale-previous',
-        expectedProviderThreadId: null,
-        providerThreadId: 'thread-media-codex-stale',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).rejects.toMatchObject({
-      response: expect.objectContaining({ msg: '大模型对话身份不匹配' }),
-      status: 409,
-    });
-    expect(conversation.providerThreadId).toBeNull();
-
-    await expect(
-      service.bindProviderThread({
-        conversationId: conversation.id,
-        conversationTurnId: conversation.activeTurnId,
-        expectedProviderThreadId: null,
-        providerThreadId: 'thread-media-codex-001',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).resolves.toMatchObject({
-      providerThreadId: 'thread-media-codex-001',
-    });
-    await expect(
-      service.resolveIdentity({
-        conversationId: conversation.id,
-        providerThreadId: 'thread-media-codex-001',
-        scene: 'media-governance',
-        sceneRefId: conversation.sceneRefId,
-      }),
-    ).resolves.toMatchObject({
-      providerThreadId: 'thread-media-codex-001',
-    });
   });
 });
 
 /**
  * 创建不依赖数据库的已准备回合夹具。
- * @param mediaScene - 是否投影媒体治理场景上下文。
  * @returns 可直接交给私有流消费边界的最小回合对象。
  */
-function preparedTurn(mediaScene = false) {
-  const conversation: Record<string, unknown> = {
+function preparedTurn() {
+  const conversation = {
     id: 'conversation-1',
-    providerThreadId: null,
+    providerThreadId: null as null | string,
   };
-  if (mediaScene) {
-    conversation.id = '2041700000000190001';
-    conversation.scene = 'media-governance';
-    conversation.sceneRefId = 'media-task-001';
-  }
   return {
     assistantMessage: { id: 'assistant-message-1' },
     conversation,

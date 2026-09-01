@@ -10,16 +10,12 @@ VALUES
   (2041700000000100604, 2041700000000100600, 'MediaGovernanceSeries', '/media/governance/series', '/media/governance/series/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:library-big","title":"系列资料库"}', 1, 0),
   (2041700000000100605, 2041700000000100600, 'MediaGovernanceSeriesDetail', '/media/governance/series/:seriesId', '/media/governance/series/detail', NULL, 'Media:Governance:List', 'menu', '{"activePath":"/media/governance/series","hideInMenu":true,"title":"媒体系列详情"}', 1, 0),
   (2041700000000100601, 2041700000000100600, 'MediaGovernanceTasks', '/media/governance/tasks', '/media/governance/tasks/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:clapperboard","title":"执行任务"}', 1, 1),
-  (2041700000000100602, 2041700000000100600, 'MediaGovernanceAgentQueue', '/media/governance/agent-queue', '/media/governance/agent-queue/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:bot","title":"Agent 治理队列"}', 1, 2),
-  (2041700000000100603, 2041700000000100600, 'MediaGovernanceAgentSession', '/media/governance/tasks/:taskId/agent', '/media/governance/agent-session/index', NULL, 'Media:Governance:AgentOperate', 'menu', '{"activePath":"/media/governance/tasks","hideInMenu":true,"hideInTab":true,"title":"CodexAgent 治理会话"}', 1, 3),
+  (2041700000000100602, 2041700000000100600, 'MediaScrapeValidation', '/media/scrape-validation', '/media/scrape-validation/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:scan-search","title":"NAS 刮削校验"}', 1, 2),
   (2041700000000120601, 2041700000000100601, 'MediaGovernanceTaskList', NULL, NULL, NULL, 'Media:Governance:List', 'button', '{"title":"common.list"}', 1, 0),
   (2041700000000120602, 2041700000000100604, 'MediaGovernanceSeriesCreate', NULL, NULL, NULL, 'Media:Governance:Create', 'button', '{"title":"common.create"}', 1, 1),
   (2041700000000120603, 2041700000000100604, 'MediaGovernanceSourceUpload', NULL, NULL, NULL, 'Media:Governance:SourceUpload', 'button', '{"title":"来源上传"}', 1, 2),
   (2041700000000120604, 2041700000000100604, 'MediaGovernanceDownload', NULL, NULL, NULL, 'Media:Governance:Download', 'button', '{"title":"来源下载"}', 1, 3),
   (2041700000000120605, 2041700000000100604, 'MediaGovernanceRun', NULL, NULL, NULL, 'Media:Governance:Run', 'button', '{"title":"开始治理"}', 1, 4),
-  (2041700000000120606, 2041700000000100604, 'MediaGovernanceAgentStart', NULL, NULL, NULL, 'Media:Governance:AgentStart', 'button', '{"title":"启动 Agent"}', 1, 5),
-  (2041700000000120607, 2041700000000100604, 'MediaGovernanceAgentOperate', NULL, NULL, NULL, 'Media:Governance:AgentOperate', 'button', '{"title":"Agent 操作"}', 1, 6),
-  (2041700000000120608, 2041700000000100604, 'MediaGovernanceOperatorDecision', NULL, NULL, NULL, 'Media:Governance:OperatorDecision', 'button', '{"title":"人工放行"}', 1, 7),
   (2041700000000120609, 2041700000000100604, 'MediaGovernanceEvidence', NULL, NULL, NULL, 'Media:Governance:Evidence', 'button', '{"title":"查看证据"}', 1, 8),
   (2041700000000120610, 2041700000000100604, 'MediaGovernanceSeriesDelete', NULL, NULL, NULL, 'Media:Governance:Delete', 'button', '{"title":"删除空系列"}', 1, 9)
 ON DUPLICATE KEY UPDATE
@@ -45,16 +41,12 @@ WHERE role.`role_code` <> 'super'
     'MediaGovernanceSeries',
     'MediaGovernanceSeriesDetail',
     'MediaGovernanceTasks',
-    'MediaGovernanceAgentQueue',
-    'MediaGovernanceAgentSession',
+    'MediaScrapeValidation',
     'MediaGovernanceTaskList',
     'MediaGovernanceSeriesCreate',
     'MediaGovernanceSourceUpload',
     'MediaGovernanceDownload',
     'MediaGovernanceRun',
-    'MediaGovernanceAgentStart',
-    'MediaGovernanceAgentOperate',
-    'MediaGovernanceOperatorDecision',
     'MediaGovernanceEvidence',
     'MediaGovernanceSeriesDelete'
   );
@@ -67,16 +59,12 @@ JOIN `admin_menu` menu ON menu.`name` IN (
   'MediaGovernanceSeries',
   'MediaGovernanceSeriesDetail',
   'MediaGovernanceTasks',
-  'MediaGovernanceAgentQueue',
-  'MediaGovernanceAgentSession',
+  'MediaScrapeValidation',
   'MediaGovernanceTaskList',
   'MediaGovernanceSeriesCreate',
   'MediaGovernanceSourceUpload',
   'MediaGovernanceDownload',
   'MediaGovernanceRun',
-  'MediaGovernanceAgentStart',
-  'MediaGovernanceAgentOperate',
-  'MediaGovernanceOperatorDecision',
   'MediaGovernanceEvidence',
   'MediaGovernanceSeriesDelete'
 )
@@ -84,3 +72,14 @@ WHERE role.`role_code` = 'super'
   AND role.`status` = 1
   AND role.`is_deleted` = 0
   AND menu.`is_deleted` = 0;
+
+UPDATE `admin_menu`
+SET `status` = 0,
+    `is_deleted` = 1
+WHERE `name` IN (
+  'MediaGovernanceAgentQueue',
+  'MediaGovernanceAgentSession',
+  'MediaGovernanceAgentStart',
+  'MediaGovernanceAgentOperate',
+  'MediaGovernanceOperatorDecision'
+);

@@ -13,11 +13,13 @@ const MIGRATION_FILES = [
   'media-governance-series-work-v1.sql',
   'media-governance-rss-context-v2.sql',
   'media-governance-series-delete-v1.sql',
+  'media-governance-mechanical-scrape-split.sql',
 ];
 const VERIFICATION_FILES = [
   'media-governance-series-work-v1-verify.sql',
   'media-governance-rss-context-v2-verify.sql',
   'media-governance-series-delete-v1-verify.sql',
+  'media-governance-mechanical-scrape-split-verify.sql',
 ];
 const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['work_table_count', 2],
@@ -38,6 +40,14 @@ const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['series_delete_permission_duplicate_count', 0],
   ['series_delete_missing_super_binding_count', 0],
   ['series_delete_non_super_binding_count', 0],
+  ['scrape_validation_table_count', 1],
+  ['scrape_validation_required_column_count', 19],
+  ['scrape_validation_task_unique_index_count', 1],
+  ['legacy_media_agent_table_count', 0],
+  ['legacy_media_task_column_count', 0],
+  ['legacy_media_unit_column_count', 0],
+  ['closed_task_without_scrape_validation_count', 0],
+  ['orphan_scrape_validation_count', 0],
 ]);
 
 export type MediaGovernanceSeriesWorkMigrationVerification = Record<
@@ -208,6 +218,8 @@ async function main(): Promise<void> {
       migrated: result.migrated,
       status: 'ready',
       rssContextColumnCount: result.verification.rss_context_column_count,
+      scrapeValidationTableCount:
+        result.verification.scrape_validation_table_count,
       seriesDeletePermissionIdentityCount:
         result.verification.series_delete_permission_identity_count,
       workTableCount: result.verification.work_table_count,

@@ -10,8 +10,6 @@ export const MEDIA_GOVERNANCE_EXECUTOR_ACTIONS = [
   'governance.preflight',
   'governance.plan',
   'governance.execute',
-  'metadata.verify',
-  'metadata.repair',
   'acceptance.verify',
   'canary.torrent',
   'canary.magnet',
@@ -53,7 +51,6 @@ export type MediaGovernanceExecutionEnvelopeInput = {
   action: MediaGovernanceExecutorAction;
   expiresAt: string;
   inputSnapshotSha256: string;
-  metadataRepairAttempt?: number;
   plan?: MediaGovernanceExecutionPlanContract;
   replayKey: string;
   runId: string;
@@ -218,12 +215,9 @@ function validatePlan(
   action: MediaGovernanceExecutorAction,
   plan: MediaGovernanceExecutionPlanContract | undefined,
 ) {
-  const requiresPlan = [
-    'governance.execute',
-    'metadata.verify',
-    'metadata.repair',
-    'acceptance.verify',
-  ].includes(action);
+  const requiresPlan = ['governance.execute', 'acceptance.verify'].includes(
+    action,
+  );
   if (requiresPlan && !plan) throw new Error('sealed-plan-required');
   if (!plan) return undefined;
   assertId(plan.planGrantId, 'plan-grant-id');
@@ -247,7 +241,6 @@ function validatePlan(
  *   当 `!Number.isInteger(input.taskRevision) || input.taskRevision < 1` 成立时拒绝当前输入并抛出 `Error`；
  *   当 `!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input.expiresAt)…` 成立时拒绝当前输入并抛出 `Error`；
  *   当 `input.unitIds.length === 0 || input.unitIds.length > 100 || input.unitI…` 成立时拒绝当前输入并抛出 `Error`；
- *   当 `!Number.isInteger(input.metadataRepairAttempt) || input.metadataRepairA…` 成立时拒绝当前输入并抛出 `Error`；当 `input.metadataRepairAttempt !== undefined` 成立时拒绝当前输入并抛出 `Error`。
  */
 export function buildMediaGovernanceExecutionEnvelope(
   input: MediaGovernanceExecutionEnvelopeInput,
@@ -280,17 +273,6 @@ export function buildMediaGovernanceExecutionEnvelope(
   }
   const sources = validateSources(input.action, input.sources);
   const plan = validatePlan(input.action, input.plan);
-  if (input.action === 'metadata.repair') {
-    if (
-      !Number.isInteger(input.metadataRepairAttempt) ||
-      input.metadataRepairAttempt! < 1 ||
-      input.metadataRepairAttempt! > 2
-    ) {
-      throw new Error('metadata-repair-attempt-invalid');
-    }
-  } else if (input.metadataRepairAttempt !== undefined) {
-    throw new Error('metadata-repair-attempt-invalid');
-  }
   const sealed: MediaGovernanceExecutionEnvelopeInput & {
     flowId: typeof MEDIA_GOVERNANCE_EXECUTOR_FLOW_ID;
     schemaVersion: typeof MEDIA_GOVERNANCE_EXECUTION_ENVELOPE_SCHEMA;
@@ -306,9 +288,6 @@ export function buildMediaGovernanceExecutionEnvelope(
     taskRevision: input.taskRevision,
     unitIds: [...input.unitIds],
   };
-  if (input.metadataRepairAttempt !== undefined) {
-    sealed.metadataRepairAttempt = input.metadataRepairAttempt;
-  }
   if (plan) sealed.plan = plan;
   if (sources) sealed.sources = sources;
   return {

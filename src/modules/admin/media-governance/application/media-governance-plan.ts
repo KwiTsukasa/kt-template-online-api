@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { sha256Json } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import { sha256MediaGovernanceJson as sha256Json } from '@/modules/admin/media-governance/contract/media-governance-hash';
 import {
   MEDIA_GOVERNANCE_CANONICAL_REPLACEMENT_SCHEMA,
   readMediaGovernanceCanonicalReplacement,
@@ -184,11 +184,13 @@ export function buildMovieCanonicalReplacementPlan(
   const replacedStateInvalid =
     replaced.stage !== 'closed' ||
     replaced.runState !== 'succeeded' ||
-    replaced.metadataStatus !== 'verified' ||
     replaced.activeRunId !== null ||
     replaced.closedAt === null ||
     replaced.closedMode === null ||
-    !replaced.workItemId;
+    !replaced.workItemId ||
+    replaced.units.some(
+      (unit) => unit.localAcceptedAt === null || unit.evidenceSha256 === null,
+    );
   const planInvalid =
     !candidatePlan ||
     !candidate.sealedPlanSha256 ||

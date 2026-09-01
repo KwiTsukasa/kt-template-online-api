@@ -481,7 +481,7 @@ export class MediaGovernanceCatalogService
 
   onApplicationBootstrap() {
     for (const task of this.readHistoricalTasks()) {
-      if (task.metadataStatus !== 'verified') continue;
+      if (task.stage !== 'closed' || task.runState !== 'succeeded') continue;
       this.queueCatalogSynchronization(task.id);
     }
   }
@@ -1334,7 +1334,8 @@ export class MediaGovernanceCatalogService
       const metadataIdentity = task.metadataIdentity;
       if (
         task.mediaType !== 'tv' ||
-        task.metadataStatus !== 'verified' ||
+        task.stage !== 'closed' ||
+        task.runState !== 'succeeded' ||
         !metadataIdentity ||
         !acceptedTaskIdentities.has(
           historicalIdentityKey(
@@ -2147,13 +2148,15 @@ export class MediaGovernanceCatalogService
   }
 
   /**
-   * 只对完整任务事件中的已验证 TV 身份排队目录同步，进度补丁和草稿状态保持零目录写入。
+   * 只对完整任务事件中的机械关闭 Task 排队目录同步，进度补丁和草稿状态保持零目录写入。
    *
    * @param event - 已在任务状态仓提交并广播的任务变更事件。
    */
   private handleTaskChanged(event: MediaGovernanceTaskChangedData) {
     if (event.patchMode !== 'full') return;
-    if (!event.task || event.task.metadataStatus !== 'verified') return;
+    if (!event.task) return;
+    if (event.task.stage !== 'closed') return;
+    if (event.task.runState !== 'succeeded') return;
     this.queueCatalogSynchronization(event.taskId);
   }
 
@@ -2211,11 +2214,15 @@ export class MediaGovernanceCatalogService
         taskId,
       };
     }
-    if (task.metadataStatus !== 'verified' || !task.metadataIdentity) {
+    if (
+      task.stage !== 'closed' ||
+      task.runState !== 'succeeded' ||
+      !task.metadataIdentity
+    ) {
       return {
         changed: false,
-        reasonCode: 'metadata-identity-unverified',
-        reasonLabel: '任务资料身份尚未完成核实',
+        reasonCode: 'mechanical-governance-incomplete',
+        reasonLabel: '任务尚未完成机械治理或缺少固化身份',
         seriesId: null,
         status: 'pending',
         taskId,
@@ -2651,15 +2658,6 @@ export class MediaGovernanceCatalogService
         0,
         'metadata-identity-missing',
         '任务缺少已核实的资料身份',
-      );
-    }
-    if (task.metadataStatus !== 'verified') {
-      return this.pendingHistoricalTask(
-        task,
-        identity,
-        0,
-        'metadata-identity-unverified',
-        '任务资料身份尚未完成核实',
       );
     }
     const identityTargets =

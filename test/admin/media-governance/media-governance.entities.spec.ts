@@ -1,11 +1,8 @@
 import { getMetadataArgsStorage } from 'typeorm';
 import {
   MEDIA_GOVERNANCE_ENTITIES,
-  MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceEventEntity,
-  MediaGovernanceMetadataExceptionEntity,
-  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceSourceEntity,
@@ -24,15 +21,6 @@ describe('media governance entity schema', () => {
     ],
     [MediaGovernanceRunEntity, 'media_governance_run'],
     [MediaGovernanceEventEntity, 'media_governance_event'],
-    [MediaGovernanceAgentSessionEntity, 'media_governance_agent_session'],
-    [
-      MediaGovernanceMetadataExceptionEntity,
-      'media_governance_metadata_exception',
-    ],
-    [
-      MediaGovernanceOperatorDecisionEntity,
-      'media_governance_operator_decision',
-    ],
     [MediaGovernanceOutboxEntity, 'media_governance_outbox'],
   ] as const;
 
@@ -59,28 +47,6 @@ describe('media governance entity schema', () => {
     expect(primaryColumns[0]?.options.type).toBe('varchar');
   });
 
-  it('persists the recovery waterline and enforces one Agent session per Task', () => {
-    const columns = getMetadataArgsStorage().columns.filter(
-      (column) => column.target === MediaGovernanceAgentSessionEntity,
-    );
-    expect(columns.map((column) => column.propertyName)).toEqual(
-      expect.arrayContaining([
-        'lastSequence',
-        'pendingPlanSha256',
-        'policyVersion',
-        'currentActionLabel',
-      ]),
-    );
-    expect(
-      getMetadataArgsStorage().indices.find(
-        (index) =>
-          index.target === MediaGovernanceAgentSessionEntity &&
-          Array.isArray(index.columns) &&
-          index.columns.includes('taskId'),
-      )?.unique,
-    ).toBe(true);
-  });
-
   it('deduplicates semantic callbacks by Task, run and sequence', () => {
     expect(
       getMetadataArgsStorage().indices.find(
@@ -102,23 +68,5 @@ describe('media governance entity schema', () => {
           column.propertyName === 'selectedFileMappings',
       )?.options,
     ).toMatchObject({ name: 'selected_file_mappings', nullable: true });
-  });
-
-  it('binds a media Task to at most one LLM conversation id', () => {
-    expect(
-      getMetadataArgsStorage().columns.find(
-        (column) =>
-          column.target === MediaGovernanceTaskEntity &&
-          column.propertyName === 'llmConversationId',
-      )?.options,
-    ).toMatchObject({ name: 'llm_conversation_id', nullable: true });
-    expect(
-      getMetadataArgsStorage().indices.find(
-        (index) =>
-          index.target === MediaGovernanceTaskEntity &&
-          Array.isArray(index.columns) &&
-          index.columns.includes('llmConversationId'),
-      )?.unique,
-    ).toBe(true);
   });
 });

@@ -25,8 +25,6 @@ import { vbenPage, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import {
   MediaGovernanceMagnetSourceCreateDto,
-  MediaGovernanceAgentSessionQueryDto,
-  MediaGovernanceOperatorDecisionDto,
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
   MediaGovernanceSourceSelectionDto,
@@ -424,46 +422,6 @@ export class MediaGovernanceController {
   }
 
   /**
-   * 禁止响应缓存后提交分档元数据核验运行，并封装服务返回的运行状态。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于元数据验证状态的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 元数据验证状态。
-   */
-  @Post(':taskId/metadata/verify')
-  @MediaGovernancePermission('Media:Governance:Run')
-  @ApiOperation({ summary: '运行 A/B/C 分档元数据核验' })
-  async startMetadataVerification(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceRevisionCommandDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(
-      await this.service.startMetadataVerification(taskId, body),
-    );
-  }
-
-  /**
-   * 禁止响应缓存后提交次数受限的确定性元数据修复，并封装运行状态。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于元数据Repair的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 元数据Repair。
-   */
-  @Post(':taskId/metadata/repair')
-  @MediaGovernancePermission('Media:Governance:Run')
-  @ApiOperation({ summary: '运行最多两次的确定性有界元数据修复' })
-  async startMetadataRepair(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceRevisionCommandDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.startMetadataRepair(taskId, body));
-  }
-
-  /**
    * 禁止响应缓存后提交独立本地验收与残留检查，并封装运行状态。
    * @param taskId - 用于精确定位任务的标识。
    * @param body - 用于验收验证状态的结构化输入。
@@ -482,62 +440,6 @@ export class MediaGovernanceController {
     return vbenSuccess(
       await this.service.startAcceptanceVerification(taskId, body),
     );
-  }
-
-  /**
-   * 为当前未完成媒体任务创建唯一的本地 Codex LLM 对话。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于从当前未完成阶段启动受策略限制的 Codex Agent的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 由标准 LLM conversation 派生的初始治理投影。
-   */
-  @Post(':taskId/agent/start')
-  @MediaGovernancePermission('Media:Governance:AgentStart')
-  @ApiOperation({ summary: '创建并绑定唯一的本地 Codex LLM 对话' })
-  async startAgent(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceRevisionCommandDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.startAgent(taskId, body));
-  }
-
-  /**
-   * 从任务绑定的标准 LLM 对话派生只读治理投影。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param query - 限定通过拉取指定任务的 Agent 会话及对话增量筛选、排序与分页范围的查询条件。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 包含可见消息和候选结果的兼容治理投影。
-   */
-  @Get(':taskId/agent/session')
-  @ApiOperation({ summary: '查询绑定 LLM 对话的只读治理投影' })
-  async agentSession(
-    @Param('taskId') taskId: string,
-    @Query() query: MediaGovernanceAgentSessionQueryDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.agentSession(taskId, query));
-  }
-
-  /**
-   * 根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策。
-   */
-  @Post(':taskId/agent/operator-decision')
-  @MediaGovernancePermission('Media:Governance:OperatorDecision')
-  @ApiOperation({ summary: '提交 Agent 候选人工放行' })
-  async operatorDecision(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceOperatorDecisionDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.operatorDecision(taskId, body));
   }
 
   /**
@@ -581,7 +483,7 @@ export class MediaGovernanceEventsController {
    * @param response - 当前 SSE 响应，用于写入禁止缓存与代理缓冲头。
    * @param lastEventIdHeader - 浏览器重连时通过 `Last-Event-ID` 发送的续传游标。
    * @param lastEventIdQuery - 无法设置请求头时通过查询参数发送的续传游标。
-   * @returns 合并历史重放、实时任务或 Agent 增量与定时心跳的事件流。
+   * @returns 合并历史重放、实时任务增量与定时心跳的事件流。
    */
   @Sse('stream')
   @ApiOperation({ summary: '订阅媒体治理任务与系列目录语义事件' })

@@ -58,9 +58,6 @@ export class MediaGovernanceTaskEntity {
   })
   governanceProfile: null | string;
 
-  @Column({ length: 32, name: 'metadata_status', type: 'varchar' })
-  metadataStatus: string;
-
   @Column({ length: 160, name: 'next_command_label', type: 'varchar' })
   nextCommandLabel: string;
 
@@ -98,10 +95,6 @@ export class MediaGovernanceTaskEntity {
   @Column({ name: 'metadata_identity', nullable: true, type: 'simple-json' })
   metadataIdentity: null | Record<string, unknown>;
 
-  @Index({ unique: true })
-  @Column({ name: 'llm_conversation_id', nullable: true, type: 'bigint' })
-  llmConversationId: null | string;
-
   @Column({ length: 32, name: 'closed_mode', nullable: true, type: 'varchar' })
   closedMode: null | string;
 
@@ -135,9 +128,6 @@ export class MediaGovernanceUnitEntity {
 
   @Column({ name: 'subtitle_contract', nullable: true, type: 'simple-json' })
   subtitleContract: null | Record<string, unknown>;
-
-  @Column({ name: 'metadata_projection', nullable: true, type: 'simple-json' })
-  metadataProjection: null | Record<string, unknown>;
 
   @Column({ name: 'local_accepted_at', nullable: true, type: 'datetime' })
   localAcceptedAt: Date | null;
@@ -399,158 +389,6 @@ export class MediaGovernanceEventEntity {
   createTime: KtDateTime;
 }
 
-@Entity('media_governance_agent_session')
-export class MediaGovernanceAgentSessionEntity {
-  @PrimaryColumn({ length: 96, type: 'varchar' })
-  id: string;
-
-  @Index({ unique: true })
-  @Column({ length: 96, name: 'task_id', type: 'varchar' })
-  taskId: string;
-
-  @Column({ length: 96, name: 'thread_id', type: 'varchar' })
-  threadId: string;
-
-  @Column({
-    length: 96,
-    name: 'current_unit_id',
-    nullable: true,
-    type: 'varchar',
-  })
-  currentUnitId: null | string;
-
-  @Column({ length: 64, name: 'policy_sha256', type: 'varchar' })
-  policySha256: string;
-
-  @Column({ length: 64, name: 'capsule_sha256', type: 'varchar' })
-  capsuleSha256: string;
-
-  @Column({ length: 64, name: 'checkpoint_sha256', type: 'varchar' })
-  checkpointSha256: string;
-
-  @Column({ length: 48, name: 'policy_version', type: 'varchar' })
-  policyVersion: string;
-
-  @Column({ default: 0, name: 'last_sequence', type: 'int' })
-  lastSequence: number;
-
-  @Column({
-    length: 64,
-    name: 'pending_plan_sha256',
-    nullable: true,
-    type: 'varchar',
-  })
-  pendingPlanSha256: null | string;
-
-  @Column({ length: 400, name: 'current_action_label', type: 'varchar' })
-  currentActionLabel: string;
-
-  @Column({ length: 160, name: 'status_label', type: 'varchar' })
-  statusLabel: string;
-
-  @Column({ length: 240, name: 'policy_boundary_label', type: 'varchar' })
-  policyBoundaryLabel: string;
-
-  @Column({ length: 32, type: 'varchar' })
-  status: string;
-
-  @Column({ name: 'last_heartbeat_at', type: 'datetime' })
-  lastHeartbeatAt: Date;
-
-  @KtCreateDateColumn({ name: 'create_time' })
-  createTime: KtDateTime;
-
-  @KtUpdateDateColumn({ name: 'update_time' })
-  updateTime: KtDateTime;
-}
-
-@Entity('media_governance_metadata_exception')
-export class MediaGovernanceMetadataExceptionEntity {
-  @PrimaryColumn({ length: 96, type: 'varchar' })
-  id: string;
-
-  @Index()
-  @Column({ length: 96, name: 'unit_id', type: 'varchar' })
-  unitId: string;
-
-  @Column({ length: 160, name: 'field_path', type: 'varchar' })
-  fieldPath: string;
-
-  @Column({ length: 8, type: 'varchar' })
-  tier: string;
-
-  @Column({ length: 64, name: 'reason_code', type: 'varchar' })
-  reasonCode: string;
-
-  @Column({ name: 'sources_checked', type: 'simple-json' })
-  sourcesChecked: string[];
-
-  @Column({ default: 0, type: 'int' })
-  attempts: number;
-
-  @Column({ name: 'selected_fallback', nullable: true, type: 'simple-json' })
-  selectedFallback: null | Record<string, unknown>;
-
-  @Column({
-    length: 96,
-    name: 'agent_thread_id',
-    nullable: true,
-    type: 'varchar',
-  })
-  agentThreadId: null | string;
-
-  @Column({ length: 48, name: 'policy_version', type: 'varchar' })
-  policyVersion: string;
-
-  @Column({ name: 'task_revision', type: 'int' })
-  taskRevision: number;
-
-  @Column({ length: 64, name: 'evidence_sha256', type: 'varchar' })
-  evidenceSha256: string;
-
-  @KtCreateDateColumn({ name: 'create_time' })
-  createTime: KtDateTime;
-}
-
-@Entity('media_governance_operator_decision')
-export class MediaGovernanceOperatorDecisionEntity {
-  @PrimaryColumn({ length: 96, type: 'varchar' })
-  id: string;
-
-  @Index()
-  @Column({ length: 96, name: 'task_id', type: 'varchar' })
-  taskId: string;
-
-  @Column({ length: 96, name: 'unit_id', nullable: true, type: 'varchar' })
-  unitId: null | string;
-
-  @Column({ length: 64, name: 'candidate_snapshot_sha256', type: 'varchar' })
-  candidateSnapshotSha256: string;
-
-  @Column({ length: 160, name: 'selected_candidate_id', type: 'varchar' })
-  selectedCandidateId: string;
-
-  @Column({ length: 400, type: 'varchar' })
-  reason: string;
-
-  @Column({ name: 'previous_revision', type: 'int' })
-  previousRevision: number;
-
-  @Column({ name: 'next_revision', type: 'int' })
-  nextRevision: number;
-
-  @Column({
-    length: 96,
-    name: 'verification_run_id',
-    nullable: true,
-    type: 'varchar',
-  })
-  verificationRunId: null | string;
-
-  @KtCreateDateColumn({ name: 'create_time' })
-  createTime: KtDateTime;
-}
-
 @Entity('media_governance_outbox')
 export class MediaGovernanceOutboxEntity {
   @PrimaryColumn({ length: 96, type: 'varchar' })
@@ -596,8 +434,5 @@ export const MEDIA_GOVERNANCE_ENTITIES = [
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceEventEntity,
-  MediaGovernanceAgentSessionEntity,
-  MediaGovernanceMetadataExceptionEntity,
-  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
 ];

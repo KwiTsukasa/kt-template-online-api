@@ -16,7 +16,6 @@ export interface MediaGovernanceTaskChangedData {
   runId: null | string;
   runSequence: null | number;
   summary: {
-    agentPending: number;
     attentionRequired: number;
     blocked: number;
     closed: number;
@@ -24,7 +23,7 @@ export interface MediaGovernanceTaskChangedData {
     evidenceDriftCount: number;
     governing: number;
     healthLabel: string;
-    metadataAutoClosureRate: number;
+    mechanicalClosureRate: number;
     mixedSubtitleSeasonCount: number;
     stagingResidualCount: null | number;
     stuckRunCount: number;

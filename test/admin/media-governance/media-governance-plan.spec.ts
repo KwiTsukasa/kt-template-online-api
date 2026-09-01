@@ -1,4 +1,4 @@
-import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import { sha256MediaGovernanceJson as sha256Json } from '../../../src/modules/admin/media-governance/contract/media-governance-hash';
 import {
   buildAdminMediaGovernancePlan,
   buildCatalogIdentityRestorationPlan,
@@ -310,7 +310,6 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
       closedMode: 'bounded_repair',
       id: 'media-task-homecoming-current',
       mediaType: 'movie',
-      metadataStatus: 'verified',
       providerRef: { provider: 'bangumi', providerId: '178607' },
       releaseYear: 2017,
       revision: 24,
@@ -319,6 +318,12 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
       sealedPlanSha256: sha256Json(currentPlan),
       seriesId: 'media-series-homecoming',
       stage: 'closed',
+      units: [
+        {
+          evidenceSha256: 'e'.repeat(64),
+          localAcceptedAt: '2026-08-29T01:00:00.000Z',
+        },
+      ],
       workId: 'media-work-homecoming',
       workItemId: 'media-082',
     } as unknown as MediaGovernanceTask;

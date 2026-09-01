@@ -31,7 +31,7 @@
 
 ```text
 src/
-  apps/        独立进程入口（CodexAgent Gateway、NapCat WebUI Gateway）
+  apps/        独立进程入口（LLM Codex Gateway、NapCat WebUI Gateway）
   commands/    有界命令行入口
   common/      跨业务装饰器、过滤器、拦截器、日志、安全和基础服务
   modules/     admin、asset、blog、bot、bot-adapter、plugin-platform、plugins 等业务边界
@@ -69,7 +69,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | Plugin Platform       | `PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                                                                                                                                                                        |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_CODEX_APP_SERVER_URL`、`ENV_DASHBOARD_HOME_ASSISTANT_*`、`ENV_DASHBOARD_SUNSHINE_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                           |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
-| Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；Codex 端点、模型与内部认证统一复用下方 LLM 配置                                                                                                                                                                                                                                                |
+| Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；治理 Task 不绑定 Codex，NAS 刮削由独立模块记录                                                                                                                                                                                                                                                 |
 | LLM                   | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                |
 | Codex Remote          | `CODEX_REMOTE_NAS_WS_URL`、`CODEX_REMOTE_NAS_WS_SHARED_SECRET`、`CODEX_REMOTE_NAS_PROJECTS_JSON`、`CODEX_REMOTE_PC_WS_URL`、`CODEX_REMOTE_PC_WS_SHARED_SECRET`、`CODEX_REMOTE_PC_PROJECTS_JSON`                                                                                                                                                                                                                                                                 |
 | BangDream             | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                |
@@ -258,131 +258,45 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 
 该公开入口不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
 
-Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
-逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
-人工放行、聚合和可续接 SSE。
-作品目录与执行任务采用 Series-first 层级：`Series → Work → Season/Episode → Task`。
-Series 必须先从 Bangumi/TMDB 官方候选中确认主身份，创建事务会同时建立唯一主 Work。身份搜索与创建前核验使用同一作品类型合同：TV 对应 Bangumi `type=2/platform=TV` 与 TMDB TV，电影对应 Bangumi `type=6/platform=电影` 与 TMDB Movie，剧场版对应 Bangumi `type=2/platform=剧场版` 与 TMDB Movie；Bangumi 请求同时使用正向 `meta_tags`，响应仍按官方 `platform` 本地复核，不能让动画 TV、动画剧场版和三次元电影互相混入候选。
-后续 TV、电影和剧场版都作为同一 Series 下的独立 Work 管理。Work 身份使用
-`provider + namespace + providerId` 唯一键区分 TMDB TV/Movie；只有 TV Work 可以创建
-Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStart + episodeCount`
-保留非 1 起始的连续集号。
-Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
-逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 从 Work/Season 派生；RSS Task 的
-标题、资料编号和年份固定使用订阅时再次核验并持久化的所选身份，不回退成 Work 主身份。
-电影与剧场版 Work 同时只允许一个未闭环 Task；已有闭环规范版本时，新建 Task 表示一次显式
-升级候选。治理开始会把同 Work 唯一闭环 Task 的计划摘要、revision、work item 和当前规范视频
-证据密封为 `canonicalReplacement`，不会按文件大小或标题自行判断画质。执行器先为候选和旧规范
-视频分别创建同设备 hardlink，并在 trim.media 停服窗口原子替换；任一后续操作失败时先把候选
-退回 staging，再恢复旧规范目标。只有候选通过独立验收，旧 Task 才与验收终态在同一数据库事务
-删除，因此进程中断或验收失败不会留下空规范路径，也不会提前丢失可回滚版本。
-误建目录只能通过 revision-bound Series 删除入口清理：独立 `Media:Governance:Delete` 权限只对空壳卡片可见，API 在事务锁内确认 Season、Episode、Task、绑定和 RSS 全部为零后，才级联删除 Work/Series 资料引用及空 Work；任一事实存在时返回 `409`，不提供绕过保护的强制删除。
-Work 为 TMDB 时同时把其已核验 canonical 身份密封为 Task 的二级 `metadataIdentity`；其他
-Work 保持空二级身份，后续只允许从飞牛对规范路径唯一映射出的官方身份自动发现，不能拿
-RSS/Bangumi catalog 身份冒充二级元数据身份。
-TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频映射完全一致后，
-只会绑定目标 Work 已存在的 Season/Episode；缺季、缺集、跨 Work 或 Episode 已被其他 Task
-占用时保持零目录写入。该同步不修改 Task revision、Run、来源或密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
-因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
-RSS 订阅按 Series/Work/Season 持久化所选资料身份、地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
-GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链或 torrent 字节只进入私有描述符存储，不写入 RSS 表。
-内置集号解析同时接受 ` - 41`、`E41` 与 `S01E41`，其中紧凑季集格式仍取绝对 Episode `41`，
-不会把年份、分辨率或前缀季号误当成目标集号。
-RSS 自动接收会先完成同批全部来源清单检查；只有每个主来源都含视频、没有 sidecar 字幕，且
-视频文件名都明确带 `SC_TC`、`CHS_CHT`、`简繁内封` 等内封标记时，才把误选的“同包外挂”
-原子纠偏为“内嵌字幕”后继续映射。失败的字幕合同校验不会留下部分文件选择。
-创建订阅前先从 Bangumi/TMDB 选择作品身份，再由服务端并行聚合九个固定社区来源并按发布组去重。
-Mikan 精确番组页发现的每个字幕组 RSS 都会被分批读取，卡片中的命中数、最近时间和样例来自
-该子组 Feed 的真实条目；单源失败独立展示，不生成意义不明的“未识别发布组”。
-旧来源若对完整长标题返回 500，发现链路只追加一次标题尾部短别名请求，并继续用完整身份别名
-过滤条目；因此来源可用性不会被站点查询词缺陷误判，也不会把宽泛搜索结果混入作品。
-订阅创建会再次核验所选 Bangumi/TMDB 身份，并把用户在当前 Season 明确选中的身份原子登记为
-Work/Series `catalog-evidence`；若该身份已属于另一 Work 则返回冲突。所选 provider、编号、标题和
-年份随订阅持久化，轮询创建 Task 时原样使用。普通错误订阅可在旧 Task 清理后按 revision 迁移并
-重置历史 item；误建 Work 已产生未密封 RSS Task 时，专用 context-repair 只在活动 Run 归零且
-subscription/Task revision 精确匹配时迁移同一 Task、来源、Episode Binding 和 item 历史，再删除
-已空的源 Work。轮询会重试尚无 Task/Source 的历史 ignored/failed 条目，固定白名单 HTTPS
-torrent enclosure 重算 BTIH 后仍原样保存私有 torrent 描述符，再按最多 16 集创建 Task 和 Episode Binding；
-历史上已入队但被降格为裸磁链的来源会在同 Feed 重轮询时按 Task/Source/BTIH 原地批量升级，来源 ID 与
-Episode Binding 不变。RSS Task 随后自动
-串行完成清单检查、保守文件映射和探针，全部来源通过后自动进入隔离下载，失败则停在明确人工
-复核态。成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
-多来源下载 Run 会在执行开始时一次性兑换并复核全部描述符授权，再按来源顺序处理载荷；因此长下载
-不会让后续来源授权在等待期间过期，也不需要延长或复用一次性授权。无效或已消费授权由 API 返回
-409 合同拒绝，数据库故障才返回 503，不再把授权问题伪装成可重试 500。
-下载首次 Run 或续传 Run 一旦取得任一已验证载荷，就不再因临时 peer/速率空窗触发
-`download_stalled`；只有已验证字节、`downloaded_session` 增量和 `dlspeed` 始终全为零的
-首次窗口才有界失败。旧版本首次下载已有部分载荷后失败时，API 只自动转换一次新的
-`source.resume`，复用原 staging/profile/fastresume；零载荷和续传再次失败继续停止。
-历史 torrent 升级若已把 Source 切到新 objectId/SHA、但 revision 数字仍停在旧值，状态仓会
-只按同 Source 的 objectId+SHA 精确选择已存在修订并恢复真实 revision，避免续传保存时与唯一
-对象索引冲突；无法精确命中时仍按声明 revision 失败关闭。
-磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
-来源身份，允许重新填写来源、已有清单时重编文件映射，或在无载荷/计划/
-来源清理 Run 时删除任务。执行任务列表只提供状态、进度和执行操作，不再提供作品新建或身份编辑；删除只
-接受当前 revision，且允许尚未进入执行阶段的 intake `draft/blocked` Task 连同来源配置
-和绑定的本地账本一起删除。API 在同一数据库
-事务中清理 Task、Unit、Source、Run、Event、Outbox、Agent 与关联决策/例外记录，并返回
-`clearedWorkItemId`；已有活动 Run、载荷/计划密封、元数据成果或验收证据的任务仍返回冲突。
-迁移前遗留 Task 只有在操作者为 Series 新增完全相同官方身份的 Work 后才会补充绑定；
-电影与剧场版不会按标题相似度自动合并，Series/Work 上下文缺失或歧义固定保持待确认。
-治理执行若只完成 dry-run，或以 `governance-local-move-state-invalid` / `Target already exists`
-明确证明尚未进入事务，即使失败回调已把进度重置为 0，也允许按当前 revision 精确移除错误来源。
-执行器先清除该来源独占 staging/profile；终态回调再清空载荷、计划和已分配 `workItemId`，把同一
-Task 退回 intake，使空来源 Task 可继续走正式删除合同。其他治理失败、已有 Unit 验收或元数据成果
-仍失败关闭，不能用进度归零冒充事务未开始。
-元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据。普通治理成功后由服务端自动串联
-首次核验、一次延后身份复核、最多两次确定性 LocalNFO/海报/逐集元数据修复、修复后复核和
-独立验收；每个后继 Run 都在前一终态事务提交并递增 revision 后才预约。未知 A/C、身份冲突、
-证据漂移或次数耗尽才停到 CodexAgent/人工决策，最终闭环模式只由独立验收判定。
-Task、Unit、来源、Run、Series/Work 目录和 RSS 由 19 张 TypeORM 领域表持久化；其中旧 Agent session
-表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
-恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。
-生产发布由同一 API digest 的 `media-governance-series-work-migration` initContainer 在
-数据库 advisory lock 内依次执行 `media-governance-series-work-v1.sql` 与
-`media-governance-rss-context-v2.sql`，随后用独立只读 SQL 核对表结构、唯一索引、
-Series/Work/Season 所有权、RSS 所选身份、旧资料引用和 Task 上下文；任一计数
-漂移都会阻止 API 启动。结构迁移不按标题写入电影归属；操作者确认的历史电影或剧场版
-通过认证的 Work 创建接口加入既有 Series，API 只绑定资料身份完全一致的遗留 Task，且
-不创建伪 Season/Episode。
-执行器高频进度先校验 Run、manifest 与连续序号，再原子追加到 Redis 热层并立即发布
-携带紧凑 Task patch 的 `task-changed`；普通 tick 不等待 MySQL。MySQL 最多每 10 秒、
-出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
-tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE 游标超出 API 有界内存
-回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。目录事务提交后在同一 SSE 发布
-携完整 SeriesCard 的 `catalog-changed`；删除后发布 `series=null` 的删除墓碑。当前页卡片原位替换或移除，新 Series、筛选边界或游标失效静默重载系列分页。
-Redis Stream 当前承担
-执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。媒体 SSE 响应同时返回
-`Cache-Control: no-store` 和 `X-Accel-Buffering: no`，防止反向代理积攒进度事件。
-运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
-自动识别迁移前 17 张或 Series-first 19 张媒体治理表，并且只允许恢复到新建的
-`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库表行数及
-Task/Run/Event/Series/Work/Season/Episode/Binding/RSS 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
-创建的隔离库；快照比较复用同一 `sha256sum`，不额外依赖 `cmp`。源库变化、目标已
-存在、摘要漂移或能力缺失都会失败关闭。
-任务汇总接口从真实 Task/Unit/Run 投影阻塞任务、10 分钟无心跳的失联运行、已关闭但
-缺少 Unit 验收证据的漂移以及同季混合字幕发布组，并去重生成中文“需要关注”结论；
-执行器回调时间写入持久化进度投影，列表和详情按当前时间显示“刚刚/几分钟前/几小时前”。
-成功终态会统一收口为 `100% / 已完成`；服务重启恢复历史任务时，也会纠正早期已成功但
-仍停留在 `0% / 执行中` 的陈旧进度投影，不需要直接修改数据库。
-NAS 暂存残留没有持续观测证据时返回 `null`，Admin 不再把未知状态显示成固定 `0`；
-正式独立验收仍必须提供实际 `stagingResiduals=0` 才能关闭 Task。
-内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入统一
-本地 Codex gateway：Admin 大模型配置中的启用 Codex 连接是端点和内部认证的唯一来源；
-可用模型不进入新增或编辑合同，而是在连接创建后由 LLM 模块经
-`GET /llm/configs/:id/models` 实时发现。普通对话与媒体治理共用 `/internal/llm-codex`、
-`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 和启用网络及 live
-Web Search 的 `llm-codex` 权限档。媒体治理调用 `agent/start` 时只创建一条
-`scene=media-governance` 的标准 LLM conversation，Task 只持久化唯一
-`llmConversationId`；消息、模型切换、流式状态、实际模型和 Codex `providerThreadId`
-全部归 LLM 模块管理。媒体入口直接进入标准 LLM 对话页，续聊只走
-`POST /llm/conversations/:id/messages/stream`，没有媒体专用消息接口，也没有非流式降级。
+Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，并严格收口为
+`固化身份 → 绑定来源/下载 → 目录与文件名归一化 → 机械验收关闭`。作品目录继续采用
+`Series → Work → Season/Episode → Task`：Series 创建同时建立主 Work，TV Work
+可以创建 Season/Episode，电影和剧场版保持无伪季的独立 Work；Task 只能绑定既有 Work
+和已确认 Episode，不能从下载标题反推或新建作品身份。
 
-媒体 CodexAgent 每轮从当前 Task 重新生成 `availableActions`，提示词与 API 共用同一阶段门；工具拒绝必须返回非空、脱敏稳定码，禁止把 409 吞成空结果后诱导模型原样重试。结构化结果以最长 8000 字的 `answer` 进入标准 LLM 消息，以短 `summary` 更新 Task 投影。策略 v3 的类型化工具覆盖 TMDB 身份确认、磁链添加/检查/移除、分页清单、保守自动文件映射、来源探针、下载、治理、元数据核验/修复与独立验收；自动映射除 `SxxExx` 和根目录纯数字方括号外，还接受根目录中唯一、由发布标点分隔的 1–3 位集号，多个候选继续失败关闭。电影来源存在宣传短片时，仅在最大视频至少 512 MiB、其余视频均不超过 64 MiB 且正片至少为第二大文件 8 倍时自动选择，否则仍要求人工复核。所有写动作仍由 Task revision、当前阶段、胶囊、provider thread CAS 和既有应用服务门保护，成功改变 revision 后当前回合必须停止，下一轮重新读取线上 Task。旧 App Server thread 在策略升级时通过显式 CAS 旋转一次，标准 conversationId 保持不变。
+治理执行合同只包含来源检查、探针、下载、治理事务和 `acceptance.verify`。
+`governance.execute` 成功后自动预约机械验收，验收通过即以
+`closedMode=mechanical` 关闭。Task 不再拥有 `metadataStatus`、A/B/C 缺项、
+媒体 Agent session、LLM conversation 或人工决策状态，也不再提供
+`metadata/verify`、`metadata/repair`、`agent/start` 等入口。迁移前停在
+`metadata` 的历史 Task 会在启动时迁移到机械验收；缺少密封计划时回到可见的治理
+阻断态，绝不会因为 NAS 刮削缺项被要求进入本地 Codex。
 
-Agent 身份修正一旦通过计划摘要、修正历史和当前二级 TMDB 身份三重绑定，后续不再要求操作员逐阶段点击。API 只在无活动 Run 的确定性边界自动预约唯一后继：需要规范根重排时先执行治理事务；否则按 `metadata.verify → 最多两次 metadata.repair → metadata.verify → acceptance.verify` 串联，任一执行失败、次数耗尽或仍需人工判断时立即停止。服务启动会恢复同一类已持久化阶段边界，包括旧版曾被错误覆盖成 `metadata/blocked + gateReason=null` 的已应用计划；已关闭任务、普通人工任务和未应用的候选计划不会被自动推进。LLM 对话恢复时，已落入计划修正历史的 `plan-submitted` 结果投影为 `succeeded` 且清空 `pendingPlanSha256`，不会重新显示成待人工处理。
+NFO、海报、资料库关联与 trim.media 可见性属于独立
+`media-scrape-validation` 模块。机械 Task 关闭后只异步登记身份与验收快照；
+独立记录使用 `pending/running/healthy/issues` 状态，NAS 执行器通过内部 claim/result
+接口领取和回传结果。刮削登记失败、校验缺项或重试都不回写 Task 的
+`stage/runState/gateReason`，不阻止规范文件进入 NAS 或直接播放。Admin 在
+`/media/scrape-validation` 提供单独页面，治理 Task 详情不再显示元数据页签。
 
-TMDB 搜索页读取固定使用 `connection: close` 与最多两次独立 10 秒请求，防止长驻 API 进程复用失效连接后持续 `fetch failed`；两次都不可用时 `provider.metadata.read` 返回 `lookupAvailable=false`，不再把整轮变成 503。Agent 可用 live Web Search 给出明确的 `themoviedb.org/movie|tv/<id>`，但 `media.identity.confirm` 仍必须由 API 独立读取该官方详情页并核对媒体类型和年份，验证失败保持零写。
+多来源下载、逐文件 Unit/角色/季集映射、字幕发布组合同、来源健康探针、下载续传、
+电影规范版本原子替换、同设备 hardlink 回滚、Redis 高频进度与 MySQL 终态事务仍保留。
+电影升级只有候选机械验收成功时才在同一事务退役旧 Task；判断不依赖文件大小，也不依赖
+NAS 刮削状态。Series/Work 自动同步只读取已机械关闭 Task 的固化身份和 Episode 映射，
+不再检查刮削状态。
+
+机械治理、Series/Work/RSS 和独立刮削由 17 张 TypeORM 表持久化。
+`sql/media-governance-init.sql` 用于新安装；
+`sql/media-governance-mechanical-scrape-split.sql` 由现有
+`migrate-media-governance-series-work` K8s initContainer 在数据库备份后的标准发布窗口执行，
+用于补建独立刮削记录并移除旧媒体 Agent/LLM/元数据投影表列；配套 verify SQL 会阻止缺表、
+遗留列、孤立校验记录或已关闭 Task 漏回填的版本启动。
+
+NAS executor 所需的 manifest、事务备份、目录合同、字幕、回滚与 trim 官方 helper
+统一由 API 项目的 `scripts/media-governance/runtime/` 持有并测试。
+根目录 `ci/media-governance-executor/build-release.sh` 只从该 API 路径构建发布包；
+`mcp/ktWorkflow` 不再包含 `kt_media_*`、媒体能力档、ledger、media/trim 脚本
+或专用测试。普通 Admin LLM/Codex 对话继续属于通用 LLM 模块，与媒体治理 Task 无绑定关系。
 
 OpenAI、智谱、DeepSeek 与 Moonshot 通过各自 OpenAI-compatible `GET /models` 读取当前
 凭据可用模型；Anthropic 通过带 `x-api-key`、`anthropic-version` 和 `after_id` 有界分页的
@@ -392,77 +306,6 @@ App Server 声明的推理强度和 Fast 档位，Anthropic 消费 Models API �
 OpenAI-compatible 供应商只在响应真实提供扩展能力字段时公开选项。未声明或不支持的能力保持
 空数组，Admin 隐藏对应控件；每次发送前 API 再次校验模型、推理强度与速度档位，并把选择
 传入供应商 SSE 或 Codex turn，不读取数据库静态模型数组。
-
-媒体场景的每一轮仍按当前 Task revision 生成 policy/capsule/manifest，通过动态类型化工具
-读取事实，并以严格输出 Schema 返回结果；接收资料、NAS 下载、独立验收及存在活动 Run
-时只能旁路读取，密封写计划仍受媒体领域门禁。gateway 在流开始时调用内部 context
-接口校验 Task 与 conversation 身份，在 done 前调用 result 接口更新治理投影。App Server
-请求必须命中 `llm-codex` 权限档、`networkAccess=true` 和 `approvalPolicy=never`，错误
-权限档、网络、路径、工具或摘要均失败关闭；浏览器不会接触 Codex 登录态或原始协议。
-旧 `media_governance_agent_session` 只保留历史兼容读取，新 Task 获得 LLM 绑定后不再保存
-第二套 session/thread/message。旧的 `MEDIA_CODEX_AGENT_GATEWAY_BASE_URL`、
-`MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS` 与 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 已退出运行
-合同。媒体会话身份只认数据库中的
-`conversationId + scene + sceneRefId + activeTurnId + providerThreadId` 五元组；gateway 在
-App Server `turn/start` 前携同一 `activeTurnId` 调内部绑定接口，由对话行锁以 CAS 完成
-`providerThreadId` 首次空值绑定或同值幂等确认。迟到回合、错误 Task/scene/ref 或不同 thread
-全部失败关闭。NAS 宿主遗留 `task-sessions` 文件不会恢复、迁移或覆盖标准 conversation，
-因此 API/Gateway 重启后仍只有一个会话事实源。Gateway 内部派生的候选 ID 不进入回调或
-消息 metadata；两个出口都只发送输出 Schema 的六个原始字段（含完整 `answer`），避免严格解析器拒绝内部字段。
-Agent 结构化输出的 `properties` 必须全部进入 `required`，无候选时显式返回空数组；
-真实候选歧义保持 `needs-operator`，operator decision 仍必须通过候选和密封计划复核。
-每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
-索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为
-`selected_file_mappings`。下载门在完整载荷开始前核对每个 Unit 的主视频覆盖、非内嵌
-profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只含字幕/字体；Schema
-`1.2.0` 计划只消费该映射，字体压缩包生成本地 `asset`，不再从发布组文件名猜季集。
-逐季字幕来源必须与目标季和发布组一致，全部来源完成清单检查与运行时探针后才允许
-进入下载。种子描述文件会安全解析，磁链和种子原文只写入
-`MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET` 指定的私有 MinIO Bucket；通用 `/minio/*`
-服务会拒绝访问该 Bucket。种子内 `attr=p` 的 padding 传输项不会进入治理清单，
-真实文件按 qBittorrent Web API 的用户可见顺序连续编号，使两端 manifest 摘要一致。
-领域合同覆盖 Task/Unit/Run、五种来源分类、逐季单一
-字幕发布组、`S00`、运行时来源健康、A/B/C 元数据、三层事件保留。来源探针先完成
-3 分钟初始观察；即使已产生少量数据，按平均吞吐估算无法在 24 小时内完成所选载荷时
-仍返回 `degraded/insufficient_throughput` 速度警告，但该唯一降级原因允许操作员继续下载；
-其他降级、证据不足或不可用原因仍阻止下载，不再把任意 1 字节误判为可用。领域合同同时覆盖
-revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封 Run 发送到仅监听
-私网的 NAS 执行器，执行器按任务隔离目录完成下载、治理、元数据核验和独立验收；缺少
-数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
-NAS executor 会在调用 API 前先把每条事件 fsync 到连续 journal；网络传输和服务端暂态
-状态按同一序号持续退避，API `Recreate` 发布期间 qBittorrent 与 runner 保持运行。最终报告
-原子密封到 `/vol1/docker/kt-codex/artifacts/automation/media/<runId>` 后再向 API 发送终态。
-下载 runner 每 1 秒采集 qBittorrent 字节、速度、ETA、peer 与逐文件进度；磁链清单检查
-仍按每 5 秒、最长 120 秒的独立合同执行。隔离 qBittorrent 使用零下载限速、全部 Tracker、
-DHT/PeX/LSD、全局 800/单种 400 连接和每秒 100 个新连接；不修改 NAS 温控或电源保护。
-API 每 5 秒以 Run、Task 和密封输入摘要查询
-对应 systemd runner；执行单元退出或失联时，
-状态查询会携 API 已确认的 `afterSequence`；失联 runner 先分页补回连续非终态事件，只有
-随后状态响应同时携带匹配的 Run manifest SHA、精确成功/失败终态与下一连续序号，API
-才应用终态并清除活动 Run。缺少密封证据、身份漂移或序号跳跃时保持 Run 活跃等待下轮
-核对，API 不自行伪造失败事件。此后调用继续或再次开始下载会密封新的接管 Run，按
-Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷只重新校验，未完成
-载荷从原分片续传，存在 qBittorrent 状态却丢失 staging 时失败关闭。
-新任务不需要操作员填写内部 `workItemId`：首次本地治理前由数据库串行分配
-`media-063+` 并持久化复用。计划密封失败会推进 revision，修正合同后可从同一
-payload-ready 载荷重试，不会重新下载。
-治理执行失败时，完整的最长 400 字符技术摘要保留在事件记录中，Task 的用户可见
-阻塞原因只投影前 160 字符以匹配数据库契约；再次开始治理会复用同一密封计划，创建
-新的 revision、Run 和 replay key，不重放下载，也不复用已经消费的事务键。
-元数据核验或独立验收出现明确的 NAS 执行失败时，也可用失败后的当前 revision 从原
-阶段重试；API 保留密封计划并创建新的 Run 和 replay key，不会把业务核验不通过误当成
-执行失败重试。元数据执行器会在治理完成后有界等待 fnOS 回填作品身份；若旧 Run 已在
-回填完成前只返回 `identity.provider/providerId` 两项缺口，API 允许从同一密封计划重新
-采集元数据事实，不重跑下载或本地治理；该确定性入口与任意阶段的 Agent 旁路入口彼此
-独立，启动 Agent 不会消费或覆盖媒体 Run。延迟身份刷新每个 Unit 最多一次，并把
-`identityRefreshAttempts` 保存在元数据投影中；一次刷新后仍缺身份时禁止第三次相同
-Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精确缺口
-且尚无计数字段的持久化任务按刷新已用完迁移，避免 API 重启重新打开循环。
-任务若已有每个 Unit 的成功核验证据、明确的元数据缺口阻塞、同一密封计划且无活动 Run，可用当前 revision 重新调用 `metadata/verify` 采集事实，以承接执行器版本修正或外部合法元数据收敛；该路径本地媒体/云端/数据库直写均为 0，不会重开已用完的延迟身份刷新次数。
-任务的 Work 派生 `catalogIdentity`、TMDB 二级元数据 `metadataIdentity` 与密封物理根 `identity` 分别校验。已选 Bangumi/TVDB/TMDB Work 主身份不会被 Agent 的 TMDB 候选静默覆盖；NFO 的 provider 季集可使用二级 TMDB，但 `title/showtitle/year` 仍使用 Work catalog 标题和年份。公开 Task API 不提供身份恢复或编辑入口；历史身份折叠残留必须先在 Series 下建立并确认正确 Work，再通过受控迁移补充上下文。
-内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
-属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口
-继续进入 `bounded_repair`/Agent，不改变 A/B/C 硬门禁。
 
 ## 核心规则
 

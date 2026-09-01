@@ -40,7 +40,18 @@ describe('MobileHomeController', () => {
     service.getBootstrap.mockResolvedValue({
       environment: {
         actions: [],
-        events: [],
+        events: [
+          {
+            eventId: 'evt-home-assistant-1',
+            observedAt: '2026-08-27T06:00:00.000Z',
+            severity: 'ok',
+            siteId: 'nas-prod',
+            sourceKind: 'local',
+            summary: 'Home Assistant 连接正常',
+            topic: 'kt/env/nas-prod/home-assistant/event',
+            type: 'environment-event',
+          },
+        ],
         generatedAt: '2026-08-27T06:00:00.000Z',
         refreshedAt: '2026-08-27T06:00:00.000Z',
         sites: [],
@@ -129,6 +140,10 @@ describe('MobileHomeController', () => {
       },
     });
     expect(response.body).not.toHaveProperty('err');
+    expect(response.body.data.environment.events).toEqual([
+      expect.objectContaining({ eventId: 'evt-home-assistant-1' }),
+    ]);
+    expect(response.body.data.environment.events[0]).not.toHaveProperty('id');
     expect(response.body.data.notices.items[0].createTime).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
     );

@@ -45,7 +45,7 @@ describe('environment event materializer', () => {
       new Date('2026-06-18T01:01:00.000Z'),
     );
 
-    expect(event?.id).toBe('evt-fresh');
+    expect(event?.eventId).toBe('evt-fresh');
     expect(cache.invalidate).toHaveBeenCalledTimes(1);
     expect(materializer.getRecentEvents()).toEqual([event]);
   });

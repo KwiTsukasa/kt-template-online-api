@@ -30,7 +30,13 @@ describe('SunshineMobileClient', () => {
           '[2026-08-31 08:30:40.968]: Info: Desktop resolution [1920x1200]',
           '[2026-08-31 09:43:58.902]: Info: Desktop resolution [3200x1440]',
           'Currently available display devices:',
-          '"friendly_name": "VDD by MTT"',
+          '[',
+          '  {',
+          '    "device_id": "{virtual-display-id}",',
+          '    "friendly_name": "VDD by MTT",',
+          '    "info": { "resolution": { "width": 2560, "height": 1600 } }',
+          '  }',
+          ']',
         ].join('\n'),
         status: 200,
       })
@@ -61,6 +67,41 @@ describe('SunshineMobileClient', () => {
         url: 'https://10.66.66.4:39000/api/config',
       }),
     );
+  });
+
+  it('uses the configured VDD mode after a cold restart before the first stream', async () => {
+    http.request
+      .mockResolvedValueOnce({
+        data: [
+          'Currently available display devices:',
+          '[',
+          '  {',
+          '    "device_id": "{physical-display-id}",',
+          '    "friendly_name": "NE160QDM-NZL",',
+          '    "info": { "resolution": { "width": 2560, "height": 1600 } }',
+          '  },',
+          '  {',
+          '    "device_id": "{virtual-display-id}",',
+          '    "friendly_name": "VDD by MTT",',
+          '    "info": { "resolution": { "width": 2560, "height": 1600 } }',
+          '  }',
+          ']',
+        ].join('\n'),
+        status: 200,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          dd_configuration_option: 'ensure_active',
+          dd_resolution_option: 'auto',
+          output_name: '{virtual-display-id}',
+        },
+        status: 200,
+      });
+
+    await expect(client.displayState()).resolves.toEqual({
+      resolution: '2560x1600',
+      virtualDisplayReady: true,
+    });
   });
 
   it('accepts a pairing PIN only when Sunshine returns status true', async () => {

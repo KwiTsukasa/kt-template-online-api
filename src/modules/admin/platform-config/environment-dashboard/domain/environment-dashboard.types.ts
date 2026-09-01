@@ -122,7 +122,7 @@ export interface EnvironmentAction {
 }
 
 export interface EnvironmentEvent {
-  id: string;
+  eventId: string;
   type?: EnvironmentStreamEventType;
   topic: string;
   siteId: string;

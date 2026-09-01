@@ -45,7 +45,7 @@ export class EnvironmentEventMaterializer {
     const event: EnvironmentEvent = {
       evidence: envelope.evidence,
       expiresAt: envelope.expiresAt,
-      id: envelope.eventId,
+      eventId: envelope.eventId,
       nodeId: envelope.nodeId,
       observedAt: envelope.observedAt,
       retained: envelope.retained,

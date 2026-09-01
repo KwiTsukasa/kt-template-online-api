@@ -25,7 +25,10 @@ describe('EnvironmentEventStreamService', () => {
 
     await expect(received).resolves.toEqual([
       expect.objectContaining({
-        data: expect.objectContaining({ summary: 'NapCat degraded' }),
+        data: expect.objectContaining({
+          eventId: 'evt-1',
+          summary: 'NapCat degraded',
+        }),
         id: 'evt-1',
         type: 'environment-event',
       }),

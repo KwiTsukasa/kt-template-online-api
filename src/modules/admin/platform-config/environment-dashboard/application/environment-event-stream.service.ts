@@ -58,12 +58,12 @@ export class EnvironmentEventStreamService {
 
   /**
    * 将`event`中的非空事件截断到安全上限后追加到目标集合。
-   * @param event - 触发事件的领域事件，包含 `id`、`type` 字段。
+   * @param event - 触发事件的领域事件，包含 `eventId`、`type` 字段。
    */
   private pushEvent(event: EnvironmentEvent) {
     const streamEvent: EnvironmentStreamEvent = {
       data: event,
-      id: event.id,
+      id: event.eventId,
       type: event.type || 'environment-event',
     };
     this.replay.push(streamEvent);

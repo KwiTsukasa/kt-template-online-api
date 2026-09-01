@@ -34,6 +34,17 @@ interface SunshineConfigPayload {
   output_name?: string;
 }
 
+interface SunshineDisplayDevicePayload {
+  device_id?: string;
+  friendly_name?: string;
+  info?: {
+    resolution?: {
+      height?: number;
+      width?: number;
+    };
+  } | null;
+}
+
 interface SunshinePinPayload {
   status?: boolean;
 }
@@ -92,38 +103,107 @@ export class SunshineMobileClient {
       logsRequest,
       configRequest,
     ]);
-    const matches = Array.from(
+    const captureMatches = Array.from(
       logsResponse.data.matchAll(
         /Desktop resolution \[(\d{3,5})x(\d{3,5})\]/gu,
       ),
     );
-    const latest = matches[matches.length - 1];
-    if (!latest) throw new Error('Sunshine 未报告桌面分辨率');
-    const width = Number.parseInt(latest[1], 10);
-    const height = Number.parseInt(latest[2], 10);
-    if (width < 640 || width > 16_384 || height < 360 || height > 16_384) {
-      throw new Error('Sunshine 桌面分辨率无效');
-    }
-    const devicesMarker = 'Currently available display devices:';
-    const devicesIndex = logsResponse.data.lastIndexOf(devicesMarker);
-    let latestDevices = '';
-    if (devicesIndex >= 0) latestDevices = logsResponse.data.slice(devicesIndex);
-    const virtualDisplayPresent = /"friendly_name"\s*:\s*"(?:VDD by MTT|Virtual Display Driver)"/u.test(
-      latestDevices,
-    );
+    const devices = this.readLatestDisplayDevices(logsResponse.data);
     let configuredOutput = '';
     if (typeof configResponse.data.output_name === 'string') {
       configuredOutput = configResponse.data.output_name.trim();
     }
+    const resolution = this.resolveDisplayResolution(
+      captureMatches,
+      devices,
+      configuredOutput,
+    );
+    const virtualDisplayPresent = devices.some((device) =>
+      /^(?:VDD by MTT|Virtual Display Driver)$/u.test(
+        `${device.friendly_name || ''}`,
+      ),
+    );
     const virtualDisplayReady =
       virtualDisplayPresent &&
       Boolean(configuredOutput) &&
       configResponse.data.dd_configuration_option === 'ensure_active' &&
       configResponse.data.dd_resolution_option === 'auto';
     return {
-      resolution: `${width}x${height}`,
+      resolution,
       virtualDisplayReady,
     };
+  }
+
+  /**
+   * 从 Sunshine 最近一次设备枚举日志中解析结构化显示器清单，拒绝把其他日志片段当成设备状态。
+   * @param logs - Sunshine 管理 API 返回的日志正文。
+   * @returns 最近一次合法设备数组；不存在或 JSON 损坏时返回空数组。
+   */
+  private readLatestDisplayDevices(logs: string): SunshineDisplayDevicePayload[] {
+    const matches = Array.from(
+      logs.matchAll(
+        /Currently available display devices:\s*(\[\s*\{[\s\S]*?^\s*\])/gmu,
+      ),
+    );
+    const latest = matches[matches.length - 1]?.[1];
+    if (!latest) return [];
+    try {
+      const parsed = JSON.parse(latest) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed as SunshineDisplayDevicePayload[];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 优先返回最近实际捕获分辨率；冷启动尚未串流时改读固定 output_name 对应设备的当前模式。
+   * @param captureMatches - 日志中按时间顺序出现的实际捕获分辨率匹配。
+   * @param devices - Sunshine 最近一次结构化设备枚举。
+   * @param configuredOutput - 配置固定的 Windows display device ID。
+   * @returns 通过移动串流安全边界校验的 `宽x高` 文本。
+   * @throws 捕获日志和配置设备都没有合法分辨率时抛出稳定错误。
+   */
+  private resolveDisplayResolution(
+    captureMatches: RegExpMatchArray[],
+    devices: SunshineDisplayDevicePayload[],
+    configuredOutput: string,
+  ): string {
+    const latestCapture = captureMatches[captureMatches.length - 1];
+    if (latestCapture) {
+      const captured = this.formatDisplayResolution(
+        Number.parseInt(latestCapture[1], 10),
+        Number.parseInt(latestCapture[2], 10),
+      );
+      if (captured) return captured;
+    }
+    const configuredDevice = devices.find(
+      (device) =>
+        `${device.device_id || ''}`.toLowerCase() ===
+        configuredOutput.toLowerCase(),
+    );
+    const configured = this.formatDisplayResolution(
+      configuredDevice?.info?.resolution?.width,
+      configuredDevice?.info?.resolution?.height,
+    );
+    if (configured) return configured;
+    throw new Error('Sunshine 未报告可用显示分辨率');
+  }
+
+  /**
+   * 把 Sunshine 数值宽高规范为有界分辨率文本，异常值不进入移动端配置。
+   * @param width - Sunshine 报告的显示宽度。
+   * @param height - Sunshine 报告的显示高度。
+   * @returns 宽高合法时返回 `宽x高`，否则返回空值。
+   */
+  private formatDisplayResolution(
+    width: number | undefined,
+    height: number | undefined,
+  ): string | null {
+    if (!Number.isInteger(width) || !Number.isInteger(height)) return null;
+    if (width! < 640 || width! > 16_384) return null;
+    if (height! < 360 || height! > 16_384) return null;
+    return `${width}x${height}`;
   }
 
   /**

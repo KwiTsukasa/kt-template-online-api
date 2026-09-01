@@ -25,7 +25,7 @@ export function canonicalMediaGovernanceJson(value: unknown): string {
 }
 
 /**
- * 对媒体治理稳定 JSON 表示计算小写十六进制 SHA-256 摘要。
+ * 先递归固定对象键序再绑定结构和值，使等价 JSON 的插入顺序差异不改变跨进程身份。
  * @param value - 需要生成摘要的 JSON 值。
  * @returns 稳定 JSON 对应的 SHA-256 摘要。
  */

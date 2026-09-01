@@ -68,7 +68,7 @@ export class MediaScrapeValidationController {
   }
 
   /**
-   * 返回一条独立 NAS 刮削校验详情。
+   * 以禁止缓存响应返回独立校验详情，不复用治理 Task 的读写接口。
    * @param validationId - 刮削校验记录标识。
    * @param response - 用于写入禁止缓存头的 HTTP 响应。
    * @returns 标准成功响应。
@@ -119,7 +119,7 @@ export class MediaScrapeValidationInternalController {
   constructor(private readonly service: MediaScrapeValidationService) {}
 
   /**
-   * 返回独立刮削校验队列的内部接口健康状态。
+   * 固定声明队列接口可用且不参与治理关闭门禁，不读取 Task 运行状态。
    * @returns 声明该模块不参与治理 Task 关闭门禁的健康投影。
    */
   @Get('health')

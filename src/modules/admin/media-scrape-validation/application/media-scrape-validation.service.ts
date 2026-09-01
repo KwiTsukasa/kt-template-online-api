@@ -77,7 +77,7 @@ export class MediaScrapeValidationService
   }
 
   /**
-   * 在治理任务机械关闭后保存只读身份和验收快照，任何刮削结果均不回写任务。
+   * 仅在 Task 达到机械关闭成功边界时复制只读快照，其他状态直接忽略且绝不回写 Task。
    * @param task - 已完成机械验收的媒体治理任务。
    */
   async enqueueTask(task: MediaGovernanceTask): Promise<void> {
@@ -101,7 +101,7 @@ export class MediaScrapeValidationService
   }
 
   /**
-   * 幂等保存治理快照；同一治理修订号不会覆盖已完成的刮削结论。
+   * 同一 Task 修订保留现有结论，新修订则重置独立队列并只递增校验自身版本。
    * @param snapshot - 与已关闭治理任务绑定的只读身份和验收快照。
    */
   private async enqueueSnapshot(snapshot: {
@@ -188,7 +188,7 @@ export class MediaScrapeValidationService
   }
 
   /**
-   * 读取一条独立刮削校验详情。
+   * 读取独立校验记录并附加中文状态文案，不查询或改变关联治理 Task。
    * @param validationId - 刮削校验记录标识。
    * @returns 带状态文案的刮削校验详情。
    */

@@ -76,7 +76,7 @@ function assertSha256(value: string, code: string) {
 }
 
 /**
- * 校验任务和来源标识仅包含有界安全字符。
+ * 限制任务和来源标识的长度与字符集，阻止对象键越出受管命名空间。
  * @param value - 待校验的稳定标识。
  * @param code - 标识非法时使用的领域错误码。
  */
@@ -178,7 +178,7 @@ export function validateSubtitleContracts(
 }
 
 /**
- * 校验描述符身份后生成任务私有对象存储键。
+ * 将已校验的任务、来源、修订号和摘要投影为不可穿越的私有描述符对象键。
  * @param input - 任务、来源、修订号、摘要和传输类型。
  * @returns 不可越出任务命名空间的描述符对象键。
  */

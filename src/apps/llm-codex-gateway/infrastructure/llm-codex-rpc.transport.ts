@@ -110,7 +110,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 写入无需响应的 JSON-RPC 通知。
+   * 仅在初始化完成等无回执场景写出协议帧；请求序号与等待超时槽位均保持不变。
    * @param method - App Server 方法名。
    * @param params - 可选协议参数。
    */
@@ -120,7 +120,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 写入与请求标识对应的 JSON-RPC 响应。
+   * 将服务端主动请求的原始标识与结果或错误封装成回执，不改动本地等待映射。
    * @param id - 上游请求标识。
    * @param response - 成功结果或错误对象。
    */
@@ -133,7 +133,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 注册 App Server 主动请求处理器。
+   * 替换当前唯一主动请求回调，使服务端发起的请求在统一 RPC 边界内收束。
    * @param handler - 接收请求身份、方法和参数的处理器。
    */
   onRequest(
@@ -147,7 +147,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 注册连接断开处理器。
+   * 保存断线收束回调，供外层及时关闭通知队列并停止等待流事件。
    * @param handler - 断线后执行的状态收束函数。
    */
   onDisconnect(handler: () => void) {
@@ -155,7 +155,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 注册 App Server 通知处理器。
+   * 保存无请求标识通知的消费回调，让已解码流事件交给当前会话处理。
    * @param handler - 接收已解码通知的处理器。
    */
   onNotification(
@@ -223,7 +223,7 @@ export class UnixWebSocketRpcTransport {
   }
 
   /**
-   * 在连接已打开时发送序列化 JSON-RPC 消息。
+   * 仅在 WebSocket 已打开时发送一帧序列化协议消息，避免断线期间静默丢包。
    * @param value - 待序列化的协议对象。
    * @throws 连接未打开时抛出断线错误。
    */

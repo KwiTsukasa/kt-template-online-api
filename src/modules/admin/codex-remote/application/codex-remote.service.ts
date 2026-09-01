@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import {
   BadRequestException,
   Injectable,
@@ -16,6 +17,7 @@ export interface CodexRemoteProject {
   cwd: string;
   id: string;
   label: string;
+  readOnlyCwdAliases: string[];
 }
 
 interface CodexRemoteNode {
@@ -148,8 +150,14 @@ export class CodexRemoteService {
         let cwd = '';
         if (typeof record.cwd === 'string') cwd = record.cwd.trim();
         if (!this.validProject(id, label, cwd, ids)) return [];
+        cwd = path.win32.normalize(cwd);
+        const readOnlyCwdAliases = this.parseReadOnlyCwdAliases(
+          record.readOnlyCwdAliases,
+          cwd,
+        );
+        if (readOnlyCwdAliases == null) return [];
         ids.add(id);
-        projects.push({ cwd, id, label });
+        projects.push({ cwd, id, label, readOnlyCwdAliases });
       }
       return projects;
     } catch {
@@ -158,7 +166,7 @@ export class CodexRemoteService {
   }
 
   /**
-   * 逐项约束 Remote 项目标识、显示名和绝对目录，避免重复 ID 或换行注入进入节点目录。
+   * 逐项约束 Remote 项目标识、显示名和 Windows drive-root 绝对目录，避免历史别名成为 writer cwd。
    * @param id - 已去除首尾空白的项目标识。
    * @param label - 已去除首尾空白的项目显示名。
    * @param cwd - 已去除首尾空白的节点绝对目录。
@@ -174,9 +182,48 @@ export class CodexRemoteService {
     if (!PROJECT_ID_PATTERN.test(id)) return false;
     if (ids.has(id)) return false;
     if (!label || label.length > 100) return false;
-    if (!cwd.startsWith('/') || cwd.length > 1000) return false;
+    if (!path.win32.isAbsolute(cwd) || !/^[a-z]:[\\/]/i.test(cwd)) {
+      return false;
+    }
+    if (cwd.length > 1000) return false;
     if (cwd.includes('\n') || cwd.includes('\r')) return false;
     return true;
+  }
+
+  /**
+   * 把显式历史目录规范为只读别名，拒绝相对路径、canonical 重复项和过量目录。
+   * @param value - 项目 JSON 中可选的历史目录数组。
+   * @param canonicalCwd - 已规范的唯一 Windows writer 目录。
+   * @returns 合法且去重的历史只读目录；整体非法时返回 null。
+   */
+  private parseReadOnlyCwdAliases(
+    value: unknown,
+    canonicalCwd: string,
+  ): string[] | null {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 8) return null;
+    const aliases: string[] = [];
+    const keys = new Set<string>();
+    keys.add(canonicalCwd.replaceAll('\\', '/').toLowerCase());
+    for (const item of value) {
+      if (typeof item !== 'string') return null;
+      const candidate = item.trim();
+      if (!candidate || candidate.length > 1000) return null;
+      if (candidate.includes('\n') || candidate.includes('\r')) return null;
+      let normalized = '';
+      if (path.posix.isAbsolute(candidate)) {
+        normalized = path.posix.normalize(candidate);
+      } else if (path.win32.isAbsolute(candidate)) {
+        normalized = path.win32.normalize(candidate);
+      } else {
+        return null;
+      }
+      const key = normalized.replaceAll('\\', '/').toLowerCase();
+      if (keys.has(key)) return null;
+      keys.add(key);
+      aliases.push(normalized);
+    }
+    return aliases;
   }
 
   /**

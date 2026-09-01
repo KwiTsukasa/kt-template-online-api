@@ -21,7 +21,12 @@ describe('CodexRemoteController', () => {
           provide: ConfigService,
           useValue: new ConfigService({
             CODEX_REMOTE_PC_PROJECTS_JSON: JSON.stringify([
-              { cwd: '/srv/kt', id: 'kt', label: 'KT Workspace' },
+              {
+                cwd: 'D:\\MyFiles\\KT',
+                id: 'kt',
+                label: 'KT Workspace',
+                readOnlyCwdAliases: ['/home/yemu2/KT'],
+              },
             ]),
             CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
             CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
@@ -67,7 +72,12 @@ describe('CodexRemoteController', () => {
 
     expect(response.body.data).toEqual(
       expect.objectContaining({
-        project: { cwd: '/srv/kt', id: 'kt', label: 'KT Workspace' },
+        project: {
+          cwd: 'D:\\MyFiles\\KT',
+          id: 'kt',
+          label: 'KT Workspace',
+          readOnlyCwdAliases: ['/home/yemu2/KT'],
+        },
         wsUrl: 'ws://10.66.66.4:48095',
       }),
     );
@@ -79,7 +89,7 @@ describe('CodexRemoteController', () => {
     ).toEqual(
       expect.objectContaining({
         aud: 'kt-codex-remote-pc',
-        projectCwd: '/srv/kt',
+        projectCwd: 'D:\\MyFiles\\KT',
         projectId: 'kt',
         sub: '2041700000000000002',
       }),

@@ -6,7 +6,15 @@ import { CodexRemoteService } from '../../../src/modules/admin/codex-remote/appl
 describe('CodexRemoteService', () => {
   const sharedSecret = Buffer.alloc(32, 9).toString('hex');
   const projectJson = JSON.stringify([
-    { cwd: '/home/kt/workspace', id: 'kt', label: 'KT Workspace' },
+    {
+      cwd: 'D:\\MyFiles\\KT',
+      id: 'kt',
+      label: 'KT Workspace',
+      readOnlyCwdAliases: [
+        '/home/yemu2/KT',
+        '\\\\wsl$\\Debian\\home\\yemu2\\KT',
+      ],
+    },
   ]);
 
   it('returns only fully configured fixed WireGuard nodes', () => {
@@ -23,7 +31,15 @@ describe('CodexRemoteService', () => {
         id: 'pc',
         label: 'Windows PC',
         projects: [
-          { cwd: '/home/kt/workspace', id: 'kt', label: 'KT Workspace' },
+          {
+            cwd: 'D:\\MyFiles\\KT',
+            id: 'kt',
+            label: 'KT Workspace',
+            readOnlyCwdAliases: [
+              '/home/yemu2/KT',
+              '\\\\wsl$\\Debian\\home\\yemu2\\KT',
+            ],
+          },
         ],
         wsUrl: 'ws://10.66.66.4:48095',
       },
@@ -59,7 +75,7 @@ describe('CodexRemoteService', () => {
         aud: 'kt-codex-remote-pc',
         iss: 'kt-admin-sso',
         nodeId: 'pc',
-        projectCwd: '/home/kt/workspace',
+        projectCwd: 'D:\\MyFiles\\KT',
         projectId: 'kt',
         sub: '2041700000000000002',
         username: 'kwitsukasa',
@@ -67,6 +83,10 @@ describe('CodexRemoteService', () => {
     );
     expect(claims.exp - claims.iat).toBe(120);
     expect(session.wsUrl).toBe('ws://10.66.66.4:48095');
+    expect(session.project.readOnlyCwdAliases).toEqual([
+      '/home/yemu2/KT',
+      '\\\\wsl$\\Debian\\home\\yemu2\\KT',
+    ]);
   });
 
   it('rejects a project that is not declared by the selected node', () => {
@@ -84,5 +104,23 @@ describe('CodexRemoteService', () => {
         username: 'kwitsukasa',
       } as never),
     ).toThrow(BadRequestException);
+  });
+
+  it.each([
+    '/home/yemu2/KT',
+    '\\\\wsl$\\Debian\\home\\yemu2\\KT',
+    'D:relative',
+    'D:\\MyFiles\\KT\nother',
+  ])('rejects non-canonical writer cwd %s', (cwd) => {
+    const service = new CodexRemoteService(
+      new ConfigService({
+        CODEX_REMOTE_PC_PROJECTS_JSON: JSON.stringify([
+          { cwd, id: 'kt', label: 'KT Workspace' },
+        ]),
+        CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
+        CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
+      }),
+    );
+    expect(service.nodes()).toEqual([]);
   });
 });

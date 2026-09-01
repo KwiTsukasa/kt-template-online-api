@@ -89,25 +89,25 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 
 ## Admin Environment Dashboard
 
-| 方法   | 路径                                | 认证  | 说明                                              |
-| ------ | ----------------------------------- | ----- | ------------------------------------------------- |
-| `GET`  | `/system/environment/dashboard`     | 是    | 返回 Windows PC、NAS、R4SE 三设备权威环境快照     |
-| `POST` | `/system/environment/self-check`    | 是    | 触发只读自检并返回最新环境快照                    |
-| `GET`  | `/system/environment/events/stream` | 是    | SSE 推送后端环境事件，支持 `lastEventId` 查询参数 |
-| `GET`  | `/system/mobile-home/bootstrap`     | super | 返回 KwiCore 环境与站内信只读聚合快照             |
-| `GET`  | `/system/mobile-home/home`          | super | 返回 HA 区域、实体、场景、活动与能源快照          |
-| `POST` | `/system/mobile-home/home/service`  | super | 执行幂等且白名单化的 HA 实体或场景动作            |
-| `POST` | `/system/mobile-home/home/assist`   | super | 调用 HA Conversation 并返回脱敏 Assist 回应       |
+| 方法   | 路径                                | 认证  | 说明                                                                   |
+| ------ | ----------------------------------- | ----- | ---------------------------------------------------------------------- |
+| `GET`  | `/system/environment/dashboard`     | 是    | 返回 Windows PC、NAS、R4SE 三设备权威环境快照                          |
+| `POST` | `/system/environment/self-check`    | 是    | 触发只读自检并返回最新环境快照                                         |
+| `GET`  | `/system/environment/events/stream` | 是    | SSE 推送后端环境事件，支持 `lastEventId` 查询参数                      |
+| `GET`  | `/system/mobile-home/bootstrap`     | super | 返回 KwiCore 环境与站内信只读聚合快照                                  |
+| `GET`  | `/system/mobile-home/home`          | super | 返回 HA 区域、实体、场景、活动与能源快照                               |
+| `POST` | `/system/mobile-home/home/service`  | super | 执行幂等且白名单化的 HA 实体或场景动作                                 |
+| `POST` | `/system/mobile-home/home/assist`   | super | 调用 HA Conversation 并返回脱敏 Assist 回应                            |
 | `GET`  | `/system/mobile-home/game`          | super | 返回 Sunshine 目录、捕获分辨率、虚拟显示、GameStream 端口和 ViGEm 状态 |
-| `POST` | `/system/mobile-home/game/pin`      | super | 提交内嵌 Moonlight 发起的四位临时配对码           |
+| `POST` | `/system/mobile-home/game/pin`      | super | 提交内嵌 Moonlight 发起的四位临时配对码                                |
 
-环境总览接口使用 `Site -> Node -> Service -> Signal` 模型聚合状态，`unwired` 表示只读观测尚未配置，`unknown` 表示已知入口但缺少新鲜证据。Admin 首次加载通过 HTTP 获取快照，后续通过 API SSE 接收 local/MQTT 事件；前端不直接连接 MQTT，也不使用定时轮询。
+环境总览接口使用 `Site -> Node -> Service -> Signal` 模型聚合状态，`unwired` 表示只读观测尚未配置，`unknown` 表示已知入口但缺少新鲜证据。Admin 首次加载通过 HTTP 获取快照，后续通过 API SSE 接收 local/MQTT 事件；每个公开环境事件都必填 `eventId`，SSE `id` 与 bootstrap `environment.events[]` 共用该身份，响应不再返回旧 `id`。前端不直接连接 MQTT，也不使用定时轮询。
 
 当前版本只提供观测和只读自检。重启 Pod、触发 Jenkins 部署、执行迁移、重建 NapCat 容器、启停插件、立即执行插件任务、切换 OpenClash 或修改 WireGuard 等高风险能力只会以禁用动作展示，后端不提供通用写动作入口。
 
 KwiCore Mobile Home 聚合接口返回 `data.environment` 与 `data.notices.items/total/unreadCount`，响应带 `Cache-Control: no-store`。通知仅投影移动端展示白名单并用 `KtDateTimeField` 格式化 `createTime/lastSeenAt`；环境与站内信权威读取并行执行，任一失败时接口整体失败。Remote 节点、短期 session、relay 和设置本机状态不进入该聚合合同。
 
-Home 快照并行读取 HA REST 与 WebSocket registry，只保留移动端 domain 和 attributes 白名单；能源实体只返回真实 24 小时历史点。常见英文区域及 HA 内置备份/太阳历实体按稳定 ID 返回中文 name，未知用户自定义名称不猜译，entityId 与原始 state 仍保持协议值。实体动作必须携带合法 `requestId/domain/entityId/service`，服务与 data key 同时通过 allowlist 后才执行。Game 快照的 Sunshine Web UI 端口仅用于服务端 Basic 管理请求，Android 使用响应中的 `streamPort/httpsPort` 直连固定 WireGuard 主机；`displayResolution` 只从 `/api/logs` 最近一条合法 `Desktop resolution` 投影为 `宽x高`，`virtualDisplayReady` 还要求最新设备清单存在 VDD 且 `/api/config` 固定为目标 `output_name + ensure_active + auto`，两者均不返回日志或配置正文。串流期只激活 VDD，物理主屏身份、现有窗口与分辨率均不变；`virtualGamepadReady` 只在 Sunshine 同时确认 ViGEm 已安装且版本兼容时为真。PIN 接口不创建会话、不接收证书，也不代替 Moonlight 的原生挑战握手。
+Home 快照并行读取 HA REST 与 WebSocket registry，只保留移动端 domain 和 attributes 白名单；能源实体只返回真实 24 小时历史点。常见英文区域及 HA 内置备份/太阳历实体按稳定 ID 返回中文 name，未知用户自定义名称不猜译，entityId 与原始 state 仍保持协议值。实体动作必须携带合法 `requestId/domain/entityId/service`，服务与 data key 同时通过 allowlist 后才执行。Game 快照的 Sunshine Web UI 端口仅用于服务端 Basic 管理请求，Android 使用响应中的 `streamPort/httpsPort` 直连固定 WireGuard 主机；`displayResolution` 优先取 `/api/logs` 最近一条合法 `Desktop resolution`，冷启动尚无捕获时则从最新结构化 display-device 清单取 `/api/config.output_name` 对应的当前模式，统一投影为 `宽x高`。`virtualDisplayReady` 还要求对应设备为 VDD 且 `/api/config` 固定为 `output_name + ensure_active + auto`，两者均不返回日志或配置正文。串流期只激活 VDD，物理主屏身份、现有窗口与分辨率均不变；`virtualGamepadReady` 只在 Sunshine 同时确认 ViGEm 已安装且版本兼容时为真。PIN 接口不创建会话、不接收证书，也不代替 Moonlight 的原生挑战握手。
 
 环境快照固定为七个稳定服务：Windows PC 的 `sunshine` 使用 Basic `GET /api/apps`、`codex-app-server` 使用 `GET /readyz`；NAS 的 `nas-api` 使用进程健康检查、`home-assistant` 使用 Bearer `GET /api/` 且要求 `message="API running."`、`bot-core` 使用 QQBot 在线摘要；R4SE 的 `r4se-wireguard` 读取固定隧道地址、`r4se-mihomo` 使用 Bearer 读取 `version/configs/proxies`。外部服务缺配置为 `unwired`，401/403 或超时为脱敏 `degraded`，任何响应都不返回凭据或服务正文；共享 client 默认严格 TLS，只有固定 WireGuard Sunshine HTTPS 请求显式允许自签证书。
 
@@ -215,7 +215,7 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
 | Media         | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                                                          |
 | LLM           | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                                                                                         |
-| Codex Remote  | `CODEX_REMOTE_NAS_WS_URL`、`CODEX_REMOTE_NAS_WS_SHARED_SECRET`、`CODEX_REMOTE_NAS_PROJECTS_JSON`、`CODEX_REMOTE_PC_WS_URL`、`CODEX_REMOTE_PC_WS_SHARED_SECRET`、`CODEX_REMOTE_PC_PROJECTS_JSON`                                                                                                                                                                                                                                                                                                                                          |
+| Codex Remote  | `CODEX_REMOTE_PC_WS_URL`、`CODEX_REMOTE_PC_WS_SHARED_SECRET`、`CODEX_REMOTE_PC_PROJECTS_JSON`                                                                                                                                                                                                                                                                                                                                                                  |
 | BangDream     | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FF14 Market   | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FFLogs        | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -223,9 +223,9 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 真实密码、Token、OAuth secret 和生产 env 不提交到 Git。
 
 Codex Remote 使用现有 Admin Bearer 鉴权。`GET /api/codex-remote/nodes` 只返回
-配置完整的 WireGuard 节点；`POST /api/codex-remote/nodes/:nodeId/session` 接收
-`{"projectId":"..."}`，返回精确项目、节点 WebSocket 地址和两分钟签名 token。
-签名 secret 仅存在于 API 私有环境与对应 Codex App Server 节点。
+配置完整的 Windows Desktop Relay；`POST /api/codex-remote/nodes/:nodeId/session`
+接收 `{"projectId":"..."}`，返回精确项目、`ws://10.66.66.4:48095` 与两分钟签名
+token。签名 secret 仅存在于 API 私有环境与同 writer Relay；独立 `:48093` 节点不再返回。
 
 Env Dashboard 与 Mobile Home 共享精确三设备七服务拓扑。私有运行环境必须提供 Codex App Server、Home Assistant、Sunshine、R4SE WireGuard 与 Mihomo 所需键；缺失配置必须返回 `unwired`，Local Dev、Tencent Cloud、Caddy 及其旧键不会进入响应合同。
 

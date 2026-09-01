@@ -12,31 +12,20 @@ describe('CodexRemoteService', () => {
   it('returns only fully configured fixed WireGuard nodes', () => {
     const service = new CodexRemoteService(
       new ConfigService({
-        CODEX_REMOTE_NAS_PROJECTS_JSON: projectJson,
-        CODEX_REMOTE_NAS_WS_SHARED_SECRET: sharedSecret,
-        CODEX_REMOTE_NAS_WS_URL: 'ws://10.66.66.2:48093',
         CODEX_REMOTE_PC_PROJECTS_JSON: projectJson,
         CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
-        CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48093',
+        CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
       }),
     );
 
     expect(service.nodes()).toEqual([
-      {
-        id: 'nas',
-        label: 'Tsukasa NAS',
-        projects: [
-          { cwd: '/home/kt/workspace', id: 'kt', label: 'KT Workspace' },
-        ],
-        wsUrl: 'ws://10.66.66.2:48093',
-      },
       {
         id: 'pc',
         label: 'Windows PC',
         projects: [
           { cwd: '/home/kt/workspace', id: 'kt', label: 'KT Workspace' },
         ],
-        wsUrl: 'ws://10.66.66.4:48093',
+        wsUrl: 'ws://10.66.66.4:48095',
       },
     ]);
   });
@@ -44,12 +33,12 @@ describe('CodexRemoteService', () => {
   it('issues an App Server compatible short HS256 token bound to node and project', () => {
     const service = new CodexRemoteService(
       new ConfigService({
-        CODEX_REMOTE_NAS_PROJECTS_JSON: projectJson,
-        CODEX_REMOTE_NAS_WS_SHARED_SECRET: sharedSecret,
-        CODEX_REMOTE_NAS_WS_URL: 'ws://10.66.66.2:48093',
+        CODEX_REMOTE_PC_PROJECTS_JSON: projectJson,
+        CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
+        CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
       }),
     );
-    const session = service.createSession('nas', 'kt', {
+    const session = service.createSession('pc', 'kt', {
       id: '2041700000000000002',
       username: 'kwitsukasa',
     } as never);
@@ -67,9 +56,9 @@ describe('CodexRemoteService', () => {
     expect(signature).toBe(expected);
     expect(claims).toEqual(
       expect.objectContaining({
-        aud: 'kt-codex-remote-nas',
+        aud: 'kt-codex-remote-pc',
         iss: 'kt-admin-sso',
-        nodeId: 'nas',
+        nodeId: 'pc',
         projectCwd: '/home/kt/workspace',
         projectId: 'kt',
         sub: '2041700000000000002',
@@ -77,20 +66,20 @@ describe('CodexRemoteService', () => {
       }),
     );
     expect(claims.exp - claims.iat).toBe(120);
-    expect(session.wsUrl).toBe('ws://10.66.66.2:48093');
+    expect(session.wsUrl).toBe('ws://10.66.66.4:48095');
   });
 
   it('rejects a project that is not declared by the selected node', () => {
     const service = new CodexRemoteService(
       new ConfigService({
-        CODEX_REMOTE_NAS_PROJECTS_JSON: projectJson,
-        CODEX_REMOTE_NAS_WS_SHARED_SECRET: sharedSecret,
-        CODEX_REMOTE_NAS_WS_URL: 'ws://10.66.66.2:48093',
+        CODEX_REMOTE_PC_PROJECTS_JSON: projectJson,
+        CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
+        CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
       }),
     );
 
     expect(() =>
-      service.createSession('nas', 'other', {
+      service.createSession('pc', 'other', {
         id: '2041700000000000002',
         username: 'kwitsukasa',
       } as never),

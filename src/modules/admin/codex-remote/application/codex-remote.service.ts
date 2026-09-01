@@ -32,16 +32,16 @@ export class CodexRemoteService {
   constructor(private readonly config: ConfigService) {}
 
   /**
-   * 返回已完整配置的 NAS/PC App Server 节点，不回传节点签名密钥。
-   * @returns 可由手机通过 WireGuard 访问的节点与项目目录。
+   * 返回已完整配置的 Windows Desktop Relay 节点，不回传 Relay 签名密钥。
+   * @returns 可由手机通过 WireGuard 访问的唯一 Desktop writer 与项目目录。
    */
   nodes() {
     return this.configuredNodes().map((node) => this.publicNode(node));
   }
 
   /**
-   * 为已通过 Admin SSO 的用户签发单节点两分钟 HS256 WebSocket token。
-   * @param nodeId - 目标 PC/NAS 节点标识。
+   * 为已通过 Admin SSO 的用户签发两分钟 Relay 管理 token，不创建第二 App Server writer。
+   * @param nodeId - 目标 Windows PC 节点标识。
    * @param projectId - 节点声明的项目标识。
    * @param user - 当前 Admin 登录用户。
    * @returns WebSocket 地址、短期 token、到期时间和精确项目目录。
@@ -77,18 +77,11 @@ export class CodexRemoteService {
   }
 
   /**
-   * 从固定 NAS/PC 环境变量构造节点，并过滤缺密钥、缺项目或地址非法的半配置项。
-   * @returns 可安全签发会话的完整节点。
+   * 从固定 PC Relay 环境变量构造唯一节点，并过滤缺密钥、缺项目或地址非法的半配置项。
+   * @returns 可安全签发 Relay 会话的 Windows PC 节点。
    */
   private configuredNodes(): CodexRemoteNode[] {
     const nodes: CodexRemoteNode[] = [];
-    const nas = this.readNode({
-      address: '10.66.66.2',
-      id: 'nas',
-      label: 'Tsukasa NAS',
-      prefix: 'CODEX_REMOTE_NAS',
-    });
-    if (nas) nodes.push(nas);
     const pc = this.readNode({
       address: '10.66.66.4',
       id: 'pc',
@@ -100,7 +93,7 @@ export class CodexRemoteService {
   }
 
   /**
-   * 读取一个固定身份节点，要求 WebSocket 只绑定其 WireGuard 地址且 secret 至少 32 字节。
+   * 读取固定 PC Relay 身份，要求 WebSocket 只绑定其 WireGuard 地址且 secret 至少 32 字节。
    * @param input - 节点固定 ID、标签、WireGuard IPv4 和环境变量前缀。
    * @returns 完整节点；任一配置缺失或非法时为 null。
    */

@@ -20,11 +20,11 @@ describe('CodexRemoteController', () => {
         {
           provide: ConfigService,
           useValue: new ConfigService({
-            CODEX_REMOTE_NAS_PROJECTS_JSON: JSON.stringify([
+            CODEX_REMOTE_PC_PROJECTS_JSON: JSON.stringify([
               { cwd: '/srv/kt', id: 'kt', label: 'KT Workspace' },
             ]),
-            CODEX_REMOTE_NAS_WS_SHARED_SECRET: sharedSecret,
-            CODEX_REMOTE_NAS_WS_URL: 'ws://10.66.66.2:48093',
+            CODEX_REMOTE_PC_WS_SHARED_SECRET: sharedSecret,
+            CODEX_REMOTE_PC_WS_URL: 'ws://10.66.66.4:48095',
           }),
         },
       ],
@@ -57,10 +57,10 @@ describe('CodexRemoteController', () => {
       .expect(200)
       .expect('Cache-Control', 'no-store');
     expect(nodes.body.data).toEqual([
-      expect.objectContaining({ id: 'nas', wsUrl: 'ws://10.66.66.2:48093' }),
+      expect.objectContaining({ id: 'pc', wsUrl: 'ws://10.66.66.4:48095' }),
     ]);
     const response = await request(apiUrl)
-      .post('/codex-remote/nodes/nas/session')
+      .post('/codex-remote/nodes/pc/session')
       .send({ projectId: 'kt' })
       .expect(201)
       .expect('Cache-Control', 'no-store');
@@ -68,7 +68,7 @@ describe('CodexRemoteController', () => {
     expect(response.body.data).toEqual(
       expect.objectContaining({
         project: { cwd: '/srv/kt', id: 'kt', label: 'KT Workspace' },
-        wsUrl: 'ws://10.66.66.2:48093',
+        wsUrl: 'ws://10.66.66.4:48095',
       }),
     );
     const token = response.body.data.token as string;
@@ -78,7 +78,7 @@ describe('CodexRemoteController', () => {
       JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')),
     ).toEqual(
       expect.objectContaining({
-        aud: 'kt-codex-remote-nas',
+        aud: 'kt-codex-remote-pc',
         projectCwd: '/srv/kt',
         projectId: 'kt',
         sub: '2041700000000000002',
@@ -88,7 +88,7 @@ describe('CodexRemoteController', () => {
 
   it('rejects unknown session fields before token issuance', async () => {
     await request(apiUrl)
-      .post('/codex-remote/nodes/nas/session')
+      .post('/codex-remote/nodes/pc/session')
       .send({ projectId: 'kt', unknownField: 'must-not-pass' })
       .expect(400);
   });

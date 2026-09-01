@@ -41,7 +41,7 @@ import { EnvironmentDashboardSelfCheckService } from './environment-dashboard/ap
 import { EnvironmentEventMaterializer } from './environment-dashboard/application/environment-event.materializer';
 import { EnvironmentEventStreamService } from './environment-dashboard/application/environment-event-stream.service';
 import { EnvironmentDashboardController } from './environment-dashboard/presentation/environment-dashboard.controller';
-import { CodexAppServerReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
+import { CodexThreadIndexReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/codex-thread-index-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { EnvironmentReadonlyHttpClient } from './environment-dashboard/infrastructure/adapters/environment-readonly-http.client';
 import { JenkinsReadonlyAdapter } from './environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
@@ -96,7 +96,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentReadonlyHttpClient,
   JenkinsReadonlyAdapter,
   KubernetesReadonlyAdapter,
-  CodexAppServerReadonlyAdapter,
+  CodexThreadIndexReadonlyAdapter,
   HomeAssistantReadonlyAdapter,
   WireguardReadonlyAdapter,
   MihomoReadonlyAdapter,

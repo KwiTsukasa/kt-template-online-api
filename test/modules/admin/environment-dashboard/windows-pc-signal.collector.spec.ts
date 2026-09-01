@@ -2,7 +2,7 @@ import { EnvironmentDashboardConfigService } from '../../../../src/modules/admin
 import { WindowsPcSignalCollector } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/collectors/windows-pc-signal.collector';
 
 describe('WindowsPcSignalCollector', () => {
-  it('projects Sunshine and Codex App Server in design order', async () => {
+  it('projects Sunshine and Codex Thread Index in design order', async () => {
     const sunshine = {
       inspect: jest.fn(async () => ({
         evidence: [],
@@ -16,16 +16,16 @@ describe('WindowsPcSignalCollector', () => {
     const codex = {
       inspect: jest.fn(async () => ({
         evidence: [],
-        id: 'codex-app-server-ready',
-        label: 'Codex App Server',
+        id: 'codex-thread-index-ready',
+        label: 'Codex Thread Index',
         sourceKind: 'live',
         status: 'ok',
-        summary: 'Codex App Server 已就绪',
+        summary: 'Codex Thread Index 已就绪',
       })),
     };
     const collector = new WindowsPcSignalCollector(
       new EnvironmentDashboardConfigService({
-        ENV_DASHBOARD_CODEX_APP_SERVER_URL: 'http://windows.example:48093',
+        ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: 'http://windows.example:48094',
         ENV_DASHBOARD_SUNSHINE_PASSWORD: 'sun-secret',
         ENV_DASHBOARD_SUNSHINE_URL: 'https://windows.example:39000',
         ENV_DASHBOARD_SUNSHINE_USERNAME: 'kwicore',
@@ -44,7 +44,7 @@ describe('WindowsPcSignalCollector', () => {
     });
     expect(services.map((service) => service.id)).toEqual([
       'sunshine',
-      'codex-app-server',
+      'codex-thread-index',
     ]);
     expect(services.every((service) => service.status === 'ok')).toBe(true);
     expect(sunshine.inspect).toHaveBeenCalledTimes(1);

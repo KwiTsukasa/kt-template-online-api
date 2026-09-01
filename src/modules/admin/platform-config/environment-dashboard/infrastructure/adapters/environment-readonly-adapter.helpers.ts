@@ -86,7 +86,7 @@ export function createErrorAdapterSignal(
 }
 
 /**
- * 把 Axios 的认证失败与超时收敛为稳定脱敏摘要，其余异常继续沿用通用错误证据。
+ * 把 Axios 的非成功状态、超时与连接失败收敛为稳定脱敏摘要。
  * @param id - 环境信号稳定标识。
  * @param label - 环境信号展示名称。
  * @param error - 只读 HTTP client 抛出的未知异常。
@@ -106,6 +106,13 @@ export function createReadonlyHttpFailureSignal(
         new Error(`只读认证失败 (HTTP ${httpStatus})`),
       );
     }
+    if (typeof httpStatus === 'number') {
+      return createErrorAdapterSignal(
+        id,
+        label,
+        new Error(`只读观测返回异常状态 (HTTP ${httpStatus})`),
+      );
+    }
     const message = String(error.message || '').toLowerCase();
     if (
       error.code === 'ECONNABORTED' ||
@@ -114,6 +121,7 @@ export function createReadonlyHttpFailureSignal(
     ) {
       return createErrorAdapterSignal(id, label, new Error('只读观测请求超时'));
     }
+    return createErrorAdapterSignal(id, label, new Error('只读观测连接失败'));
   }
   return createErrorAdapterSignal(id, label, error);
 }

@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import type { AddressInfo } from 'node:net';
-import { CodexAppServerReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
+import { CodexThreadIndexReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-thread-index-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { MihomoReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/mihomo-readonly.adapter';
 import { SunshineReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/sunshine-readonly.adapter';
@@ -95,9 +95,17 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
         response.end(JSON.stringify([{ name: 'Desktop' }]));
         return;
       }
-      if (request.method === 'GET' && request.url === '/codex/readyz') {
+      if (request.method === 'GET' && request.url === '/thread-index/readyz') {
         response.writeHead(200, { 'content-type': 'text/plain' });
         response.end('private readiness detail');
+        return;
+      }
+      if (
+        request.method === 'GET' &&
+        request.url === '/thread-index-unavailable/readyz'
+      ) {
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ detail: 'private failure detail' }));
         return;
       }
       if (request.method === 'GET' && request.url === '/r4se/') {
@@ -253,18 +261,19 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
 
     expect(sunshineSignal.status).toBe('ok');
     expect(homeAssistantSignal.status).toBe('degraded');
-    expect(homeAssistantSignal.summary).toMatch(
+    expect(homeAssistantSignal.summary).toBe('只读观测连接失败');
+    expect(JSON.stringify(homeAssistantSignal)).not.toMatch(
       /certificate has expired|self-signed certificate/u,
     );
     expect(JSON.stringify(sunshineSignal)).not.toContain('Desktop');
     expect(JSON.stringify(sunshineSignal)).not.toContain('sun-local-secret');
   });
 
-  it('uses fixed read-only paths for Codex App Server, R4SE WireGuard, and Mihomo', async () => {
+  it('uses fixed read-only paths for Codex Thread Index, R4SE WireGuard, and Mihomo', async () => {
     const http = new EnvironmentReadonlyHttpClient({ timeoutMs: 1000 });
-    const codex = new CodexAppServerReadonlyAdapter(
+    const codex = new CodexThreadIndexReadonlyAdapter(
       new EnvironmentDashboardConfigService({
-        ENV_DASHBOARD_CODEX_APP_SERVER_URL: `${baseUrl}/codex/`,
+        ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: `${baseUrl}/thread-index/`,
       }),
       http,
     );
@@ -295,7 +304,10 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
     ]).toEqual(['ok', 'ok', 'ok']);
     expect(requests).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: 'GET', url: '/codex/readyz' }),
+        expect.objectContaining({
+          method: 'GET',
+          url: '/thread-index/readyz',
+        }),
         expect.objectContaining({ method: 'GET', url: '/r4se/' }),
         expect.objectContaining({ method: 'GET', url: '/mihomo/version' }),
         expect.objectContaining({ method: 'GET', url: '/mihomo/configs' }),
@@ -309,5 +321,26 @@ describe('Home Assistant and Sunshine real readonly HTTP boundary', () => {
       'private router page',
     );
     expect(JSON.stringify(mihomoSignal)).not.toContain('mihomo-local-secret');
+  });
+
+  it('maps a real Thread Index non-2xx response to a stable sanitized summary', async () => {
+    const http = new EnvironmentReadonlyHttpClient({ timeoutMs: 1000 });
+    const codex = new CodexThreadIndexReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: `${baseUrl}/thread-index-unavailable/`,
+      }),
+      http,
+    );
+
+    const signal = await codex.inspect();
+    const serialized = JSON.stringify(signal);
+
+    expect(signal).toMatchObject({
+      sourceKind: 'derived',
+      status: 'degraded',
+      summary: '只读观测返回异常状态 (HTTP 503)',
+    });
+    expect(serialized).not.toContain('Request failed');
+    expect(serialized).not.toContain('private failure detail');
   });
 });

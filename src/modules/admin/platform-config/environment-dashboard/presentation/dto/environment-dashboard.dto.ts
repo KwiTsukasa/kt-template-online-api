@@ -24,10 +24,13 @@ export class EnvironmentEvidenceDto {
 }
 
 export class EnvironmentSignalDto {
-  @ApiProperty({ description: '稳定信号 ID' })
+  @ApiProperty({
+    description: '稳定信号 ID',
+    example: 'codex-thread-index-ready',
+  })
   id!: string;
 
-  @ApiProperty({ description: '信号展示名称' })
+  @ApiProperty({ description: '信号展示名称', example: 'Codex Thread Index' })
   label!: string;
 
   @ApiProperty({ description: '信号健康状态', example: 'unwired' })
@@ -50,10 +53,10 @@ export class EnvironmentSignalDto {
 }
 
 export class EnvironmentServiceDto {
-  @ApiProperty({ description: '稳定服务 ID' })
+  @ApiProperty({ description: '稳定服务 ID', example: 'codex-thread-index' })
   id!: string;
 
-  @ApiProperty({ description: '服务展示名称' })
+  @ApiProperty({ description: '服务展示名称', example: 'Codex Thread Index' })
   label!: string;
 
   @ApiProperty({ description: '服务聚合健康状态' })

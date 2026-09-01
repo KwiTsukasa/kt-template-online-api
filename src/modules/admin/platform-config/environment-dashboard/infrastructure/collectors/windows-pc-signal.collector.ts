@@ -4,7 +4,7 @@ import {
   unwiredEvidence,
 } from '../environment-dashboard-evidence.mapper';
 import { EnvironmentDashboardConfigService } from '../environment-dashboard-config.service';
-import { CodexAppServerReadonlyAdapter } from '../adapters/codex-app-server-readonly.adapter';
+import { CodexThreadIndexReadonlyAdapter } from '../adapters/codex-thread-index-readonly.adapter';
 import { SunshineReadonlyAdapter } from '../adapters/sunshine-readonly.adapter';
 import {
   mapSiteStatus,
@@ -29,11 +29,11 @@ export class WindowsPcSignalCollector {
     @Optional()
     private readonly sunshineAdapter?: SunshineReadonlyAdapter,
     @Optional()
-    private readonly codexAppServerAdapter?: CodexAppServerReadonlyAdapter,
+    private readonly codexThreadIndexAdapter?: CodexThreadIndexReadonlyAdapter,
   ) {}
 
   /**
-   * 并行采集 Windows PC 上 Sunshine 与 Codex App Server 的固定只读信号。
+   * 并行采集 Windows PC 上 Sunshine 与 Codex Thread Index 的固定只读信号。
    * @param context - 提供本轮站点快照的统一观测时间。
    * @returns 只包含两个已批准 Windows 服务的单节点站点。
    */
@@ -55,12 +55,12 @@ export class WindowsPcSignalCollector {
         this.sunshineAdapter,
       ),
       this.createAdapterService(
-        'codex-app-server',
-        'Codex App Server',
-        'codex-app-server-ready',
-        'Codex App Server',
-        ['ENV_DASHBOARD_CODEX_APP_SERVER_URL'],
-        this.codexAppServerAdapter,
+        'codex-thread-index',
+        'Codex Thread Index',
+        'codex-thread-index-ready',
+        'Codex Thread Index',
+        ['ENV_DASHBOARD_CODEX_THREAD_INDEX_URL'],
+        this.codexThreadIndexAdapter,
       ),
     ]);
     const node = this.createNode('windows-pc-node', 'Windows PC', services);

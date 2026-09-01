@@ -1,4 +1,4 @@
-import { CodexAppServerReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-app-server-readonly.adapter';
+import { CodexThreadIndexReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/codex-thread-index-readonly.adapter';
 import { HomeAssistantReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/home-assistant-readonly.adapter';
 import { JenkinsReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/adapters/kubernetes-readonly.adapter';
@@ -40,7 +40,7 @@ describe('environment remote readonly adapters', () => {
   it.each([
     ['Jenkins', new JenkinsReadonlyAdapter(config)],
     ['K8s', new KubernetesReadonlyAdapter(config)],
-    ['Codex App Server', new CodexAppServerReadonlyAdapter(config)],
+    ['Codex Thread Index', new CodexThreadIndexReadonlyAdapter(config)],
     ['WireGuard', new WireguardReadonlyAdapter(config)],
     ['Mihomo', new MihomoReadonlyAdapter(config)],
     ['Home Assistant', new HomeAssistantReadonlyAdapter(config)],
@@ -57,7 +57,7 @@ describe('environment remote readonly adapters', () => {
   );
 
   it('keeps credential keys visible as missing config without exposing values', async () => {
-    const codexSignal = await new CodexAppServerReadonlyAdapter(
+    const codexSignal = await new CodexThreadIndexReadonlyAdapter(
       config,
     ).inspect();
     const mihomoSignal = await new MihomoReadonlyAdapter(config).inspect();
@@ -67,7 +67,7 @@ describe('environment remote readonly adapters', () => {
     const sunshineSignal = await new SunshineReadonlyAdapter(config).inspect();
 
     expect(codexSignal.evidence[0].metadata?.missingConfigKeys).toContain(
-      'ENV_DASHBOARD_CODEX_APP_SERVER_URL',
+      'ENV_DASHBOARD_CODEX_THREAD_INDEX_URL',
     );
     expect(mihomoSignal.evidence[0].metadata?.missingConfigKeys).toContain(
       'ENV_DASHBOARD_R4SE_MIHOMO_SECRET',
@@ -195,12 +195,12 @@ describe('environment remote readonly adapters', () => {
     expect(JSON.stringify(signal)).not.toContain('k8s-token');
   });
 
-  it('Codex App Server reads only the fixed readiness path and drops its body', async () => {
+  it('Codex Thread Index reads only the fixed readiness path and drops its body', async () => {
     const http = createHttpMock();
     http.get.mockResolvedValue(httpResponse('private readiness detail', 200));
-    const adapter = new CodexAppServerReadonlyAdapter(
+    const adapter = new CodexThreadIndexReadonlyAdapter(
       new EnvironmentDashboardConfigService({
-        ENV_DASHBOARD_CODEX_APP_SERVER_URL: 'http://windows.example:48093',
+        ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: 'http://windows.example:48094',
       }),
       http,
     );
@@ -208,12 +208,12 @@ describe('environment remote readonly adapters', () => {
     const signal = await adapter.inspect();
 
     expect(http.get).toHaveBeenCalledWith(
-      'http://windows.example:48093/readyz',
+      'http://windows.example:48094/readyz',
     );
     expect(http.head).not.toHaveBeenCalled();
     expect(http.request).not.toHaveBeenCalled();
     expect(signal).toMatchObject({
-      id: 'codex-app-server-ready',
+      id: 'codex-thread-index-ready',
       sourceKind: 'live',
       status: 'ok',
     });
@@ -418,6 +418,72 @@ describe('environment remote readonly adapters', () => {
       expect(JSON.stringify(signal)).not.toContain('ha-secret');
     },
   );
+
+  it.each([404, 409, 500])(
+    'returns stable Chinese evidence for readonly HTTP %s without leaking Axios details',
+    async (status) => {
+      const http = createHttpMock();
+      http.get.mockRejectedValue({
+        config: {
+          headers: { Authorization: 'Bearer private-secret' },
+          url: 'http://private.example/readyz',
+        },
+        isAxiosError: true,
+        message: `Request failed with status code ${status}: private-secret`,
+        response: {
+          data: { detail: 'private-response' },
+          status,
+        },
+      });
+      const adapter = new CodexThreadIndexReadonlyAdapter(
+        new EnvironmentDashboardConfigService({
+          ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: 'http://windows.example:48094',
+        }),
+        http,
+      );
+
+      const signal = await adapter.inspect();
+      const serialized = JSON.stringify(signal);
+
+      expect(signal).toMatchObject({
+        sourceKind: 'derived',
+        status: 'degraded',
+        summary: `只读观测返回异常状态 (HTTP ${status})`,
+      });
+      expect(serialized).not.toContain('Request failed');
+      expect(serialized).not.toContain('private-secret');
+      expect(serialized).not.toContain('private-response');
+      expect(serialized).not.toContain('private.example');
+    },
+  );
+
+  it('returns stable Chinese evidence for Axios connection failures', async () => {
+    const http = createHttpMock();
+    http.get.mockRejectedValue({
+      code: 'ECONNREFUSED',
+      config: { url: 'http://private.example/readyz?token=private-secret' },
+      isAxiosError: true,
+      message: 'connect ECONNREFUSED private-secret',
+    });
+    const adapter = new CodexThreadIndexReadonlyAdapter(
+      new EnvironmentDashboardConfigService({
+        ENV_DASHBOARD_CODEX_THREAD_INDEX_URL: 'http://windows.example:48094',
+      }),
+      http,
+    );
+
+    const signal = await adapter.inspect();
+    const serialized = JSON.stringify(signal);
+
+    expect(signal).toMatchObject({
+      sourceKind: 'derived',
+      status: 'degraded',
+      summary: '只读观测连接失败',
+    });
+    expect(serialized).not.toContain('ECONNREFUSED');
+    expect(serialized).not.toContain('private-secret');
+    expect(serialized).not.toContain('private.example');
+  });
 
   it('returns stable degraded evidence for Sunshine timeouts without leaking credentials', async () => {
     const http = createHttpMock();

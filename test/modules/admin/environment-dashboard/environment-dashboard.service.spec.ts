@@ -27,7 +27,7 @@ describe('EnvironmentDashboardService', () => {
         'nas-prod',
         'r4se',
         'sunshine',
-        'codex-app-server',
+        'codex-thread-index',
         'nas-api',
         'home-assistant',
         'bot-core',
@@ -41,7 +41,7 @@ describe('EnvironmentDashboardService', () => {
       .map((serviceItem) => serviceItem.id);
     expect(serviceIds).toEqual([
       'sunshine',
-      'codex-app-server',
+      'codex-thread-index',
       'nas-api',
       'home-assistant',
       'bot-core',

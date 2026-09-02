@@ -292,6 +292,10 @@ trim.media 可见性由独立的 `media-scrape-validation` 模块校验；其
 事实，并原子创建 Series、主 Work、全部正集数 Season 与连续 Episode。官方季列表缺失、
 越界或集数不可解析时返回冲突且零目录/数据库写入；movie/theatrical 不创建 Season。
 
+RSS 轮询先用订阅 `includePattern` 过滤发布组，再支持从 ` - NN`、`SxxENN`、`EPNN`
+以及一至三位独立 `[NN]` 提取单集编号。批量范围 `[01-10]` 及 `[2022]`、`[1080]` 等四位元数据
+保持未命中；`ignored` item 属于可重试状态，下一轮会按当前解析合同重新计算。
+
 #### 媒体治理 Task
 
 | Method   | Path                                                              | Purpose                            |

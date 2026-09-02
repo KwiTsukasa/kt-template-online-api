@@ -289,6 +289,10 @@ NAS 刮削状态。Series/Work 自动同步只读取已机械关闭 Task 的固�
 主 Work、全部正集数 Season 与连续 Episode；季列表不可用或为空时失败关闭，不再产生
 `mediaType=tv` 但零季零集的空壳。电影和剧场版仍保持无伪季 Work。
 
+RSS 轮询先应用订阅的发布组过滤，再从 ` - NN`、`SxxENN`、`EPNN` 或一至三位独立
+`[NN]` 中提取单集编号；`[01-10]` 批量范围及 `[2022]`、`[1080]` 等四位元数据不会被当成单集。
+被忽略条目会在后续轮询重新计算，因此解析规则修复不需要迁移历史 RSS item。
+
 机械治理、Series/Work/RSS 和独立刮削由 17 张 TypeORM 表持久化。
 `sql/media-governance-init.sql` 用于新安装；
 `sql/media-governance-mechanical-scrape-split.sql` 由现有

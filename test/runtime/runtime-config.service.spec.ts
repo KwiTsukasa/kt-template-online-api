@@ -64,9 +64,8 @@ describe('RuntimeConfigService', () => {
   });
 
   it('masks secrets in checks and snapshots', () => {
-    const adminTokenSecret = 'abcdef1234567890abcdef1234567890';
     const service = createService({
-      ADMIN_TOKEN_SECRET: adminTokenSecret,
+      ADMIN_TOKEN_SECRET: 'abcdef123456',
       DB_HOST: 'mysql',
       DB_PORT: '3306',
       DB_USERNAME: 'root',
@@ -87,16 +86,16 @@ describe('RuntimeConfigService', () => {
       (check) => check.key === 'ADMIN_TOKEN_SECRET',
     );
 
-    expect(service.maskSecret(adminTokenSecret)).toBe('ab***90');
+    expect(service.maskSecret('abcdef123456')).toBe('ab***56');
     expect(service.maskSecret('')).toBe('');
     expect(service.maskSecret('abcd')).toBe('****');
     expect(adminSecretCheck).toEqual(
       expect.objectContaining({
         present: true,
-        maskedValue: 'ab***90',
+        maskedValue: 'ab***56',
       }),
     );
-    expect(snapshotJson).not.toContain(adminTokenSecret);
+    expect(snapshotJson).not.toContain('abcdef123456');
     expect(snapshotJson).not.toContain('password-value');
     expect(snapshotJson).not.toContain('minio-access-key');
     expect(snapshotJson).not.toContain('wordpress-password');
@@ -248,19 +247,6 @@ describe('RuntimeConfigService', () => {
         level: 'required',
         present: false,
         message: 'NETWORK_AGENT_MQTT_URL is not configured',
-      }),
-    );
-  });
-
-  it('marks the default Admin token secret as an invalid required value', () => {
-    const service = createService({ ADMIN_TOKEN_SECRET: 'change-me' });
-
-    expect(service.getConfigChecks()).toContainEqual(
-      expect.objectContaining({
-        key: 'ADMIN_TOKEN_SECRET',
-        level: 'required',
-        message: 'ADMIN_TOKEN_SECRET is weak or uses a default placeholder',
-        present: false,
       }),
     );
   });

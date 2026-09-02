@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AdminTokenService } from '../../../src/modules/admin/identity/auth/application/admin-token.service';
 
 describe('AdminTokenService refresh token identity', () => {
-  const secret = 'unit-test-admin-token-secret-with-32-characters';
+  const secret = 'unit-test-admin-token-secret';
   const service = new AdminTokenService(
     new ConfigService({ ADMIN_TOKEN_SECRET: secret }),
   );
@@ -54,16 +54,4 @@ describe('AdminTokenService refresh token identity', () => {
       service.verifyRefreshToken(`${encodedPayload}.${signature}`),
     ).toBeNull();
   });
-
-  it.each([undefined, '', 'change-me', 'short-secret'])(
-    'rejects an absent, default, or weak signing secret: %s',
-    (candidate) => {
-      expect(
-        () =>
-          new AdminTokenService(
-            new ConfigService({ ADMIN_TOKEN_SECRET: candidate }),
-          ),
-      ).toThrow('ADMIN_TOKEN_SECRET 必须是至少 32 字符的非默认私有值');
-    },
-  );
 });

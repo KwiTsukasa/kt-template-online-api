@@ -162,7 +162,7 @@ export function parseMediaGovernanceRss(
 }
 
 /**
- * 按管理员提供的捕获组或内置发布名模式提取集号，避免把年份和分辨率误作集号。
+ * 按管理员捕获组、发布名或一至三位独立方括号提取集号，并让四位年份与分辨率保持未命中。
  * @param title - RSS 条目标题。
  * @param episodePattern - 可选正则；优先读取命名组 `episode`，否则读取第一捕获组。
  * @returns 1–2000 的集号；未命中或越界时返回 `null`。
@@ -177,6 +177,7 @@ export function parseMediaGovernanceEpisodeNumber(
   patterns.push(/\s-\s(\d{1,4})(?:\s|\[|\()/u);
   patterns.push(/\bS\d{1,2}E(?:P)?\s*(\d{1,4})\b/iu);
   patterns.push(/\bE(?:P)?\s*(\d{1,4})\b/iu);
+  patterns.push(/\[(\d{1,3})\]/u);
   for (const pattern of patterns) {
     const match = pattern.exec(title);
     const value = match?.groups?.episode ?? match?.[1];

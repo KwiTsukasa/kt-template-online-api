@@ -61,6 +61,29 @@ describe('media governance RSS parser', () => {
     ).toEqual([41, 42, 43, 44, 45]);
   });
 
+  it('parses standalone bracket episodes without treating years or resolution as episodes', () => {
+    const titles = Array.from({ length: 10 }, (_item, index) => {
+      const episode = String(index + 1).padStart(2, '0');
+      return `[猎户不鸽发布组] 赛博朋克：边缘行者 / Cyberpunk Edgerunners [${episode}] [1080p] [网飞2022年9月番]`;
+    });
+
+    expect(
+      titles.map((title) => parseMediaGovernanceEpisodeNumber(title, null)),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(
+      parseMediaGovernanceEpisodeNumber(
+        '[Archive] Cyberpunk Edgerunners [2022] [1080]',
+        null,
+      ),
+    ).toBeNull();
+    expect(
+      parseMediaGovernanceEpisodeNumber(
+        '[DBD-Raws] Cyberpunk Edgerunners [01-10TV全集] [1080P]',
+        null,
+      ),
+    ).toBeNull();
+  });
+
   it('rejects XML entity declarations before parsing', () => {
     expect(() =>
       parseMediaGovernanceRss(

@@ -100,6 +100,15 @@ def buildEnvFileValidationScript(String envFile) {
       echo "Update the private .env.production used by Jenkins before deploying."
       exit 1
     fi
+    admin_secret_count=\$(grep -c '^ADMIN_TOKEN_SECRET=' "\$ENV_FILE")
+    admin_secret=\$(sed -n 's/^ADMIN_TOKEN_SECRET=//p' "\$ENV_FILE" | tail -n 1)
+    if [ "\$admin_secret_count" -ne 1 ] ||
+      [ "\${#admin_secret}" -lt 32 ] ||
+      [ "\$admin_secret" = 'change-me' ] ||
+      [ "\$admin_secret" = 'kt-template-online-admin-token-secret' ]; then
+      echo 'ADMIN_TOKEN_SECRET must be one private value with at least 32 characters.'
+      exit 1
+    fi
   """.stripIndent()
 }
 

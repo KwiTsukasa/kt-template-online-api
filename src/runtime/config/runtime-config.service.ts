@@ -12,6 +12,7 @@ import {
   RuntimeSafeConfigSnapshot,
   RuntimeSecurityConfig,
 } from './runtime-config.types';
+import { isSecureAdminTokenSecret } from './admin-token-secret.policy';
 
 const REQUIRED_CONFIG_KEYS = [
   'DB_HOST',
@@ -346,7 +347,12 @@ export class RuntimeConfigService {
   ): RuntimeConfigCheck {
     const value = this.configService.get(key);
     const text = this.toolsService.toSecretText(value);
-    const present = !!text;
+    const present = (() => {
+      if (key === 'ADMIN_TOKEN_SECRET') {
+        return isSecureAdminTokenSecret(text);
+      }
+      return !!text;
+    })();
 
     return {
       key,
@@ -361,6 +367,9 @@ export class RuntimeConfigService {
       message: (() => {
         if (present) {
           return undefined;
+        }
+        if (key === 'ADMIN_TOKEN_SECRET' && !!text) {
+          return `${key} is weak or uses a default placeholder`;
         }
         return `${key} is not configured`;
       })(),

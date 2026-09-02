@@ -6,13 +6,20 @@ import type {
   AdminRefreshTokenPayload,
   AdminTokenPayload,
 } from '@/modules/admin/contract/admin.types';
+import { requireSecureAdminTokenSecret } from '@/runtime/config/admin-token-secret.policy';
 
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const TOKEN_ID_PATTERN = /^[a-f0-9]{32}$/;
 
 @Injectable()
 export class AdminTokenService {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly tokenSecret: string;
+
+  constructor(configService: ConfigService) {
+    this.tokenSecret = requireSecureAdminTokenSecret(
+      configService.get<string>('ADMIN_TOKEN_SECRET'),
+    );
+  }
 
   /**
    * 根据`user`处理sign访问权限令牌。
@@ -154,10 +161,9 @@ export class AdminTokenService {
    * @returns sign载荷。
    */
   private signPayload(payload: string) {
-    const secret =
-      this.configService.get<string>('ADMIN_TOKEN_SECRET') ||
-      'kt-template-online-admin-token-secret';
-    return createHmac('sha256', secret).update(payload).digest('base64url');
+    return createHmac('sha256', this.tokenSecret)
+      .update(payload)
+      .digest('base64url');
   }
 
   /**

@@ -590,4 +590,35 @@ describe('NetworkPortForwardGroupService', () => {
     expect(harness.state.desiredRevision).toBe('3');
     expect(harness.mqtt.requestDesiredPublish).not.toHaveBeenCalled();
   });
+
+  it('switches asymmetric UDP NATMap independently from the Keeper path', async () => {
+    const group = createGroup({
+      externalPort: 51_825,
+      internalPort: 51_820,
+      protocolMode: 'udp',
+      targetIpv4: '192.168.31.81',
+    });
+    const udp = createMapping({
+      externalPort: 51_825,
+      internalPort: 51_820,
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: false,
+      protocol: 'udp',
+      syncStatus: 'synced',
+      targetIpv4: '192.168.31.81',
+    });
+    const harness = createHarness([group], [udp]);
+
+    await expect(harness.service.enableUdpNatmap('200')).resolves.toMatchObject(
+      { natmapDesiredEnabled: true, protocol: 'udp' },
+    );
+    expect(udp.keeperDesiredEnabled).toBe(false);
+    udp.syncStatus = 'synced';
+    await expect(
+      harness.service.disableUdpNatmap('200'),
+    ).resolves.toMatchObject({ natmapDesiredEnabled: false, protocol: 'udp' });
+    await expect(harness.service.enableKeeper('200')).rejects.toMatchObject({
+      status: 400,
+    });
+  });
 });

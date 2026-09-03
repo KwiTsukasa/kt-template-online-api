@@ -35,6 +35,9 @@ import {
 
 const DEFAULT_AGENT_ID = 'nas-main';
 const DEFAULT_TARGET_IPV4 = '192.168.31.224';
+const WIREGUARD_TARGET_IPV4 = '192.168.31.81';
+const WIREGUARD_NATMAP_EXTERNAL_PORT = 51_825;
+const WIREGUARD_TARGET_PORT = 51_820;
 
 type GroupTransactionResult = {
   channels: NetworkPortForward[];
@@ -259,7 +262,7 @@ export class NetworkPortForwardGroupService {
       }
       channel.lastErrorCode = null;
       channel.lastErrorMessage = null;
-      if (protocol === 'tcp') {
+      if (protocol === 'tcp' || this.isUdpNatmapChannel(channel)) {
         channel.natmapLastErrorCode = null;
         channel.natmapLastErrorMessage = null;
       } else {
@@ -278,16 +281,51 @@ export class NetworkPortForwardGroupService {
    * @returns NATMap 转发。
    */
   async enableNatmap(groupId: string, expectedDesiredRevision?: string) {
+    return this.enableNatmapTarget(groupId, 'tcp', expectedDesiredRevision);
+  }
+
+  /**
+   * 为内外端口不同的 UDP 通道启用受管 NATMap forward，Keeper 通道保持独立。
+   * @param groupId - 用于精确定位逻辑组的标识。
+   * @param expectedDesiredRevision - 可选的通道并发修订前置条件。
+   * @returns 启用请求后的 UDP NATMap 通道视图。
+   */
+  async enableUdpNatmap(groupId: string, expectedDesiredRevision?: string) {
+    return this.enableNatmapTarget(groupId, 'udp', expectedDesiredRevision);
+  }
+
+  /**
+   * 按协议启用 NATMap，并让 UDP 仅接受与 Keeper 互斥的不同端口关系。
+   * @param groupId - 用于精确定位逻辑组的标识。
+   * @param protocol - 目标 NATMap 协议通道。
+   * @param expectedDesiredRevision - 可选的通道并发修订前置条件。
+   * @returns 启用请求后的目标协议通道视图。
+   */
+  private enableNatmapTarget(
+    groupId: string,
+    protocol: PortForwardProtocol,
+    expectedDesiredRevision?: string,
+  ) {
     return this.mutateChannel(
       groupId,
-      'tcp',
+      protocol,
       async (group, channel, channels) => {
         if (channel.natmapDesiredEnabled) return false;
         this.assertMechanismTransitionAllowed(channels);
-        this.assertReleaseMutation({
-          current: this.releaseState(group, true),
-          kind: 'natmap-enable',
-        });
+        if (protocol === 'tcp') {
+          this.assertReleaseMutation({
+            current: this.releaseState(group, true),
+            kind: 'natmap-enable',
+          });
+        } else {
+          this.assertUdpNatmapPorts(channel);
+          if (channel.keeperDesiredEnabled) {
+            throwVbenError(
+              '请先停用 UDP Keeper 再启用 UDP NATMap',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        }
         channel.natmapDesiredEnabled = true;
         channel.syncStatus = 'pending';
         return true;
@@ -304,17 +342,46 @@ export class NetworkPortForwardGroupService {
    * @returns NATMap 转发。
    */
   async disableNatmap(groupId: string, expectedDesiredRevision?: string) {
+    return this.disableNatmapTarget(groupId, 'tcp', expectedDesiredRevision);
+  }
+
+  /**
+   * 停用 UDP NATMap 并撤下已发布端点，保留同一 UDP 通道身份。
+   * @param groupId - 用于精确定位逻辑组的标识。
+   * @param expectedDesiredRevision - 可选的通道并发修订前置条件。
+   * @returns 停用请求后的 UDP NATMap 通道视图。
+   */
+  async disableUdpNatmap(groupId: string, expectedDesiredRevision?: string) {
+    return this.disableNatmapTarget(groupId, 'udp', expectedDesiredRevision);
+  }
+
+  /**
+   * 按协议停用 NATMap，并仅对 TCP 继续执行既有发布策略门禁。
+   * @param groupId - 用于精确定位逻辑组的标识。
+   * @param protocol - 目标 NATMap 协议通道。
+   * @param expectedDesiredRevision - 可选的通道并发修订前置条件。
+   * @returns 停用请求后的目标协议通道视图。
+   */
+  private disableNatmapTarget(
+    groupId: string,
+    protocol: PortForwardProtocol,
+    expectedDesiredRevision?: string,
+  ) {
     return this.mutateChannel(
       groupId,
-      'tcp',
+      protocol,
       async (group, channel, channels) => {
         if (!channel.natmapDesiredEnabled) return false;
         this.assertMechanismTransitionAllowed(channels);
-        this.assertReleaseMutation({
-          after: this.releaseState(group, false),
-          before: this.releaseState(group, true),
-          kind: 'natmap-disable',
-        });
+        if (protocol === 'tcp') {
+          this.assertReleaseMutation({
+            after: this.releaseState(group, false),
+            before: this.releaseState(group, true),
+            kind: 'natmap-disable',
+          });
+        } else {
+          this.assertUdpNatmapPorts(channel);
+        }
         channel.natmapDesiredEnabled = false;
         channel.syncStatus = 'pending';
         this.withdrawCurrentEndpoint(channel);
@@ -474,6 +541,9 @@ export class NetworkPortForwardGroupService {
       if (protocol === 'tcp') {
         return 'tcp_natmap';
       }
+      if (this.isUdpNatmapChannel(channel)) {
+        return 'udp_natmap';
+      }
       return 'udp_stun';
     })();
     const [items, total] = await this.historyRepository.findAndCount({
@@ -528,7 +598,12 @@ export class NetworkPortForwardGroupService {
         name,
         protocolMode: input.protocolMode,
         remark: input.remark?.trim() || null,
-        targetIpv4: state.targetIpv4,
+        targetIpv4: this.targetIpv4ForGroup(
+          input.protocolMode,
+          input.externalPort,
+          input.internalPort,
+          state.targetIpv4,
+        ),
       });
       await groupRepository.save(group);
       const channels = protocols.map((protocol) =>
@@ -675,6 +750,12 @@ export class NetworkPortForwardGroupService {
     group.externalPort = externalPort;
     group.internalPort = internalPort;
     group.protocolMode = protocolMode;
+    group.targetIpv4 = this.targetIpv4ForGroup(
+      protocolMode,
+      externalPort,
+      internalPort,
+      state.targetIpv4,
+    );
     for (const channel of channels) {
       if (authorityPayloadChanged) changedChannels.add(channel);
       channel.name = group.name;
@@ -1034,6 +1115,66 @@ export class NetworkPortForwardGroupService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  /**
+   * 要求 UDP NATMap 使用不同的外层 bind 与内层固定服务端口，避免与 Keeper 所有权重叠。
+   * @param channel - 待启用 UDP NATMap 的持久通道。
+   * @throws 当内外端口相同时抛出 400 业务错误。
+   */
+  private assertUdpNatmapPorts(channel: NetworkPortForward): void {
+    if (
+      channel.externalPort !== WIREGUARD_NATMAP_EXTERNAL_PORT ||
+      channel.internalPort !== WIREGUARD_TARGET_PORT
+    ) {
+      throwVbenError(
+        'UDP NATMap 仅允许 WireGuard 51825 → 51820 端口对',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * 以精确端口和目标识别本地配置绑定的 UDP NATMap 通道，禁用态仍保持机制身份。
+   * @param channel - 待分类的 UDP 通道。
+   * @returns 协议为 UDP 且内外端口不同时返回 true。
+   */
+  private isUdpNatmapChannel(channel: NetworkPortForward): boolean {
+    return (
+      channel.protocol === 'udp' &&
+      channel.externalPort === WIREGUARD_NATMAP_EXTERNAL_PORT &&
+      channel.internalPort === WIREGUARD_TARGET_PORT &&
+      channel.targetIpv4 === WIREGUARD_TARGET_IPV4
+    );
+  }
+
+  /**
+   * 把唯一 WireGuard UDP NATMap 端口对绑定到 R4SE，其余通道继续使用 Agent 的 NAS 目标。
+   * @param protocolMode - 逻辑组协议模式。
+   * @param externalPort - 外层 NATMap bind 端口。
+   * @param internalPort - 内层服务目标端口。
+   * @param defaultTarget - 当前 Agent 配置的 NAS 目标 IPv4。
+   * @returns 该逻辑组应展示和持久化的受信目标 IPv4。
+   */
+  private targetIpv4ForGroup(
+    protocolMode: TcpProtocolMode,
+    externalPort: number,
+    internalPort: number,
+    defaultTarget: string,
+  ): string {
+    const isWireGuardPortPair =
+      externalPort === WIREGUARD_NATMAP_EXTERNAL_PORT &&
+      internalPort === WIREGUARD_TARGET_PORT;
+    if (isWireGuardPortPair && protocolMode !== 'udp') {
+      throwVbenError(
+        'WireGuard UDP NATMap 端口对只允许 UDP 协议',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (isWireGuardPortPair) {
+      return WIREGUARD_TARGET_IPV4;
+    }
+    return defaultTarget;
   }
 
   /**

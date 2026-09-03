@@ -562,14 +562,14 @@ function createV2Harness(): V2MqttHarness {
 }
 
 function v2Endpoint(
-  mechanism: 'tcp_natmap' | 'udp_stun',
+  mechanism: 'tcp_natmap' | 'udp_natmap' | 'udp_stun',
   overrides: Record<string, unknown> = {},
 ) {
   return {
     mechanism,
     observedAt: '2099-07-27T00:00:00.000Z',
-    publicIpv4: mechanism === 'tcp_natmap' ? '8.8.8.8' : '8.8.4.4',
-    publicPort: mechanism === 'tcp_natmap' ? 45101 : 45102,
+    publicIpv4: mechanism === 'udp_stun' ? '8.8.4.4' : '8.8.8.8',
+    publicPort: mechanism === 'udp_stun' ? 45102 : 45101,
     validatedAt: '2099-07-27T00:00:05.000Z',
     validUntil: '2099-07-27T00:00:45.000Z',
     ...overrides,
@@ -613,6 +613,34 @@ function v2Reported(
         natmapStatus: present ? 'active' : 'disabled',
         protocol: 'tcp',
         routerPresent: present,
+        syncStatus: 'synced',
+        ...channelOverrides[channel.id],
+      };
+    }
+    if (
+      channel.externalPort === 51_825 &&
+      channel.internalPort === 51_820 &&
+      channel.targetIpv4 === '192.168.31.81'
+    ) {
+      const endpoint = v2Endpoint('udp_natmap');
+      return {
+        appliedDesiredDigest: desiredChannel.channelDesiredDigest,
+        appliedDesiredRevision: desiredChannel.channelDesiredRevision,
+        ...(present
+          ? {
+              candidateEndpoint: endpoint,
+              currentEndpoint: endpoint,
+              instanceGeneration: 'generation-udp',
+              lastObservedEndpoint: endpoint,
+            }
+          : {}),
+        channelId: channel.id,
+        desiredPresence: channel.desiredPresence,
+        groupId: channel.groupId,
+        natmapDesiredEnabled: channel.natmapDesiredEnabled,
+        natmapStatus: present ? 'active' : 'disabled',
+        protocol: 'udp',
+        routerPresent: false,
         syncStatus: 'synced',
         ...channelOverrides[channel.id],
       };
@@ -2048,6 +2076,32 @@ describe('NetworkAgentMqttService', () => {
   });
 
   describe('MQTT v2 reported endpoint lifecycle', () => {
+    it('publishes UDP NATMap without claiming NAS router or helper ownership', async () => {
+      const harness = createV2Harness();
+      const udp = harness.channels[1];
+      udp.externalPort = 51_825;
+      udp.internalPort = 51_820;
+      udp.keeperDesiredEnabled = false;
+      udp.keeperStatus = 'disabled';
+      udp.natmapDesiredEnabled = true;
+      udp.natmapStatus = 'starting';
+      udp.targetIpv4 = '192.168.31.81';
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+
+      expect(udp).toMatchObject({
+        candidatePublicIpv4: '8.8.8.8',
+        currentPublicIpv4: '8.8.8.8',
+        currentPublicPort: 45101,
+        keeperStatus: 'disabled',
+        natmapStatus: 'active',
+        syncStatus: 'synced',
+      });
+    });
+
     it('publishes a direct TCP endpoint only with confirmed NAS reply routing', async () => {
       const harness = createV2Harness();
       const tcp = harness.channels[0];

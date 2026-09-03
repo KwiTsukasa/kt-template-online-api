@@ -210,6 +210,54 @@ export class NetworkPortForwardGroupController {
   }
 
   /**
+   * 启用逻辑组的 UDP NATMap forward，并保留 Keeper 作为互斥机制。
+   * @param params - 包含目标逻辑组 ID 的路由参数。
+   * @param body - 可选的通道 desiredRevision 并发前置条件。
+   * @param response - 接收禁止缓存响应头的当前 HTTP 响应。
+   * @returns 启用后的 UDP NATMap 通道状态。
+   */
+  @Post(':groupId/channels/udp/natmap/enable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '启用 UDP NATMap' })
+  async enableUdpNatmap(
+    @Param() params: NetworkPortForwardGroupParamsDto,
+    @Body() body: NetworkPortForwardGroupChannelMutationDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.enableUdpNatmap(
+        params.groupId,
+        body.expectedDesiredRevision,
+      ),
+    );
+  }
+
+  /**
+   * 停用逻辑组的 UDP NATMap forward，并撤下其公网端点。
+   * @param params - 包含目标逻辑组 ID 的路由参数。
+   * @param body - 可选的通道 desiredRevision 并发前置条件。
+   * @param response - 接收禁止缓存响应头的当前 HTTP 响应。
+   * @returns 停用后的 UDP NATMap 通道状态。
+   */
+  @Post(':groupId/channels/udp/natmap/disable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '停用 UDP NATMap' })
+  async disableUdpNatmap(
+    @Param() params: NetworkPortForwardGroupParamsDto,
+    @Body() body: NetworkPortForwardGroupChannelMutationDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.disableUdpNatmap(
+        params.groupId,
+        body.expectedDesiredRevision,
+      ),
+    );
+  }
+
+  /**
    * 禁止响应缓存后启用分组的 UDP STUN 保活，并封装更新后的通道状态。
    * @param params - 用于保活器的领域对象，包含 `groupId` 字段。
    * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。

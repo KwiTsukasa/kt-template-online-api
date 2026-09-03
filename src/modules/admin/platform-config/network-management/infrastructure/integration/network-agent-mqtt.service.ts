@@ -58,6 +58,9 @@ const DEFAULT_AGENT_ID = 'nas-main';
 const DEFAULT_CLIENT_ID = 'kt-template-online-api-network-nas-main';
 const DEFAULT_RETRY_MS = 5000;
 const MAX_MESSAGE_BYTES = 256 * 1024;
+const WIREGUARD_TARGET_IPV4 = '192.168.31.81';
+const WIREGUARD_NATMAP_EXTERNAL_PORT = 51_825;
+const WIREGUARD_TARGET_PORT = 51_820;
 
 export const NETWORK_MQTT_CLIENT_FACTORY = Symbol(
   'NETWORK_MQTT_CLIENT_FACTORY',
@@ -821,7 +824,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
             mapping.syncStatus = item.syncStatus;
             mapping.lastErrorCode = item.errorCode || null;
             mapping.lastErrorMessage = item.errorMessage || null;
-            if (item.protocol === 'tcp') {
+            if (item.protocol === 'tcp' || 'natmapDesiredEnabled' in item) {
               mapping.natmapStatus = item.natmapStatus;
               mapping.natmapLastErrorCode = item.natmapErrorCode || null;
               mapping.natmapLastErrorMessage = item.natmapErrorMessage || null;
@@ -1010,11 +1013,20 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         message: 'V2 reported channel intent does not match desired state',
       };
     }
-    if (
-      reported.protocol === 'udp' &&
-      (desired.protocol !== 'udp' ||
-        reported.keeperDesiredEnabled !== desired.keeperDesiredEnabled)
-    ) {
+    if (reported.protocol === 'udp' && desired.protocol === 'udp') {
+      const intentMatches = (() => {
+        if ('natmapDesiredEnabled' in desired) {
+          return (
+            'natmapDesiredEnabled' in reported &&
+            reported.natmapDesiredEnabled === desired.natmapDesiredEnabled
+          );
+        }
+        return (
+          'keeperDesiredEnabled' in reported &&
+          reported.keeperDesiredEnabled === desired.keeperDesiredEnabled
+        );
+      })();
+      if (intentMatches) return null;
       return {
         code: 'reported_channel_intent_conflict',
         message: 'V2 reported channel intent does not match desired state',
@@ -1239,7 +1251,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     const current = reported.currentEndpoint;
     const lastObserved = reported.lastObservedEndpoint;
     if (desired.desiredPresence !== 'present') return false;
-    if (reported.syncStatus !== 'synced' || !reported.routerPresent) {
+    if (reported.syncStatus !== 'synced') {
       return false;
     }
     if (!current || !lastObserved) return false;
@@ -1247,6 +1259,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (!this.isV2EndpointLeaseFresh(current, reportedAt)) return false;
     if (!this.isV2EndpointLeaseFresh(lastObserved, reportedAt)) return false;
     if (reported.protocol === 'tcp') {
+      if (!reported.routerPresent) return false;
       const dataPlaneReady =
         (reported.dnatPresent && reported.routePresent !== true) ||
         (!reported.dnatPresent && reported.routePresent === true);
@@ -1262,8 +1275,21 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         this.isV2EndpointLeaseFresh(reported.candidateEndpoint, reportedAt)
       );
     }
+    if ('natmapDesiredEnabled' in reported) {
+      return (
+        'natmapDesiredEnabled' in desired &&
+        desired.natmapDesiredEnabled &&
+        reported.natmapDesiredEnabled &&
+        reported.natmapStatus === 'active' &&
+        !!reported.instanceGeneration?.trim() &&
+        !!reported.candidateEndpoint &&
+        this.sameV2EndpointTuple(current, reported.candidateEndpoint) &&
+        this.isV2EndpointLeaseFresh(reported.candidateEndpoint, reportedAt)
+      );
+    }
     return (
       desired.protocol === 'udp' &&
+      'keeperDesiredEnabled' in desired &&
       desired.keeperDesiredEnabled &&
       reported.keeperDesiredEnabled &&
       reported.routePresent &&
@@ -1342,6 +1368,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         !reported.candidateEndpoint
       );
     }
+    if ('natmapDesiredEnabled' in reported) {
+      return (
+        !reported.natmapDesiredEnabled &&
+        reported.natmapStatus === 'disabled' &&
+        !reported.candidateEndpoint
+      );
+    }
     return (
       !reported.routePresent &&
       !reported.keeperDesiredEnabled &&
@@ -1360,10 +1393,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     mapping: NetworkPortForward,
   ): Promise<boolean> {
     const repository = manager.getRepository(NetworkEndpointHistory);
+    const mechanism = this.udpEndpointMechanism(mapping);
     let histories = await repository.find({
       order: { occurredAt: 'DESC', id: 'DESC' },
       take: 2,
-      where: { mappingId: mapping.id, mechanism: 'udp_stun' },
+      where: { mappingId: mapping.id, mechanism },
     });
     if (histories[0]?.eventType === 'restored') {
       if (histories[1]?.eventType !== 'withdrawn') return false;
@@ -1373,7 +1407,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         where: {
           eventType: Not('withdrawn'),
           mappingId: mapping.id,
-          mechanism: 'udp_stun',
+          mechanism,
         },
       });
     }
@@ -1978,7 +2012,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       if (event.protocol === 'tcp') {
         return 'tcp_natmap';
       }
-      return 'udp_stun';
+      return this.udpEndpointMechanism(mapping);
     })();
     return (
       event.mechanism === expectedMechanism &&
@@ -1992,6 +2026,27 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       this.isV2EndpointLeaseFresh(event.endpoint, event.occurredAt) &&
       new Date(mapping.currentValidUntil).getTime() > Date.now()
     );
+  }
+
+  /**
+   * 以精确端口和目标区分 UDP Keeper 与固定目标 NATMap，禁用态仍保持历史机制一致。
+   * @param mapping - 当前 UDP 通道持久记录。
+   * @returns 当前通道对应的 UDP 端点机制。
+   */
+  private udpEndpointMechanism(
+    mapping: Pick<
+      NetworkPortForward,
+      'externalPort' | 'internalPort' | 'targetIpv4'
+    >,
+  ): 'udp_natmap' | 'udp_stun' {
+    if (
+      mapping.externalPort === WIREGUARD_NATMAP_EXTERNAL_PORT &&
+      mapping.internalPort === WIREGUARD_TARGET_PORT &&
+      mapping.targetIpv4 === WIREGUARD_TARGET_IPV4
+    ) {
+      return 'udp_natmap';
+    }
+    return 'udp_stun';
   }
 
   /**

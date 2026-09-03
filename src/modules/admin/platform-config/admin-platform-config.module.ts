@@ -26,6 +26,9 @@ import { NetworkManagementService } from '@/modules/admin/platform-config/networ
 import { NetworkStunMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/infrastructure/integration/network-stun-message-source.adapter';
 import { NetworkTcpNatmapMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/infrastructure/integration/network-tcp-natmap-message-source.adapter';
 import { NetworkTcpReleasePolicyService } from '@/modules/admin/platform-config/network-management/application/network-tcp-release-policy.service';
+import { NetworkWireGuardEndpointService } from '@/modules/admin/platform-config/network-management/application/network-wireguard-endpoint.service';
+import { NetworkWireGuardEndpointController } from '@/modules/admin/platform-config/network-management/presentation/network-wireguard-endpoint.controller';
+import { NetworkWireGuardEndpointGuard } from '@/modules/admin/platform-config/network-management/presentation/network-wireguard-endpoint.guard';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
 import { SystemLogService } from '@/modules/admin/platform-config/system-log/system-log.service';
 import { AdminTimezoneController } from '@/modules/admin/platform-config/timezone/admin-timezone.controller';
@@ -68,6 +71,7 @@ export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   NetworkManagementController,
   NetworkPortForwardGroupController,
   NetworkOpenRedirectController,
+  NetworkWireGuardEndpointController,
 ];
 
 export const ADMIN_PLATFORM_CONFIG_IMPORTED_CONTROLLERS = [
@@ -114,6 +118,8 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   NetworkTcpReleasePolicyService,
   NetworkAgentMqttService,
   NetworkOpenRedirectService,
+  NetworkWireGuardEndpointService,
+  NetworkWireGuardEndpointGuard,
 ];
 
 @Module({

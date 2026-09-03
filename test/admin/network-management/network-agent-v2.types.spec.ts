@@ -276,6 +276,7 @@ describe('network agent MQTT v2 contract', () => {
         name: 'TCP NATMap',
         natmapDesiredEnabled: true,
         protocol: 'tcp' as const,
+        targetIpv4: '192.168.31.224',
       },
     ];
     const desired = buildDesiredSnapshotV2(state, channels);
@@ -290,6 +291,115 @@ describe('network agent MQTT v2 contract', () => {
         channels,
       ),
     ).toThrow();
+  });
+
+  it('builds and parses a dedicated UDP NATMap channel when bind and target ports differ', () => {
+    const state = {
+      agentId: 'nas-main',
+      desiredIssuedAt: new Date('2026-09-03T00:01:10Z'),
+      desiredRevision: '9',
+    };
+    const desired = buildDesiredSnapshotV2(state, [
+      {
+        desiredPresence: 'present' as const,
+        desiredRevision: '9',
+        externalPort: 51825,
+        groupId: '3',
+        id: '30',
+        internalPort: 51820,
+        keeperDesiredEnabled: false,
+        name: 'WireGuard G2',
+        natmapDesiredEnabled: true,
+        protocol: 'udp' as const,
+        targetIpv4: '192.168.31.81',
+      },
+    ]);
+    expect(desired.channels[0]).toMatchObject({
+      natmapDesiredEnabled: true,
+      protocol: 'udp',
+    });
+    expect(desired.channels[0]).not.toHaveProperty('keeperDesiredEnabled');
+    expect(parseDesiredSnapshotV2(JSON.stringify(desired))).toEqual(desired);
+
+    const endpoint = {
+      mechanism: 'udp_natmap',
+      observedAt: '2026-09-03T00:01:00Z',
+      publicIpv4: '8.8.8.8',
+      publicPort: 52000,
+      validatedAt: '2026-09-03T00:01:10Z',
+      validUntil: '2026-09-03T00:03:00Z',
+    };
+    expect(
+      parseReportedSnapshotV2(
+        JSON.stringify({
+          agentId: 'nas-main',
+          channels: [
+            {
+              appliedDesiredDigest: desired.channels[0].channelDesiredDigest,
+              appliedDesiredRevision: 9,
+              candidateEndpoint: endpoint,
+              channelId: '30',
+              currentEndpoint: endpoint,
+              desiredPresence: 'present',
+              groupId: '3',
+              instanceGeneration: 'generation-30',
+              lastObservedEndpoint: endpoint,
+              natmapDesiredEnabled: true,
+              natmapStatus: 'active',
+              protocol: 'udp',
+              routerPresent: false,
+              syncStatus: 'synced',
+            },
+          ],
+          reportedAt: '2026-09-03T00:01:10Z',
+          schemaVersion: 2,
+          snapshotDigest: desired.snapshotDigest,
+          snapshotRevision: 9,
+        }),
+      ).channels[0],
+    ).toMatchObject({
+      currentEndpoint: { mechanism: 'udp_natmap' },
+      natmapStatus: 'active',
+      protocol: 'udp',
+    });
+    expect(
+      parseEndpointEventV2(
+        JSON.stringify({
+          agentId: 'nas-main',
+          channelId: '30',
+          endpoint,
+          eventId: 'event-udp-natmap',
+          groupId: '3',
+          mechanism: 'udp_natmap',
+          occurredAt: '2026-09-03T00:01:10Z',
+          protocol: 'udp',
+          revision: 9,
+          schemaVersion: 2,
+          type: 'published',
+        }),
+      ),
+    ).toMatchObject({ mechanism: 'udp_natmap', protocol: 'udp' });
+
+    const ordinaryUdp = buildDesiredSnapshotV2(state, [
+      {
+        desiredPresence: 'present' as const,
+        desiredRevision: '9',
+        externalPort: 9000,
+        groupId: '4',
+        id: '40',
+        internalPort: 9001,
+        keeperDesiredEnabled: true,
+        name: 'Ordinary UDP',
+        natmapDesiredEnabled: false,
+        protocol: 'udp' as const,
+        targetIpv4: '192.168.31.224',
+      },
+    ]);
+    expect(ordinaryUdp.channels[0]).toMatchObject({
+      keeperDesiredEnabled: true,
+      protocol: 'udp',
+    });
+    expect(ordinaryUdp.channels[0]).not.toHaveProperty('natmapDesiredEnabled');
   });
 
   it('sorts built channels canonically and returns a snapshot accepted by the strict parser', () => {
@@ -309,6 +419,7 @@ describe('network agent MQTT v2 contract', () => {
       name: `channel-${id}`,
       natmapDesiredEnabled: true,
       protocol: 'tcp' as const,
+      targetIpv4: '192.168.31.224',
     });
 
     const desired = buildDesiredSnapshotV2(state, [
@@ -339,6 +450,7 @@ describe('network agent MQTT v2 contract', () => {
       name: 'TCP NATMap',
       natmapDesiredEnabled: true,
       protocol: 'tcp' as const,
+      targetIpv4: '192.168.31.224',
     };
 
     expect(() =>

@@ -8,6 +8,9 @@ import type { EndpointMechanism } from './network-management.types';
 export const NETWORK_AGENT_V2_SCHEMA_VERSION = 2 as const;
 export const NETWORK_AGENT_V2_MAX_CHANNELS = 64;
 export const NETWORK_AGENT_V2_MAX_MESSAGE_BYTES = 256 * 1024;
+const WIREGUARD_TARGET_IPV4 = '192.168.31.81';
+const WIREGUARD_NATMAP_EXTERNAL_PORT = 51_825;
+const WIREGUARD_TARGET_PORT = 51_820;
 
 export type NetworkV2Protocol = 'tcp' | 'udp';
 export type NetworkV2DesiredPresence = 'absent' | 'present';
@@ -58,6 +61,10 @@ export type NetworkDesiredChannelV2 =
       keeperDesiredEnabled: boolean;
       probeRequestId?: string;
       protocol: 'udp';
+    })
+  | (DesiredChannelBaseV2 & {
+      natmapDesiredEnabled: boolean;
+      protocol: 'udp';
     });
 
 export type NetworkDesiredSnapshotV2 = {
@@ -82,6 +89,7 @@ type NetworkDesiredChannelSourceV2 = Pick<
   | 'natmapDesiredEnabled'
   | 'probeRequestId'
   | 'protocol'
+  | 'targetIpv4'
 >;
 
 export type NetworkEndpointLeaseV2 = {
@@ -130,6 +138,17 @@ export type NetworkReportedChannelV2 =
       lastProbeRequestId?: string;
       protocol: 'udp';
       routePresent: boolean;
+    })
+  | (ReportedChannelBaseV2 & {
+      candidateEndpoint?: NetworkEndpointLeaseV2;
+      currentEndpoint?: NetworkEndpointLeaseV2;
+      instanceGeneration?: string;
+      lastObservedEndpoint?: NetworkEndpointLeaseV2;
+      natmapDesiredEnabled: boolean;
+      natmapErrorCode?: string;
+      natmapErrorMessage?: string;
+      natmapStatus: NetworkV2NatmapStatus;
+      protocol: 'udp';
     });
 
 export type NetworkReportedSnapshotV2 = {
@@ -285,6 +304,17 @@ export function buildDesiredSnapshotV2(
             ...base,
             natmapDesiredEnabled: channel.natmapDesiredEnabled,
             protocol: 'tcp',
+          };
+        }
+        if (
+          channel.externalPort === WIREGUARD_NATMAP_EXTERNAL_PORT &&
+          channel.internalPort === WIREGUARD_TARGET_PORT &&
+          channel.targetIpv4 === WIREGUARD_TARGET_IPV4
+        ) {
+          return {
+            ...base,
+            natmapDesiredEnabled: channel.natmapDesiredEnabled,
+            protocol: 'udp',
           };
         }
         return {
@@ -559,7 +589,7 @@ function validateEndpointEventV2(value: unknown): NetworkEndpointEventV2 {
   );
   const mechanism = enumValue(
     record.mechanism,
-    ['tcp_natmap', 'udp_stun'] as const,
+    ['tcp_natmap', 'udp_natmap', 'udp_stun'] as const,
     'mechanism',
   );
   const type = enumValue(
@@ -567,7 +597,10 @@ function validateEndpointEventV2(value: unknown): NetworkEndpointEventV2 {
     ['changed', 'published', 'restored', 'withdrawn'] as const,
     'type',
   );
-  if ((protocol === 'tcp') !== (mechanism === 'tcp_natmap'))
+  if (
+    (protocol === 'tcp' && mechanism !== 'tcp_natmap') ||
+    (protocol === 'udp' && mechanism === 'tcp_natmap')
+  )
     invalid('event mechanism');
   const endpoint = (() => {
     if (record.endpoint === undefined) {
@@ -627,10 +660,22 @@ function parseDesiredChannelV2(value: unknown): NetworkDesiredChannelV2 {
       if (protocol === 'tcp') {
         return [...required, 'natmapDesiredEnabled'];
       }
+      if (
+        value &&
+        typeof value === 'object' &&
+        Object.hasOwn(value, 'natmapDesiredEnabled')
+      ) {
+        return [...required, 'natmapDesiredEnabled'];
+      }
       return [...required, 'keeperDesiredEnabled'];
     })(),
     (() => {
-      if (protocol === 'udp') {
+      if (
+        protocol === 'udp' &&
+        value &&
+        typeof value === 'object' &&
+        !Object.hasOwn(value, 'natmapDesiredEnabled')
+      ) {
         return ['probeRequestId'];
       }
       return [];
@@ -640,6 +685,16 @@ function parseDesiredChannelV2(value: unknown): NetworkDesiredChannelV2 {
   const base = desiredBase(record);
   const channel = (() => {
     if (protocol === 'tcp') {
+      return {
+        ...base,
+        natmapDesiredEnabled: booleanValue(
+          record.natmapDesiredEnabled,
+          'natmapDesiredEnabled',
+        ),
+        protocol,
+      };
+    }
+    if (Object.hasOwn(record, 'natmapDesiredEnabled')) {
       return {
         ...base,
         natmapDesiredEnabled: booleanValue(
@@ -699,6 +754,13 @@ function parseReportedChannelV2(value: unknown): NetworkReportedChannelV2 {
           'natmapStatus',
         ];
       }
+      if (
+        value &&
+        typeof value === 'object' &&
+        Object.hasOwn(value, 'natmapDesiredEnabled')
+      ) {
+        return [...common, 'natmapDesiredEnabled', 'natmapStatus'];
+      }
       return [
         ...common,
         'keeperDesiredEnabled',
@@ -718,6 +780,22 @@ function parseReportedChannelV2(value: unknown): NetworkReportedChannelV2 {
           'natmapErrorCode',
           'natmapErrorMessage',
           'routePresent',
+        ];
+      }
+      if (
+        value &&
+        typeof value === 'object' &&
+        Object.hasOwn(value, 'natmapDesiredEnabled')
+      ) {
+        return [
+          'candidateEndpoint',
+          'currentEndpoint',
+          'errorCode',
+          'errorMessage',
+          'instanceGeneration',
+          'lastObservedEndpoint',
+          'natmapErrorCode',
+          'natmapErrorMessage',
         ];
       }
       return [
@@ -830,6 +908,51 @@ function parseReportedChannelV2(value: unknown): NetworkReportedChannelV2 {
         };
       })(),
     };
+  if (Object.hasOwn(record, 'natmapDesiredEnabled')) {
+    return {
+      ...base,
+      candidateEndpoint: optionalEndpoint(
+        record.candidateEndpoint,
+        'udp_natmap',
+      ),
+      currentEndpoint: optionalEndpoint(record.currentEndpoint, 'udp_natmap'),
+      instanceGeneration: optionalBounded(
+        record.instanceGeneration,
+        'instanceGeneration',
+        128,
+      ),
+      lastObservedEndpoint: optionalEndpoint(
+        record.lastObservedEndpoint,
+        'udp_natmap',
+      ),
+      natmapDesiredEnabled: booleanValue(
+        record.natmapDesiredEnabled,
+        'natmapDesiredEnabled',
+      ),
+      natmapErrorCode: optionalErrorCode(
+        record.natmapErrorCode,
+        'natmapErrorCode',
+      ),
+      natmapErrorMessage: optionalBounded(
+        record.natmapErrorMessage,
+        'natmapErrorMessage',
+        512,
+      ),
+      natmapStatus: enumValue(
+        record.natmapStatus,
+        [
+          'active',
+          'disabled',
+          'failed',
+          'stale',
+          'starting',
+          'stopping',
+        ] as const,
+        'natmapStatus',
+      ),
+      protocol,
+    };
+  }
   return {
     ...base,
     currentEndpoint: optionalEndpoint(record.currentEndpoint, 'udp_stun'),
@@ -919,7 +1042,7 @@ function parseEndpointV2(
   );
   const mechanism = enumValue(
     record.mechanism,
-    ['tcp_natmap', 'udp_stun'] as const,
+    ['tcp_natmap', 'udp_natmap', 'udp_stun'] as const,
     'mechanism',
   );
   if (mechanism !== expectedMechanism) invalid('endpoint mechanism');
@@ -955,6 +1078,18 @@ function canonicalDesiredChannelV2(channel: NetworkDesiredChannelV2): object {
       natmapDesiredEnabled: channel.natmapDesiredEnabled,
       protocol: channel.protocol,
     };
+  if ('natmapDesiredEnabled' in channel) {
+    return {
+      channelId: channel.channelId,
+      desiredPresence: channel.desiredPresence,
+      externalPort: channel.externalPort,
+      groupId: channel.groupId,
+      internalPort: channel.internalPort,
+      name: channel.name,
+      natmapDesiredEnabled: channel.natmapDesiredEnabled,
+      protocol: channel.protocol,
+    };
+  }
   return {
     channelId: channel.channelId,
     desiredPresence: channel.desiredPresence,

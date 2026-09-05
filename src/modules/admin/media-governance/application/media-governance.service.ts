@@ -1157,7 +1157,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         if (
           !acceptance ||
           !acceptance.canClose ||
-          acceptance.acceptedUnits !== task.units.length ||
+          acceptance.acceptedUnits !== task.units.length
+        ) {
+          throwVbenError('独立本地验收证据未闭合', HttpStatus.CONFLICT);
+        }
+        if (
           !Array.isArray(operations) ||
           operations.length === 0 ||
           acceptance.acceptedFiles !== operations.length

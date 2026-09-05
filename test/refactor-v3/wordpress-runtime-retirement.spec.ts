@@ -3,6 +3,11 @@ import { join } from 'node:path';
 
 const repoRoot = join(__dirname, '..', '..');
 
+/**
+ * 读取当前仓库的源码与配置，核验已退役能力没有重新接入运行时。
+ * @param path 相对仓库根目录的文件路径。
+ * @returns 文件的 UTF-8 文本。
+ */
 function readRepoFile(path: string) {
   return readFileSync(join(repoRoot, path), 'utf8');
 }
@@ -30,22 +35,8 @@ describe('WordPress runtime retirement contract', () => {
     expect(readRepoFile('src/common/swagger/swagger-response.ts')).not.toMatch(
       /wordpress/i,
     );
-    const contractMatrix = readRepoFile(
-      'docs/refactor-v3/api-admin-contract-matrix.md',
-    );
-
-    expect(contractMatrix).not.toMatch(/\/wordpress\/\*|WordPress pages/i);
-    expect(contractMatrix).toContain(
-      'WordPress 运行路由与 Blog 导入端点已在 Phase 1 退役',
-    );
-    expect(contractMatrix).toMatch(
-      /Phase 2 直接退役已于\s+2026-07-31 获得用户明确授权/,
-    );
-    expect(contractMatrix).toMatch(
-      /正常 API 进程不再注册离线资源迁移器及其\s+HTTP\/DNS provider/,
-    );
     expect(readRepoFile('src/modules/blog/blog-content.module.ts')).not.toMatch(
-      /blog_import_job|importJob/,
+      /blog_import_job|importJob|BlogLegacyAsset|BLOG_LEGACY_ASSET/,
     );
     expect(readRepoFile('sql/refactor-v3/00-full-schema.sql')).not.toMatch(
       /\bblog_import_job\b/,

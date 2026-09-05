@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { CodexRemoteService } from '../../../src/modules/admin/codex-remote/application/codex-remote.service';
+import { CodexCoordinationService } from '../../../src/modules/admin/codex-remote/application/codex-coordination.service';
 import { CodexRemoteController } from '../../../src/modules/admin/codex-remote/presentation/codex-remote.controller';
 import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
@@ -17,6 +18,7 @@ describe('CodexRemoteController', () => {
       controllers: [CodexRemoteController],
       providers: [
         CodexRemoteService,
+        CodexCoordinationService,
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -54,6 +56,84 @@ describe('CodexRemoteController', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('serves coordination snapshots through a real local HTTP route with a bound upstream token', async () => {
+    const snapshot = {
+      schemaVersion: 1,
+      snapshotId: 'fixture-snapshot',
+      tasks: [],
+      claims: [],
+      events: [],
+    };
+    const upstream = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify(snapshot), { status: 200 }),
+      );
+    const response = await request(apiUrl)
+      .get('/codex-remote/coordination')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(response.body.data).toEqual(snapshot);
+    expect(upstream).toHaveBeenCalledWith(
+      'http://10.66.66.4:48094/workflow-coordination',
+      expect.objectContaining({
+        redirect: 'error',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    const headers = upstream.mock.calls[0][1]?.headers as Record<
+      string,
+      string
+    >;
+    const payload = JSON.parse(
+      Buffer.from(headers.Authorization.split('.')[1], 'base64url').toString(),
+    );
+    expect(payload).toMatchObject({
+      projectId: 'kt',
+      projectCwd: 'D:\\MyFiles\\KT',
+      sub: '2041700000000000002',
+    });
+    expect(JSON.stringify(response.body)).not.toContain(headers.Authorization);
+  });
+
+  it('forwards separate large SSE frames through backpressure and reports unavailable snapshots', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start: (controller) => {
+            const encoder = new TextEncoder();
+            controller.enqueue(
+              encoder.encode(
+                `event: coordination-snapshot\ndata: ${JSON.stringify({ revision: 1, padding: 'x'.repeat(128 * 1024) })}\n\n`,
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                'event: coordination-snapshot\ndata: {"revision":2}\n\n',
+              ),
+            );
+            controller.close();
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
+    const streamed = await request(apiUrl)
+      .get('/codex-remote/coordination/events')
+      .expect(200)
+      .expect('Content-Type', /text\/event-stream/);
+    expect(streamed.text).toContain('"revision":2');
+    jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('upstream connection failed'));
+    const failed = await request(apiUrl)
+      .get('/codex-remote/coordination')
+      .expect(503);
+    expect(failed.body.message).toBe('PC 协调中心暂不可用');
   });
 
   it('returns no-store node catalog and session token responses', async () => {

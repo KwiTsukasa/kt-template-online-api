@@ -817,6 +817,7 @@ WHERE role.role_code IN ('super', 'admin')
 INSERT INTO admin_menu (id, pid, name, path, component, redirect, auth_code, type, meta, status, sort) VALUES
   (2041700000000100500,0,'Llm','/llm',NULL,'/llm/config',NULL,'catalog','{"icon":"lucide:brain-circuit","order":115,"title":"大模型"}',1,115),
   (2041700000000100501,2041700000000100500,'LlmConfig','/llm/config','/llm/config/index',NULL,'Llm:Config:List','menu','{"icon":"lucide:blocks","title":"大模型配置"}',1,0),
+  (2041700000000100503,2041700000000100500,'WorkflowCoordination','/llm/coordination','/llm/coordination/index',NULL,'Llm:Coordination:Read','menu','{"icon":"lucide:workflow","title":"工作流协调中心"}',1,2),
   (2041700000000100502,2041700000000100500,'LlmChat','/llm/config/:configId/chat','/llm/chat/index',NULL,'Llm:Chat:Use','menu','{"activePath":"/llm/config","fullPathKey":false,"hideInMenu":true,"keepAlive":true,"title":"流式对话"}',1,1),
   (2041700000000120501,2041700000000100501,'LlmConfigCreate',NULL,NULL,NULL,'Llm:Config:Create','button','{"title":"common.create"}',1,1),
   (2041700000000120502,2041700000000100501,'LlmConfigUpdate',NULL,NULL,NULL,'Llm:Config:Update','button','{"title":"common.edit"}',1,2),
@@ -835,7 +836,7 @@ WHERE role.role_code = 'super'
   AND role.status = 1
   AND role.is_deleted = 0
   AND menu.id IN (
-    2041700000000100500, 2041700000000100501, 2041700000000100502,
+    2041700000000100500, 2041700000000100501, 2041700000000100502, 2041700000000100503,
     2041700000000120501, 2041700000000120502, 2041700000000120503,
     2041700000000120504, 2041700000000120505, 2041700000000120506,
     2041700000000120507

@@ -717,7 +717,7 @@ FROM admin_menu
 WHERE name IN (
   'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
   'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault', 'LlmConfigToggle',
-  'LlmChatUse'
+  'LlmChatUse', 'WorkflowCoordination'
 )
   AND status = 1
   AND is_deleted = 0;
@@ -742,7 +742,7 @@ WHERE role.role_code = 'super'
   AND menu.name IN (
     'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
     'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault', 'LlmConfigToggle',
-    'LlmChatUse'
+    'LlmChatUse', 'WorkflowCoordination'
   )
   AND menu.is_deleted = 0
   AND role_menu.role_id IS NULL;

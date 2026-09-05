@@ -214,12 +214,12 @@ async function prepareLocalDatabase() {
          AND menu.name IN (
            'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
            'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault',
-           'LlmConfigToggle', 'LlmChatUse'
+           'LlmConfigToggle', 'LlmChatUse', 'WorkflowCoordination'
          )`,
     );
     const llmPermissionCount = Number(llmPermissionRows[0]?.permission_count);
-    if (llmPermissionCount !== 10) {
-      throw new Error(`本地大模型权限不完整：${llmPermissionCount}/10`);
+    if (llmPermissionCount !== 11) {
+      throw new Error(`本地大模型权限不完整：${llmPermissionCount}/11`);
     }
     process.stdout.write(
       `${JSON.stringify({

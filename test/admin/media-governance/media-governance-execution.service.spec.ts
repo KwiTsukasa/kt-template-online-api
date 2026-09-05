@@ -85,7 +85,7 @@ describe('MediaGovernanceService mechanical execution', () => {
       undefined,
       sink,
     );
-    return { dispatch, service, sink, stateStore };
+    return { dispatch, gateway, service, sink, stateStore };
   }
 
   /**
@@ -203,6 +203,83 @@ describe('MediaGovernanceService mechanical execution', () => {
     return dispatch.mock.calls.at(-1)![0] as MediaGovernanceExecutionEnvelope;
   }
 
+  it.each(['inspect', 'probe', 'download', 'governance', 'remove'])(
+    'rejects persisted %s work instead of falling back to simulated success',
+    async (operation) => {
+      const { gateway, service, stateStore } = fixture();
+      gateway.enabled = () => false;
+      const task = await service.create({
+        mediaType: 'movie',
+        titleHint: '正式任务禁止模拟',
+      });
+      const before = structuredClone(task);
+      jest.mocked(stateStore.saveTask).mockClear();
+      const input = { expectedRevision: task.revision };
+      let attempt: Promise<unknown>;
+      if (operation === 'inspect')
+        attempt = service.inspectSource(task.id, 'source-unavailable', input);
+      else if (operation === 'probe')
+        attempt = service.probeRuntimeSource(
+          task.id,
+          'source-unavailable',
+          input,
+        );
+      else if (operation === 'download')
+        attempt = service.startDownload(task.id, input);
+      else if (operation === 'remove')
+        attempt = service.removeSource(task.id, 'source-unavailable', input);
+      else attempt = service.startGovernance(task.id, input);
+      await expect(attempt).rejects.toMatchObject({
+        status: 503,
+        response: { msg: '媒体执行器暂不可用，不能使用模拟执行' },
+      });
+      expect(task).toEqual(before);
+      expect(stateStore.saveTask).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, 2])(
+    'rejects acceptance count %s when the plan seals one file',
+    async (acceptedFiles) => {
+      const { dispatch, service, stateStore, sink } = fixture();
+      const task = await createRunningGovernanceTask(service);
+      const envelope = await completeGovernance(service, dispatch, task);
+      const before = structuredClone(task);
+      jest.mocked(stateStore.applyExecutorEvent!).mockClear();
+      await expect(
+        service.applyExecutorEvent({
+          acceptance: {
+            acceptedFiles,
+            acceptedUnits: 1,
+            activeDownloadOwners: 0,
+            canClose: true,
+            cloudWrites: 0,
+            databaseDirectWrites: 0,
+            mechanicalScans: 0,
+            schemaVersion: 'media-admin-local-acceptance-v1',
+            stagingResiduals: 0,
+            uiWrites: 0,
+          },
+          action: 'acceptance.verify',
+          evidenceSha256: 'd'.repeat(64),
+          eventType: 'run-succeeded',
+          observedAt: new Date().toISOString(),
+          runId: envelope.runId,
+          sequence: 1,
+          summary: '不匹配文件数',
+          taskId: task.id,
+          taskRevision: task.revision,
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: { msg: '独立本地验收证据未闭合' },
+      });
+      expect(task).toEqual(before);
+      expect(stateStore.applyExecutorEvent).not.toHaveBeenCalled();
+      expect(sink.enqueueTask).not.toHaveBeenCalled();
+    },
+  );
+
   it('continues governance success directly to mechanical acceptance', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
@@ -226,6 +303,83 @@ describe('MediaGovernanceService mechanical execution', () => {
       expect.arrayContaining(['metadata.verify', 'metadata.repair']),
     );
     service.onModuleDestroy();
+  });
+
+  it('serves real HTTP failures without closing a task, then accepts the exact mechanical file count', async () => {
+    const { dispatch, gateway, service } = fixture();
+    const secret = 'f'.repeat(64);
+    const moduleRef = await Test.createTestingModule({
+      controllers: [
+        MediaGovernanceController,
+        MediaGovernanceExecutorInternalController,
+      ],
+      providers: [
+        { provide: MediaGovernanceService, useValue: service },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET: secret,
+          }),
+        },
+        MediaGovernanceExecutorInternalGuard,
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(MediaGovernancePermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    const app = moduleRef.createNestApplication();
+    await app.listen(0, '127.0.0.1');
+    try {
+      const task = await createRunningGovernanceTask(service);
+      gateway.enabled = () => false;
+      const unavailable = await request(app.getHttpServer())
+        .post(`/media-governance/tasks/${task.id}/governance/start`)
+        .send({ expectedRevision: task.revision })
+        .expect(503);
+      expect(unavailable.body.msg).toContain('不能使用模拟执行');
+      gateway.enabled = () => true;
+      const envelope = await completeGovernance(service, dispatch, task);
+      const body = {
+        acceptance: {
+          acceptedFiles: 0,
+          acceptedUnits: 1,
+          activeDownloadOwners: 0,
+          canClose: true,
+          cloudWrites: 0,
+          databaseDirectWrites: 0,
+          mechanicalScans: 0,
+          schemaVersion: 'media-admin-local-acceptance-v1',
+          stagingResiduals: 0,
+          uiWrites: 0,
+        },
+        action: 'acceptance.verify',
+        evidenceSha256: 'd'.repeat(64),
+        eventType: 'run-succeeded',
+        observedAt: new Date().toISOString(),
+        runId: envelope.runId,
+        sequence: 1,
+        summary: 'HTTP 机械验收',
+        taskId: task.id,
+        taskRevision: task.revision,
+      };
+      await request(app.getHttpServer())
+        .post('/internal/media-governance/executor/events')
+        .set('x-kt-media-executor-secret', secret)
+        .send(body)
+        .expect(409);
+      expect(task.stage).toBe('acceptance');
+      body.acceptance.acceptedFiles = 1;
+      await request(app.getHttpServer())
+        .post('/internal/media-governance/executor/events')
+        .set('x-kt-media-executor-secret', secret)
+        .send(body)
+        .expect(201);
+      expect(task.stage).toBe('closed');
+    } finally {
+      await app.close();
+    }
   });
 
   it('closes after mechanical acceptance and registers scraping out of band', async () => {
@@ -363,3 +517,11 @@ describe('MediaGovernanceService mechanical execution', () => {
     expect(MEDIA_GOVERNANCE_EXECUTOR_ACTIONS).toContain('acceptance.verify');
   });
 });
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import * as request from 'supertest';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { MediaGovernanceController } from '../../../src/modules/admin/media-governance/presentation/media-governance.controller';
+import { MediaGovernancePermissionGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
+import { MediaGovernanceExecutorInternalController } from '../../../src/modules/admin/media-governance/presentation/media-governance-executor-internal.controller';
+import { MediaGovernanceExecutorInternalGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-executor-internal.guard';

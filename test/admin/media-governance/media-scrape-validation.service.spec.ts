@@ -19,11 +19,13 @@ describe('MediaScrapeValidationService', () => {
           return true;
         }) ?? null,
       findOneBy: async (where: { id?: string; taskId?: string }) =>
-        [...rows.values()].find((row) => {
-          if (where.id && row.id !== where.id) return false;
-          if (where.taskId && row.taskId !== where.taskId) return false;
-          return true;
-        }) ?? null,
+        structuredClone(
+          [...rows.values()].find((row) => {
+            if (where.id && row.id !== where.id) return false;
+            if (where.taskId && row.taskId !== where.taskId) return false;
+            return true;
+          }) ?? null,
+        ),
       save: async (entity: MediaScrapeValidationEntity) => {
         rows.set(entity.id, entity);
         return entity;
@@ -34,12 +36,22 @@ describe('MediaScrapeValidationService', () => {
       save: jest.fn(),
     };
     const unitRepository = { find: jest.fn(async () => []) };
+    let transactionQueue = Promise.resolve();
     const dataSource = {
       transaction: async (
         work: (manager: {
           getRepository: () => typeof validationRepository;
         }) => Promise<unknown>,
-      ) => work({ getRepository: () => validationRepository }),
+      ) => {
+        const result = transactionQueue.then(() =>
+          work({ getRepository: () => validationRepository }),
+        );
+        transactionQueue = result.then(
+          () => undefined,
+          () => undefined,
+        );
+        return result;
+      },
     };
     const service = new MediaScrapeValidationService(
       dataSource as never,
@@ -140,5 +152,28 @@ describe('MediaScrapeValidationService', () => {
     expect(requeued.status).toBe('pending');
     expect(requeued.revision).toBe(record.revision + 1);
     expect(task.stage).toBe('closed');
+
+    const duplicate = await Promise.allSettled([
+      service.requestRecheck(record.id, {
+        expectedRevision: requeued.revision,
+      }),
+      service.requestRecheck(record.id, {
+        expectedRevision: requeued.revision,
+      }),
+    ]);
+    expect(duplicate.map((result) => result.status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    const current = await service.detail(record.id);
+    const racing = await Promise.allSettled([
+      service.claimNext(),
+      service.requestRecheck(record.id, { expectedRevision: current.revision }),
+    ]);
+    expect(racing.map((result) => result.status)).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect((await service.detail(record.id)).status).toBe('running');
   });
 });

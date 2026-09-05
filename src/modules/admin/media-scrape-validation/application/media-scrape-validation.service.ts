@@ -198,7 +198,7 @@ export class MediaScrapeValidationService
   }
 
   /**
-   * 将已有结论重新排入刮削校验队列，不改变关联治理任务。
+   * 在与领取任务相同的行锁内重新排队，防止并发重试覆盖已领取的运行身份；不改变关联治理任务。
    * @param validationId - 刮削校验记录标识。
    * @param input - 调用方读取到的记录修订号。
    * @returns 重新排队后的刮削校验详情。
@@ -207,26 +207,35 @@ export class MediaScrapeValidationService
     validationId: string,
     input: MediaScrapeValidationRevisionDto,
   ) {
-    const entity = await this.requiredEntity(validationId);
-    if (entity.revision !== input.expectedRevision) {
-      throwVbenError(
-        `刮削校验版本已变化，当前版本为 ${entity.revision}`,
-        HttpStatus.CONFLICT,
-      );
-    }
-    if (entity.status === 'running') {
-      throwVbenError('刮削校验正在运行', HttpStatus.CONFLICT);
-    }
-    entity.status = 'pending';
-    entity.reason = null;
-    entity.issueProjection = [];
-    entity.evidenceSha256 = null;
-    entity.startedAt = null;
-    entity.completedAt = null;
-    entity.requestedAt = new Date();
-    entity.revision += 1;
-    await this.validationRepository.save(entity);
-    return this.project(entity);
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(MediaScrapeValidationEntity);
+      const entity = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: validationId },
+      });
+      if (!entity) {
+        throwVbenError('刮削校验记录不存在', HttpStatus.NOT_FOUND);
+      }
+      if (entity.revision !== input.expectedRevision) {
+        throwVbenError(
+          `刮削校验版本已变化，当前版本为 ${entity.revision}`,
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (entity.status === 'running') {
+        throwVbenError('刮削校验正在运行', HttpStatus.CONFLICT);
+      }
+      entity.status = 'pending';
+      entity.reason = null;
+      entity.issueProjection = [];
+      entity.evidenceSha256 = null;
+      entity.startedAt = null;
+      entity.completedAt = null;
+      entity.requestedAt = new Date();
+      entity.revision += 1;
+      await repository.save(entity);
+      return this.project(entity);
+    });
   }
 
   /**

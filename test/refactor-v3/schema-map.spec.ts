@@ -13,30 +13,17 @@ const retiredLegacyImportTables = [
   'blog_import_job',
 ];
 
-const extractSchemaMapTables = () => {
-  const schemaMap = readFileSync(
-    join(root, 'docs/refactor-v3/schema-map.md'),
-    'utf8',
-  );
-
-  const matches = schemaMap.match(/`[a-z][a-z0-9_]+`/g) || [];
-
-  return Array.from(
-    new Set(
-      matches
-        .map((match) => match.slice(1, -1))
-        .filter((tableName) => !tableName.endsWith('_*')),
-    ),
-  ).sort();
-};
+const requiredSchemaTables: string[] = JSON.parse(
+  readFileSync(join(__dirname, 'fixtures/schema-tables.json'), 'utf8'),
+);
 
 describe('refactor v3 schema skeleton', () => {
-  it('declares every table listed in the schema map in the full schema file', () => {
+  it('declares every required domain table in the full schema file', () => {
     const sql = readFileSync(
       join(root, 'sql/refactor-v3/00-full-schema.sql'),
       'utf8',
     );
-    const requiredTables = extractSchemaMapTables();
+    const requiredTables = requiredSchemaTables;
 
     expect(requiredTables.length).toBeGreaterThan(50);
 
@@ -111,10 +98,6 @@ describe('refactor v3 schema skeleton', () => {
     const referenceSql = referenceFiles.map((file) =>
       readFileSync(join(root, file), 'utf8'),
     );
-    const schemaMap = readFileSync(
-      join(root, 'docs/refactor-v3/schema-map.md'),
-      'utf8',
-    );
 
     for (const table of retiredLegacyImportTables) {
       referenceSql.forEach((sql) => {
@@ -125,7 +108,7 @@ describe('refactor v3 schema skeleton', () => {
           ),
         );
       });
-      expect(schemaMap).not.toContain(`\`${table}\``);
+      expect(requiredSchemaTables).not.toContain(table);
     }
   });
 

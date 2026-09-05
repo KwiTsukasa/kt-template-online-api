@@ -1149,10 +1149,18 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       } else if (input.action === 'acceptance.verify') {
         this.assertCanonicalSealedPlan(task);
         const acceptance = input.acceptance;
+        const operations = (
+          task.sealedPlan?.manifests as
+            | { local?: { forward?: unknown[] } }
+            | undefined
+        )?.local?.forward;
         if (
           !acceptance ||
           !acceptance.canClose ||
-          acceptance.acceptedUnits !== task.units.length
+          acceptance.acceptedUnits !== task.units.length ||
+          !Array.isArray(operations) ||
+          operations.length === 0 ||
+          acceptance.acceptedFiles !== operations.length
         ) {
           throwVbenError('独立本地验收证据未闭合', HttpStatus.CONFLICT);
         }
@@ -1809,6 +1817,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task);
     const source = this.findSource(task, sourceId);
     const resettableUnboundResidue =
       task.stage === 'metadata' &&
@@ -2221,6 +2230,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceSource> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task);
     const source = this.findSource(task, sourceId);
     if (this.executionGateway?.enabled()) {
       source.sourceHealth = 'probing';
@@ -2293,6 +2303,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceSource> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task);
     const source = this.findSource(task, sourceId);
     if (source.manifestState !== 'inspected') {
       throwVbenError('必须先检查来源清单', HttpStatus.CONFLICT);
@@ -2339,6 +2350,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task);
     if (task.runState === 'running') {
       throwVbenError('任务已有运行中的操作', HttpStatus.CONFLICT);
     }
@@ -2693,6 +2705,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task);
     const retryingPlanFailure =
       task.stage === 'download' &&
       task.runState === 'blocked' &&
@@ -3956,6 +3969,25 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
    */
   private databaseReady() {
     return this.stateStore?.isReady() === true;
+  }
+
+  /**
+   * 只允许未注入任何持久化或网关的内存夹具使用模拟执行，正式任务在网关缺失时失败关闭。
+   * @param task - 准备执行 NAS 副作用的当前任务。
+   * @throws 正式执行器缺失或配置不可用时返回服务不可用，且不改变任务状态。
+   */
+  private assertExecutionMode(task: MediaGovernanceTask) {
+    if (this.executionGateway?.enabled()) return;
+    if (
+      this.stateStore ||
+      this.executionGateway ||
+      task.persistenceMode === 'database'
+    ) {
+      throwVbenError(
+        '媒体执行器暂不可用，不能使用模拟执行',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   /**

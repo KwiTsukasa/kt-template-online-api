@@ -1420,7 +1420,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 把匹配的v2TCP历史写入对应领域状态。
+   * 将最新且匹配当前租约的 TCP 端点与前次有效端点比较；冷启动缺少撤回事件时仍处理真实变化。
    * @param manager - 保证把匹配的v2TCP历史写入对应领域状态读写处于同一事务中的实体管理器。
    * @param mapping - 用于把匹配的v2TCP历史写入对应领域状态的领域对象，包含 `id` 字段。
    * @param expectedEventId - 用于精确定位expected事件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
@@ -1440,8 +1440,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (expectedEventId && histories[0]?.eventId !== expectedEventId) {
       return false;
     }
-    if (histories[0]?.eventType === 'restored') {
-      if (histories[1]?.eventType !== 'withdrawn') return false;
+    if (
+      histories[0]?.eventType === 'restored' &&
+      histories[1]?.eventType === 'withdrawn'
+    ) {
       histories = await repository.find({
         order: { occurredAt: 'DESC', id: 'DESC' },
         take: 2,

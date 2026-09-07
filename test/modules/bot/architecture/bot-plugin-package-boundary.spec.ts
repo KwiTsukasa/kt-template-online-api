@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
+import * as ts from 'typescript';
 
 const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/plugins');
@@ -40,6 +41,42 @@ const requiredPluginPaths = [
 
 const requiredCommandPluginPaths = ['src/operations'];
 const requiredEventPluginPaths = ['src/events'];
+
+const hasImportTimeTimer = (source: string): boolean => {
+  const file = ts.createSourceFile(
+    'plugin.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let found = false;
+  const visit = (node: ts.Node) => {
+    if (ts.isFunctionLike(node)) {
+      let expression: ts.Node = node;
+      while (
+        expression.parent &&
+        ts.isParenthesizedExpression(expression.parent)
+      ) {
+        expression = expression.parent;
+      }
+      if (
+        !expression.parent ||
+        !ts.isCallExpression(expression.parent) ||
+        expression.parent.expression !== expression
+      )
+        return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      /^set(?:Interval|Timeout)$/.test(node.expression.text)
+    )
+      found = true;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+};
 
 describe('QQBot plugin package boundary', () => {
   it('does not keep built-in plugin transfer services under plugin-platform', () => {
@@ -86,12 +123,13 @@ describe('QQBot plugin package boundary', () => {
       'bilibili-card',
       'ff14-market',
       'fflogs',
+      'hermes-agent',
       'natmap-port',
       'repeater',
     ]);
   });
 
-  it('uses the same package shape for every built-in plugin', () => {
+  it('preserves the established layered package shape of existing plugins', () => {
     const missing = [
       'bangdream',
       'bilibili-card',
@@ -198,20 +236,35 @@ describe('QQBot plugin package boundary', () => {
         name: 'direct fs',
         pattern: /from ['"](?:node:)?fs['"]|require\(['"](?:node:)?fs['"]\)/,
       },
-      {
-        name: 'import-time timer',
-        pattern: /\bset(?:Interval|Timeout)\(/,
-      },
     ];
 
     const violations = collectTsFiles(pluginRoot).flatMap((filePath) => {
       const source = readFileSync(filePath, 'utf8');
-      return banned
+      const violations = banned
         .filter(({ pattern }) => pattern.test(source))
         .map(({ name }) => `${toRepoPath(filePath)} :: ${name}`);
+      if (hasImportTimeTimer(source))
+        violations.push(`${toRepoPath(filePath)} :: import-time timer`);
+      return violations;
     });
 
     expect(violations).toEqual([]);
+  });
+
+  it('rejects module timers and immediately invoked timers while allowing request-scoped timeouts', () => {
+    expect(hasImportTimeTimer('setTimeout(() => {}, 10);')).toBe(true);
+    expect(hasImportTimeTimer('(() => setInterval(() => {}, 10))();')).toBe(
+      true,
+    );
+    expect(
+      hasImportTimeTimer('class A { static { setTimeout(() => {}, 10); } }'),
+    ).toBe(true);
+    expect(
+      hasImportTimeTimer('class A { request() { setTimeout(() => {}, 10); } }'),
+    ).toBe(false);
+    expect(
+      hasImportTimeTimer('const request = () => setTimeout(() => {}, 10);'),
+    ).toBe(false);
   });
 
   it('uses plugin.json as the only operation metadata source', () => {

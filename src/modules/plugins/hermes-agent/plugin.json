@@ -1,0 +1,35 @@
+{
+  "pluginKey": "hermes-agent",
+  "name": "Hermes Agent",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "将已授权会话的普通文本交给独立 Hermes Agent，并由当前 Bot 回复队列发送结果。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "permissions": [
+    "bot.event.receive",
+    "bot.reply",
+    "plugin.config.read",
+    "runtime.http"
+  ],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 65000,
+    "memoryMb": 128,
+    "maxConcurrency": 3,
+    "configKeys": ["HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY"]
+  },
+  "configSchema": { "type": "object", "properties": {} },
+  "operations": [],
+  "events": [
+    {
+      "key": "hermes-agent.message",
+      "name": "对话回复",
+      "eventName": "message",
+      "handlerName": "handleMessage",
+      "description": "命令由宿主处理；普通文本按安装实例、会话和发送者隔离上下文。"
+    }
+  ],
+  "assets": [],
+  "migrations": []
+}

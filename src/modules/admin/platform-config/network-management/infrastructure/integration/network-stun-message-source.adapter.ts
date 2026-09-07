@@ -17,6 +17,7 @@ import {
 import { SystemMessageSourceRegistry } from '@/modules/message-management/application/system-message-source.registry';
 import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import { classifyStunEndpointSource } from '../../domain/network-source-eligibility';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
@@ -128,6 +129,8 @@ export class NetworkStunMessageSourceAdapter
   constructor(
     @InjectRepository(NetworkPortForward)
     private readonly mappingRepository: Repository<NetworkPortForward>,
+    @InjectRepository(NetworkPortForwardGroup)
+    private readonly groupRepository: Repository<NetworkPortForwardGroup>,
     @InjectRepository(NetworkDdnsRecord)
     private readonly ddnsRepository: Repository<NetworkDdnsRecord>,
     private readonly sourceRegistry: SystemMessageSourceRegistry,
@@ -208,52 +211,73 @@ export class NetworkStunMessageSourceAdapter
   }
 
   /**
-   * 将网络实体转换成供动态订阅表单使用的标准选项。
-   * @returns 包含 `ddnsRecords`、`portForwards` 字段的将网络实体转换成供动态订阅表单使用的标准选项。
+   * 读取有效端口组内的当前 UDP 映射及关联 A 记录，保留暂时不可用资源的禁用原因。
+   * @returns 已排除删除资源、非 UDP 映射和不符合来源契约的 DDNS 的订阅选项。
    */
   async listSubscriptionOptions(): Promise<SystemMessageSourceOptionsResponse> {
-    const [mappings, records] = await Promise.all([
+    const [mappings, groups, records] = await Promise.all([
       this.mappingRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
+      this.groupRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
       this.ddnsRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
     ]);
+    const currentGroupIds = new Set(
+      groups
+        .filter((group) => !group.isDeleted)
+        .map((group) => String(group.id)),
+    );
+    const currentMappings = mappings.filter(
+      (mapping) =>
+        !mapping.isDeleted &&
+        mapping.desiredPresence === 'present' &&
+        mapping.protocol === 'udp' &&
+        currentGroupIds.has(String(mapping.groupId)),
+    );
     const mappingsById = new Map(
-      mappings.map((mapping) => [String(mapping.id), mapping]),
+      currentMappings.map((mapping) => [String(mapping.id), mapping]),
     );
     return {
-      ddnsRecords: records.map((record) => {
-        const mapping = (() => {
-          if (record.portForwardId) {
-            return mappingsById.get(String(record.portForwardId));
-          }
-          return undefined;
-        })();
-        const disabledReasonCode = ddnsOptionReason(record, mapping);
-        return {
-          ...(() => {
+      ddnsRecords: records
+        .filter(
+          (record) =>
+            !record.isDeleted &&
+            record.recordType === 'A' &&
+            record.sourceType === 'port_forward_ipv4' &&
+            mappingsById.has(String(record.portForwardId)),
+        )
+        .map((record) => {
+          const mapping = (() => {
             if (record.portForwardId) {
-              return { dependsOnValue: String(record.portForwardId) };
+              return mappingsById.get(String(record.portForwardId));
             }
-            return {};
-          })(),
-          disabled: disabledReasonCode !== null,
-          disabledReasonCode,
-          eligible: disabledReasonCode === null,
-          fqdn: ddnsFqdn(record),
-          id: String(record.id),
-          label: [record.name, ddnsFqdn(record), disabledReasonCode]
-            .filter((value) => value !== null)
-            .join(' · '),
-          name: record.name,
-          portForwardId: (() => {
-            if (record.portForwardId) {
-              return String(record.portForwardId);
-            }
-            return '';
-          })(),
-          value: String(record.id),
-        };
-      }),
-      portForwards: mappings.map((mapping) => {
+            return undefined;
+          })();
+          const disabledReasonCode = ddnsOptionReason(record, mapping);
+          return {
+            ...(() => {
+              if (record.portForwardId) {
+                return { dependsOnValue: String(record.portForwardId) };
+              }
+              return {};
+            })(),
+            disabled: disabledReasonCode !== null,
+            disabledReasonCode,
+            eligible: disabledReasonCode === null,
+            fqdn: ddnsFqdn(record),
+            id: String(record.id),
+            label: [record.name, ddnsFqdn(record), disabledReasonCode]
+              .filter((value) => value !== null)
+              .join(' · '),
+            name: record.name,
+            portForwardId: (() => {
+              if (record.portForwardId) {
+                return String(record.portForwardId);
+              }
+              return '';
+            })(),
+            value: String(record.id),
+          };
+        }),
+      portForwards: currentMappings.map((mapping) => {
         const { disabledReasonCode, eligible } =
           classifyStunEndpointSource(mapping);
         return {
@@ -378,12 +402,10 @@ export class NetworkStunMessageSourceAdapter
   }
 
   /**
-   * 从`input`解析订阅；从 `mappingRepository.findOne` 读取订阅。
-   * @param input - 用于订阅的结构化输入，包含 `ddnsRecordId`、`portForwardId` 字段。
-   * @returns 包含 `config`、`ddnsRecord`、`mapping`、`sourceSummary` 字段的订阅。
-   * @throws 当 `!isPlainRecord(input)` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `normalizeSnowflakeId` 调用失败时拒绝当前输入并抛出 `SystemMessageContractError`；
-   *   当 `!mapping` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `!sourceEligibility.eligible` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
-   *   当 `ddnsReason` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   * 校验当前 UDP 映射、所属端口组与关联 A 记录，拒绝已失效或暂不可用的订阅来源。
+   * @param input - 包含端口转发和 DDNS 记录标识的订阅配置。
+   * @returns 规范化配置、当前映射、关联 DDNS 与可读摘要。
+   * @throws 配置格式错误、资源失效或来源不满足 STUN 契约时抛出 `SystemMessageContractError`。
    */
   private async resolveSubscription(
     input: unknown,
@@ -415,6 +437,12 @@ export class NetworkStunMessageSourceAdapter
           >,
         ),
       );
+    }
+    const group = await this.groupRepository.findOne({
+      where: { id: mapping.groupId },
+    });
+    if (!group || group.isDeleted) {
+      throw new SystemMessageContractError('mapping_not_managed');
     }
     const ddnsRecord = await this.ddnsRepository.findOne({
       where: { id: config.ddnsRecordId },

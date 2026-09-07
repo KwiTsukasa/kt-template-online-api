@@ -1,6 +1,14 @@
+import { Test } from '@nestjs/testing';
+import { MessageManagementController } from '../../../src/modules/message-management/contract/message-management.controller';
+import { MessageSubscriptionService } from '../../../src/modules/message-management/application/message-subscription.service';
+import { MessageTemplateService } from '../../../src/modules/message-management/application/message-template.service';
+import { MessageSubscriberRegistry } from '../../../src/modules/message-management/application/subscriber/message-subscriber.registry';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { MessageManagementPermissionGuard } from '../../../src/modules/message-management/contract/message-management-permission.guard';
 import type { Repository } from 'typeorm';
 import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import { NetworkStunMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-stun-message-source.adapter';
 import { SystemMessageSourceRegistry } from '../../../src/modules/message-management/application/system-message-source.registry';
 
@@ -8,18 +16,33 @@ type Harness = {
   adapter: NetworkStunMessageSourceAdapter;
   ddns: NetworkDdnsRecord;
   ddnsRepository: Repository<NetworkDdnsRecord>;
+  group: NetworkPortForwardGroup;
+  groups: NetworkPortForwardGroup[];
+  groupRepository: Repository<NetworkPortForwardGroup>;
   mapping: NetworkPortForward;
+  mappings: NetworkPortForward[];
+  records: NetworkDdnsRecord[];
   mappingRepository: Repository<NetworkPortForward>;
   registry: SystemMessageSourceRegistry;
 };
 
+/**
+ * 用可变资源集合建立真实适配器，供删除、重建和关联变更的回归测试复用。
+ * @returns 适配器、注册表及可独立修改的资源与仓库。
+ */
 function createHarness(): Harness {
+  const group = Object.assign(new NetworkPortForwardGroup(), {
+    id: '2041700000000000004',
+    isDeleted: false,
+    name: '帕鲁新世界',
+  });
   const mapping = Object.assign(new NetworkPortForward(), {
     currentPublicIpv4: '203.0.113.10',
     currentPublicPort: 38213,
     currentValidUntil: new Date('2026-07-24T13:00:00.000Z'),
     desiredPresence: 'present' as const,
     externalPort: 8213,
+    groupId: group.id,
     id: '2041700000000000001',
     internalPort: 8213,
     isDeleted: false,
@@ -42,6 +65,13 @@ function createHarness(): Harness {
   });
   const mappings = [mapping];
   const records = [ddns];
+  const groups = [group];
+  const groupRepository = {
+    find: jest.fn(async () => groups),
+    findOne: jest.fn(
+      async ({ where }) => groups.find((item) => item.id === where.id) || null,
+    ),
+  } as unknown as Repository<NetworkPortForwardGroup>;
   const mappingRepository = {
     find: jest.fn(async () => mappings),
     findOne: jest.fn(
@@ -59,12 +89,18 @@ function createHarness(): Harness {
   return {
     adapter: new NetworkStunMessageSourceAdapter(
       mappingRepository,
+      groupRepository,
       recordRepository,
       registry,
     ),
     ddns,
     ddnsRepository: recordRepository,
+    group,
+    groups,
+    groupRepository,
     mapping,
+    mappings,
+    records,
     mappingRepository,
     registry,
   };
@@ -143,6 +179,21 @@ describe('NetworkStunMessageSourceAdapter', () => {
       (harness: Harness) => (harness.mapping.isDeleted = true),
     ],
     [
+      'deleting mapping',
+      'mapping_not_managed',
+      (harness: Harness) => (harness.mapping.desiredPresence = 'absent'),
+    ],
+    [
+      'deleted group',
+      'mapping_not_managed',
+      (harness: Harness) => (harness.group.isDeleted = true),
+    ],
+    [
+      'missing group',
+      'mapping_not_managed',
+      (harness: Harness) => harness.groups.splice(0),
+    ],
+    [
       'disabled DDNS',
       'ddns_disabled',
       (harness: Harness) => (harness.ddns.enabled = false),
@@ -189,6 +240,12 @@ describe('NetworkStunMessageSourceAdapter', () => {
         sourceSummary: '未选择有效的 STUN 映射与 DDNS',
         valid: false,
       });
+      await expect(
+        harness.adapter.resolveDelivery({
+          eventPayload: eventPayload(),
+          subscriptionConfig: config,
+        }),
+      ).resolves.toEqual({ reasonCode: code, status: 'cancelled' });
     },
   );
 
@@ -289,17 +346,16 @@ describe('NetworkStunMessageSourceAdapter', () => {
 
   it('returns generic options with the temporary legacy STUN fields', async () => {
     const { adapter, mapping } = createHarness();
-    mapping.protocol = 'tcp';
     await expect(adapter.listSubscriptionOptions()).resolves.toEqual({
       ddnsRecords: [
         {
           dependsOnValue: mapping.id,
-          disabled: true,
-          disabledReasonCode: 'UDP_REQUIRED',
-          eligible: false,
+          disabled: false,
+          disabledReasonCode: null,
+          eligible: true,
           fqdn: 'pal.kwitsukasa.top',
           id: '2041700000000000002',
-          label: '帕鲁域名 · pal.kwitsukasa.top · UDP_REQUIRED',
+          label: '帕鲁域名 · pal.kwitsukasa.top',
           name: '帕鲁域名',
           portForwardId: mapping.id,
           value: '2041700000000000002',
@@ -307,19 +363,165 @@ describe('NetworkStunMessageSourceAdapter', () => {
       ],
       portForwards: [
         {
-          disabled: true,
-          disabledReasonCode: 'UDP_REQUIRED',
-          eligible: false,
+          disabled: false,
+          disabledReasonCode: null,
+          eligible: true,
           externalPort: 8213,
           id: mapping.id,
           internalPort: 8213,
-          label: '帕鲁新世界 · TCP:8213 · UDP_REQUIRED',
+          label: '帕鲁新世界 · UDP:8213',
           name: '帕鲁新世界',
-          protocol: 'tcp',
+          protocol: 'udp',
           value: mapping.id,
         },
       ],
     });
+  });
+
+  it.each([
+    ['TCP mapping', (h: Harness) => (h.mapping.protocol = 'tcp')],
+    ['deleted mapping', (h: Harness) => (h.mapping.isDeleted = true)],
+    [
+      'deleting mapping',
+      (h: Harness) => (h.mapping.desiredPresence = 'absent'),
+    ],
+    ['deleted group', (h: Harness) => (h.group.isDeleted = true)],
+    ['missing group', (h: Harness) => h.groups.splice(0)],
+    [
+      'unlinked group',
+      (h: Harness) => (h.mapping.groupId = '2041700000000000099'),
+    ],
+  ])('omits %s and its linked DDNS from options', async (_name, mutate) => {
+    const h = createHarness();
+    mutate(h);
+    await expect(h.adapter.listSubscriptionOptions()).resolves.toEqual({
+      ddnsRecords: [],
+      portForwards: [],
+    });
+  });
+
+  it.each([
+    ['deleted DDNS', (h: Harness) => (h.ddns.isDeleted = true)],
+    ['unlinked DDNS', (h: Harness) => (h.ddns.portForwardId = null)],
+    [
+      'missing mapping',
+      (h: Harness) => (h.ddns.portForwardId = '2041700000000000099'),
+    ],
+    ['AAAA record', (h: Harness) => (h.ddns.recordType = 'AAAA')],
+    ['IP4P source', (h: Harness) => (h.ddns.sourceType = 'port_forward_ip4p')],
+    ['agent source', (h: Harness) => (h.ddns.sourceType = 'agent_ipv6')],
+  ])(
+    'omits %s without removing the current UDP mapping',
+    async (_name, mutate) => {
+      const h = createHarness();
+      mutate(h);
+      const options = await h.adapter.listSubscriptionOptions();
+      expect(options.ddnsRecords).toEqual([]);
+      expect(options.portForwards).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    [
+      'KEEPER_DISABLED',
+      (h: Harness) => (h.mapping.keeperDesiredEnabled = false),
+    ],
+    ['PORT_MISMATCH', (h: Harness) => (h.mapping.internalPort = 1)],
+  ])('retains current UDP resources with %s', async (reason, mutate) => {
+    const h = createHarness();
+    mutate(h);
+    const options = await h.adapter.listSubscriptionOptions();
+    for (const collection of [options.portForwards, options.ddnsRecords]) {
+      expect(collection).toHaveLength(1);
+      expect(collection[0]).toMatchObject({
+        disabled: true,
+        disabledReasonCode: reason,
+      });
+    }
+  });
+
+  it('retains a disabled linked A record with its reason', async () => {
+    const h = createHarness();
+    h.ddns.enabled = false;
+    const options = await h.adapter.listSubscriptionOptions();
+    expect(options.ddnsRecords).toHaveLength(1);
+    expect(options.ddnsRecords[0]).toMatchObject({
+      disabled: true,
+      disabledReasonCode: 'ddns_disabled',
+    });
+    expect(options.portForwards[0].disabled).toBe(false);
+  });
+
+  it('serves current resources after creation and deletion through the real local Nest HTTP route', async () => {
+    jest.useRealTimers();
+    const h = createHarness();
+    h.adapter.onModuleInit();
+    const module = await Test.createTestingModule({
+      controllers: [MessageManagementController],
+      providers: [
+        { provide: SystemMessageSourceRegistry, useValue: h.registry },
+        { provide: MessageSubscriberRegistry, useValue: {} },
+        { provide: MessageSubscriptionService, useValue: {} },
+        { provide: MessageTemplateService, useValue: {} },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(MessageManagementPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    const app = module.createNestApplication();
+    try {
+      await app.listen(0, '127.0.0.1');
+      const url =
+        (await app.getUrl()) +
+        '/message-management/sources/network.stun.mapping-port-changed/subscription-options';
+      const readOptions = async () => {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000),
+        });
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.code).toBe(200);
+        return body.data;
+      };
+      expect((await readOptions()).portForwards).toHaveLength(1);
+      h.group.isDeleted = true;
+      expect(await readOptions()).toEqual({
+        ddnsRecords: [],
+        portForwards: [],
+      });
+      h.group.isDeleted = false;
+      h.mapping.desiredPresence = 'absent';
+      expect(await readOptions()).toEqual({
+        ddnsRecords: [],
+        portForwards: [],
+      });
+      const addedMapping = Object.assign(new NetworkPortForward(), h.mapping, {
+        id: '2041700000000000011',
+        desiredPresence: 'present',
+      });
+      const addedRecord = Object.assign(new NetworkDdnsRecord(), h.ddns, {
+        id: '2041700000000000012',
+        portForwardId: addedMapping.id,
+      });
+      h.mappings.push(addedMapping);
+      h.records.push(addedRecord);
+      const created = await readOptions();
+      expect(
+        created.portForwards.map((item: { value: string }) => item.value),
+      ).toEqual([addedMapping.id]);
+      expect(
+        created.ddnsRecords.map((item: { value: string }) => item.value),
+      ).toEqual([addedRecord.id]);
+      addedRecord.isDeleted = true;
+      const deleted = await readOptions();
+      expect(deleted.ddnsRecords).toEqual([]);
+      expect(deleted.portForwards).toHaveLength(1);
+    } finally {
+      await app.close();
+      h.adapter.onModuleDestroy();
+    }
   });
 
   it.each([
@@ -464,6 +666,7 @@ describe('NetworkStunMessageSourceAdapter', () => {
 
   it.each([
     ['mapping', 'mappingRepository'],
+    ['group', 'groupRepository'],
     ['DDNS', 'ddnsRepository'],
   ] as const)(
     'rethrows an unexpected %s repository error for delivery retry',

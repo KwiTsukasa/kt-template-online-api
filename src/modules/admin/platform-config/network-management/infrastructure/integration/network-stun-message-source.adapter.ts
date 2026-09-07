@@ -68,7 +68,7 @@ export class NetworkStunMessageSourceAdapter
       {
         dependsOn: 'portForwardId',
         key: 'ddnsRecordId',
-        label: 'DDNS 记录（A / IP4P AAAA）',
+        label: 'DDNS 记录',
         optionCollection: 'ddnsRecords',
         required: true,
         type: 'select',

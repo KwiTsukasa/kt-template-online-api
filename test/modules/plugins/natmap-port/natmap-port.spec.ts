@@ -9,6 +9,7 @@ const pluginRoot = join(process.cwd(), 'src/modules/plugins/natmap-port');
 const currentEndpoint = {
   label: 'Gitea SSH',
   observedAt: '2026-08-27T00:00:00.000Z',
+  protocol: 'tcp' as const,
   publicPort: 45_678,
   status: 'current' as const,
   validUntil: '2026-08-27T00:02:00.000Z',
@@ -59,7 +60,7 @@ describe('natmap-port plugin', () => {
       channel: null,
       observedAt: null,
       publicPort: null,
-      replyText: '当前没有已启用的 TCP NATMap 通道。',
+      replyText: '当前没有已启用的 NATMap 通道。',
       status: 'empty',
       validUntil: null,
     });
@@ -70,6 +71,7 @@ describe('natmap-port plugin', () => {
       endpoint: {
         label: 'Gitea SSH',
         observedAt: '2026-08-26T00:00:00.000Z',
+        protocol: 'tcp',
         publicPort: null,
         status: 'stale',
         validUntil: null,
@@ -143,6 +145,30 @@ describe('natmap-port plugin', () => {
     expect(missing.status).toBe('not-found');
     expect(missing.publicPort).toBeNull();
   });
+
+  it.each(['tcp', 'udp'])(
+    'renders the actual %s NATMap protocol',
+    async (protocol) => {
+      const application = createApplication({
+        endpoint: { ...currentEndpoint, protocol },
+        kind: 'found',
+      });
+      const result = await application.query({ raw: 'Gitea SSH' });
+      expect(result.status).toBe('current');
+      expect(result.replyText).toContain(`协议：${protocol.toUpperCase()}`);
+    },
+  );
+
+  it.each([undefined, 'icmp', 'TCP'])(
+    'rejects an invalid protocol %s from the Host',
+    async (protocol) => {
+      const application = createApplication({
+        endpoint: { ...currentEndpoint, protocol },
+        kind: 'found',
+      });
+      expect((await application.query({})).status).toBe('unavailable');
+    },
+  );
 
   it('normalizes Host failures without exposing raw errors', async () => {
     const host: NatmapPortPluginHost = {

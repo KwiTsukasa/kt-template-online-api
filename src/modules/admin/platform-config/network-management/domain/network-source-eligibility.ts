@@ -1,5 +1,12 @@
 import type { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 
+export const UDP_NATMAP_ENDPOINT_IDENTITY = {
+  protocol: 'udp',
+  externalPort: 51_825,
+  internalPort: 51_820,
+  targetIpv4: '192.168.31.81',
+} as const;
+
 export type StunEndpointSourceDisabledReason =
   | 'KEEPER_DISABLED'
   | 'NATMAP_DISABLED'
@@ -62,9 +69,9 @@ export function isUdpNatmapEndpointSource(
   >,
 ): boolean {
   return (
-    mapping.protocol === 'udp' &&
-    mapping.externalPort === 51_825 &&
-    mapping.internalPort === 51_820 &&
-    mapping.targetIpv4 === '192.168.31.81'
+    mapping.protocol === UDP_NATMAP_ENDPOINT_IDENTITY.protocol &&
+    mapping.externalPort === UDP_NATMAP_ENDPOINT_IDENTITY.externalPort &&
+    mapping.internalPort === UDP_NATMAP_ENDPOINT_IDENTITY.internalPort &&
+    mapping.targetIpv4 === UDP_NATMAP_ENDPOINT_IDENTITY.targetIpv4
   );
 }

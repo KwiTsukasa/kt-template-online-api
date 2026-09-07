@@ -1,13 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { throwVbenError } from '@/common';
 import { BotConfig } from '../../infrastructure/persistence/config/bot-config.entity';
 import type { BotPermissionConfig } from '../../contract/bot.types';
-
-const BOT_PERMISSION_CONFIG_KEYS = {
-  allowlistEnabled: 'permission.allowlistEnabled',
-  blocklistEnabled: 'permission.blocklistEnabled',
-} as const;
 
 @Injectable()
 export class BotConfigService {
@@ -17,22 +13,11 @@ export class BotConfigService {
   ) {}
 
   /**
-   * 按当前运行态读取权限配置；从 `getBooleanConfig` 读取权限配置。
-   * @returns 包含 `allowlistEnabled`、`blocklistEnabled` 字段的权限配置。
+   * 返回固定同时启用的黑白名单策略，历史互斥开关不再改变实际过滤行为。
+   * @returns 黑名单和白名单均启用的权限配置。
    */
   async getPermissionConfig(): Promise<BotPermissionConfig> {
-    const [allowlistEnabled, blocklistEnabled] = await Promise.all([
-      this.getBooleanConfig(
-        BOT_PERMISSION_CONFIG_KEYS.allowlistEnabled,
-        false,
-      ),
-      this.getBooleanConfig(
-        BOT_PERMISSION_CONFIG_KEYS.blocklistEnabled,
-        true,
-      ),
-    ]);
-
-    return { allowlistEnabled, blocklistEnabled };
+    return { allowlistEnabled: true, blocklistEnabled: true };
   }
 
   /**
@@ -48,35 +33,20 @@ export class BotConfigService {
   }
 
   /**
-   * 根据`config`更新权限配置；从 `getPermissionConfig` 读取权限配置。
-   * @param config - 限定权限配置边界、地址与开关的运行配置，包含 `allowlistEnabled`、`blocklistEnabled` 字段。
-   * @returns 权限配置。
+   * 保持旧配置接口可读取双名单策略，拒绝旧客户端重新关闭任一名单。
+   * @param config - 旧客户端提交的名单开关；仅允许空值或启用。
+   * @returns 固定同时启用的权限配置。
+   * @throws 请求关闭任一名单时返回业务错误。
    */
   async updatePermissionConfig(
     config: Partial<BotPermissionConfig>,
   ): Promise<BotPermissionConfig> {
-    const tasks: Array<Promise<void>> = [];
-
-    if (typeof config.allowlistEnabled === 'boolean') {
-      tasks.push(
-        this.setBooleanConfig(
-          BOT_PERMISSION_CONFIG_KEYS.allowlistEnabled,
-          config.allowlistEnabled,
-          'Bot 白名单总开关',
-        ),
-      );
+    if (
+      config.allowlistEnabled === false ||
+      config.blocklistEnabled === false
+    ) {
+      throwVbenError('黑白名单同时生效，不能关闭；请管理具体名单项');
     }
-    if (typeof config.blocklistEnabled === 'boolean') {
-      tasks.push(
-        this.setBooleanConfig(
-          BOT_PERMISSION_CONFIG_KEYS.blocklistEnabled,
-          config.blocklistEnabled,
-          'Bot 黑名单总开关',
-        ),
-      );
-    }
-
-    await Promise.all(tasks);
     return this.getPermissionConfig();
   }
 

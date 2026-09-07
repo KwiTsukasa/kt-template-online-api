@@ -39,6 +39,8 @@ describe('Bot Adapter protocol migration command', () => {
       natmap_command_conflict_count: 0,
       natmap_command_duplicate_count: 0,
       natmap_command_identity_count: 1,
+      permission_user_set_column_count: 2,
+      permission_user_set_invalid_count: 0,
       plugin_trigger_mode_mismatch: 0,
       plugin_trigger_mode_missing_count: 0,
       tencent_binding_missing_account_count: 0,

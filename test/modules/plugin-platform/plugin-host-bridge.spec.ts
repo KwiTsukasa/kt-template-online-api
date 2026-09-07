@@ -129,6 +129,7 @@ describe('plugin protocol host bridge', () => {
         endpoint: {
           label: 'Gitea SSH',
           observedAt: '2026-08-27T00:00:00.000Z',
+          protocol: 'tcp',
           publicPort: 45_678,
           status: 'current',
           validUntil: '2099-01-01T00:00:00.000Z',
@@ -150,6 +151,7 @@ describe('plugin protocol host bridge', () => {
         endpoint: {
           label: '旧通道',
           observedAt: '2026-08-26T00:00:00.000Z',
+          protocol: 'tcp',
           publicPort: null,
           status: 'stale',
           validUntil: null,

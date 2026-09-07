@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, Not, Repository, type FindOptionsWhere } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
 import { BotAllowlist } from '../../infrastructure/persistence/permission/bot-allowlist.entity';
 import { BotBlocklist } from '../../infrastructure/persistence/permission/bot-blocklist.entity';
@@ -50,7 +50,7 @@ export class BotPermissionService {
   }
 
   /**
-   * 根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页。
+   * 筛选未删除的白名单或黑名单；普通视图分页，树表视图读取完整筛选结果供账号分组。
    * @param kind - 决定根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页内容、边界或目标的 `kind` 值。
    * @param query - 限定根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页筛选、排序与分页范围的查询条件，包含 `selfId`、`targetType`、`targetId`、`userId` 字段。
    * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页。
@@ -82,9 +82,13 @@ export class BotPermissionService {
       });
     }
     if (query.userId) {
-      builder.andWhere('permission.userId LIKE :userId', {
-        userId: `%${query.userId}%`,
-      });
+      builder.andWhere(
+        `(JSON_CONTAINS(permission.userIds, JSON_QUOTE(:selectedUserId))
+        OR (permission.userIds IS NULL AND permission.userId = :selectedUserId))`,
+        {
+          selectedUserId: query.userId,
+        },
+      );
     }
     if (query.preciseUser !== undefined && `${query.preciseUser}` !== '') {
       builder.andWhere('permission.preciseUser = :preciseUser', {
@@ -92,46 +96,39 @@ export class BotPermissionService {
       });
     }
 
-    const [list, total] = await builder
-      .orderBy('permission.createTime', 'DESC')
-      .skip(skip)
-      .take(pageSize)
-      .getManyAndCount();
+    builder.orderBy('permission.createTime', 'DESC');
+    if (query.view !== 'tree') builder.skip(skip).take(pageSize);
+    const [list, total] = await builder.getManyAndCount();
     return { list, pageNo, pageSize, total };
   }
 
   /**
-   * 根据`kind`、`body`更新`save` 对应结果；把变更持久化到当前存储（`repository.save`）。
-   * @param kind - 决定`save` 对应结果内容、边界或目标的 `kind` 值。
-   * @param body - 用于`save` 对应结果的结构化输入。
-   * @returns `save` 对应。
+   * 同一账号的群或频道及多选成员只创建一个实体，成员数量不会增加名单记录数。
+   * @param kind - 要写入的白名单或黑名单类型。
+   * @param body - 同一账号与会话的名单配置，可包含精确用户数组。
+   * @returns 新增名单记录的标识。
    */
   async save(kind: BotPermissionKind, body: BotPermissionBodyDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
+    await this.assertConversationAvailable(repository, payload);
     const saved = await repository.save(
-      repository.create({
-        ...payload,
-      } as BotPermissionEntity),
+      repository.create(payload as BotPermissionEntity),
     );
     return saved.id;
   }
 
   /**
-   * 根据`kind`、`body`更新`update` 对应结果；把变更持久化到当前存储（`repository.update`）。
-   * @param kind - 决定`update` 对应结果内容、边界或目标的 `kind` 值。
-   * @param body - 用于`update` 对应结果的结构化输入，包含 `id` 字段。
-   * @returns 满足`update` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * 用当前名单标识覆盖成员集合，移除取消勾选的成员并保持记录身份不变。
+   * @param kind - 当前规则所属的白名单或黑名单类型。
+   * @param body - 当前规则标识与更新后的账号、会话及用户选择。
+   * @returns 更新成功后返回 true。
    */
   async update(kind: BotPermissionKind, body: BotPermissionUpdateDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
-    await repository.update(
-      { id: body.id } as any,
-      {
-        ...payload,
-      } as any,
-    );
+    await this.assertConversationAvailable(repository, payload, body.id);
+    await repository.update({ id: body.id }, payload);
     return true;
   }
 
@@ -170,10 +167,10 @@ export class BotPermissionService {
   }
 
   /**
-   * 根据`repository`、`message`处理existsMatched；把变更持久化到当前存储（`repository.createQueryBuilder`）。
-   * @param repository - 负责查询或持久化existsMatched的仓库实例。
-   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`userId`、`messageType`、`targetId` 字段。
-   * @returns 满足existsMatched约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * 在当前账号和全局规则中匹配启用的目标；群和频道精确规则按成员集合匹配，并兼容旧单成员记录。
+   * @param repository - 当前白名单或黑名单的持久化仓库。
+   * @param message - 包含账号、会话类型、会话标识及发送者身份的标准消息。
+   * @returns 存在符合目标及成员约束的启用规则时返回 true。
    */
   private async existsMatched(
     repository: Repository<BotPermissionEntity>,
@@ -203,7 +200,10 @@ export class BotPermissionService {
                 AND permission.targetId = :targetId
                 AND (
                   permission.preciseUser = :notPrecise
-                  OR (permission.preciseUser = :precise AND permission.userId = :userId)
+                  OR (permission.preciseUser = :precise AND (
+                    JSON_CONTAINS(permission.userIds, JSON_QUOTE(:userId))
+                    OR (permission.userIds IS NULL AND permission.userId = :userId)
+                  ))
                 ))`,
               {
                 groupType: 'group',
@@ -221,7 +221,10 @@ export class BotPermissionService {
                 AND permission.targetId = :targetId
                 AND (
                   permission.preciseUser = :notPrecise
-                  OR (permission.preciseUser = :precise AND permission.userId = :userId)
+                  OR (permission.preciseUser = :precise AND (
+                    JSON_CONTAINS(permission.userIds, JSON_QUOTE(:userId))
+                    OR (permission.userIds IS NULL AND permission.userId = :userId)
+                  ))
                 ))`,
               {
                 channelType: 'channel',
@@ -239,9 +242,9 @@ export class BotPermissionService {
   }
 
   /**
-   * 将`body`规范为请求内容，使等价输入得到一致表示。
-   * @param body - 用于请求内容的结构化输入，包含 `targetType`、`targetId`、`userId`、`preciseUser` 字段。
-   * @returns 包含 `enabled`、`preciseUser`、`remark`、`selfId`、`targetId` 字段的请求内容。
+   * 兼容旧单成员输入并生成去重成员数组；非群聊、非频道目标强制关闭精确匹配。
+   * @param body - 单条名单的目标与成员选择，兼容旧版单成员字段。
+   * @returns 可持久化为一条规则的账号、目标、开关和成员集合。
    */
   private normalizeBody(
     body: Partial<BotPermissionBodyDto>,
@@ -255,13 +258,15 @@ export class BotPermissionService {
     const normalizedTargetType = targetType || 'qq';
     const targetId = `${body.targetId || ''}`.trim();
     const userId = `${body.userId || ''}`.trim();
-    const preciseUser =
-      (() => {
-        if (normalizedTargetType === 'group' || normalizedTargetType === 'channel') {
-          return !!body.preciseUser;
-        }
-        return false;
-      })();
+    const preciseUser = (() => {
+      if (
+        normalizedTargetType === 'group' ||
+        normalizedTargetType === 'channel'
+      ) {
+        return !!body.preciseUser;
+      }
+      return false;
+    })();
 
     if (!targetId) {
       throwVbenError(
@@ -276,8 +281,22 @@ export class BotPermissionService {
         })(),
       );
     }
-    if (preciseUser && !userId) {
-      throwVbenError('开启精确到 QQ 号后必须填写 QQ 号');
+    let userIds: string[] = [];
+    if (preciseUser) {
+      let selected = body.userIds;
+      if (selected === undefined) selected = [userId].filter(Boolean);
+      if (
+        !Array.isArray(selected) ||
+        selected.length === 0 ||
+        selected.length > 100 ||
+        selected.some(
+          (value) =>
+            typeof value !== 'string' || !/^[\w-]{1,64}$/u.test(value.trim()),
+        )
+      ) {
+        throwVbenError('请选择 1 至 100 个有效的精确用户');
+      }
+      userIds = [...new Set(selected.map((value) => value.trim()))];
     }
 
     return {
@@ -287,13 +306,34 @@ export class BotPermissionService {
       selfId: body.selfId || '',
       targetId,
       targetType: normalizedTargetType,
-      userId: (() => {
-        if (preciseUser) {
-          return userId;
-        }
-        return '';
-      })(),
+      userId: '',
+      userIds,
     } as Partial<BotPermissionEntity>;
+  }
+
+  /**
+   * 拒绝在同一账号、同一种名单中重复新增群或频道，引导管理员修改已有记录的成员集合。
+   * @param repository - 当前白名单或黑名单仓库。
+   * @param payload - 已规范化的账号与会话身份。
+   * @param editingId - 更新时排除的当前名单标识。
+   */
+  private async assertConversationAvailable(
+    repository: Repository<BotPermissionEntity>,
+    payload: Partial<BotPermissionEntity>,
+    editingId?: string,
+  ) {
+    if (payload.targetType !== 'group' && payload.targetType !== 'channel')
+      return;
+    const where: FindOptionsWhere<BotPermissionEntity> = {
+      isDeleted: false,
+      selfId: payload.selfId,
+      targetId: payload.targetId,
+      targetType: payload.targetType,
+    };
+    if (editingId) where.id = Not(editingId);
+    if (await repository.exists({ where })) {
+      throwVbenError('该账号的群或频道已有名单，请编辑原有记录的成员选择');
+    }
   }
 
   /**

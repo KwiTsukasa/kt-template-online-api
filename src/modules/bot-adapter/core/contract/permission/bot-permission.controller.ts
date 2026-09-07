@@ -15,15 +15,31 @@ import {
   BotPermissionBodyDto,
   BotPermissionConfigDto,
   BotPermissionQueryDto,
+  BotPermissionOptionsQueryDto,
   BotPermissionUpdateDto,
 } from './bot-permission.dto';
 import { BotPermissionService } from '../../application/permission/bot-permission.service';
+import { BotPermissionOptionsService } from '../../application/permission/bot-permission-options.service';
 
 @ApiTags('Bot - 权限名单')
 @Controller('bot/permission')
 @UseGuards(JwtAuthGuard)
 export class BotPermissionController {
-  constructor(private readonly permissionService: BotPermissionService) {}
+  constructor(
+    private readonly permissionService: BotPermissionService,
+    private readonly optionsService: BotPermissionOptionsService,
+  ) {}
+
+  /**
+   * 返回权限名单的 Bot 账号及按账号、群或频道隔离的下拉候选。
+   * @param query - 选定的 Bot 账号、目标类型和群或频道。
+   * @returns 账号、目标与精确用户候选的 Vben 响应。
+   */
+  @Get('options')
+  @ApiOperation({ summary: 'Bot 权限名单级联候选' })
+  async options(@Query() query: BotPermissionOptionsQueryDto) {
+    return vbenSuccess(await this.optionsService.list(query));
+  }
 
   /**
    * 根据当前运行态处理配置；从 `permissionService.getConfig` 读取配置。

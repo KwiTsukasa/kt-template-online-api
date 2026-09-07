@@ -5,6 +5,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Repository } from 'typeorm';
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { UDP_NATMAP_ENDPOINT_IDENTITY } from '@/modules/admin/platform-config/network-management/domain/network-source-eligibility';
 import type { PluginPermission } from '@/modules/plugin-platform/domain/manifest';
 import type { PluginPackageDescriptor } from '@/modules/plugin-platform/infrastructure/integration/package/plugin-package.types';
 import {
@@ -120,7 +121,7 @@ export class PluginHostBridgeService {
   }
 
   /**
-   * 只读取已启用的 TCP NATMap 通道并在 Host 内完成精确名称匹配，数据库名称永不跨越 worker 边界。
+   * 只读取已启用的 TCP 与现有 UDP NATMap 通道，在 Host 内精确匹配名称并保持返回数量上限。
    * @param rawSelector - 用户已知的可选通道名称；为空时只接受唯一通道。
    * @returns 空、未找到、不唯一或单个脱敏端点的固定解析结果。
    * @throws 状态仓未接线、查询失败或候选数量超过消息查询边界时抛出安全错误。
@@ -143,15 +144,24 @@ export class PluginHostBridgeService {
           'lastObservedAt',
           'name',
           'natmapStatus',
+          'protocol',
           'syncStatus',
         ],
         take: MAX_NATMAP_ENDPOINTS + 1,
-        where: {
-          desiredPresence: 'present',
-          isDeleted: false,
-          natmapDesiredEnabled: true,
-          protocol: 'tcp',
-        },
+        where: [
+          {
+            desiredPresence: 'present',
+            isDeleted: false,
+            natmapDesiredEnabled: true,
+            protocol: 'tcp',
+          },
+          {
+            ...UDP_NATMAP_ENDPOINT_IDENTITY,
+            desiredPresence: 'present',
+            isDeleted: false,
+            natmapDesiredEnabled: true,
+          },
+        ],
       });
     } catch {
       throw new Error('NATMap 只读状态查询失败');
@@ -190,7 +200,7 @@ export class PluginHostBridgeService {
 
   /**
    * 把一条网络映射收敛为当前、过期或不可用状态；只有同步、活动且租约有效时才保留动态端口。
-   * @param mapping - 已通过 TCP NATMap 期望态与 Host 内名称匹配的权威网络映射。
+   * @param mapping - 已通过 NATMap 机制、期望态与 Host 内名称匹配的权威网络映射。
    * @param label - “默认通道”或用户原本已知且通过安全校验的选择器。
    * @returns 不含任何 IP、内部端口、数据库 ID 与错误文本的端点投影。
    */
@@ -225,6 +235,7 @@ export class PluginHostBridgeService {
     return {
       label,
       observedAt,
+      protocol: mapping.protocol,
       publicPort,
       status,
       validUntil,

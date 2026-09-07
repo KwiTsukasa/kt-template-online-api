@@ -87,7 +87,7 @@ BEGIN
       0,
       5000,
       5,
-      '只读查询已授权 TCP NATMap 通道；格式：/natmap [通道名称]',
+      '只读查询已授权 TCP / UDP NATMap 通道；格式：/natmap [通道名称]',
       0
     );
   END IF;

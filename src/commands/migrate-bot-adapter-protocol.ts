@@ -10,8 +10,11 @@ const MIGRATION_LOCK = 'kt:bot-adapter-protocol-v1';
 const PROTOCOL_MIGRATION_FILE = 'bot-adapter-protocol-v1.sql';
 const MENU_MIGRATION_FILE = 'bot-adapter-menu-v1.sql';
 const NATMAP_COMMAND_MIGRATION_FILE = 'natmap-port-command-v1.sql';
+const PERMISSION_USER_SETS_MIGRATION_FILE = 'bot-permission-user-sets-v1.sql';
 const VERIFICATION_FILE = 'bot-adapter-protocol-v1-verify.sql';
 const NATMAP_COMMAND_VERIFICATION_FILE = 'natmap-port-command-v1-verify.sql';
+const PERMISSION_USER_SETS_VERIFICATION_FILE =
+  'bot-permission-user-sets-v1-verify.sql';
 const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['tencent_binding_missing_account_count', 0],
   ['tencent_binding_missing_plugin_count', 0],
@@ -30,6 +33,8 @@ const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['natmap_command_identity_count', 1],
   ['natmap_command_conflict_count', 0],
   ['natmap_command_duplicate_count', 0],
+  ['permission_user_set_column_count', 2],
+  ['permission_user_set_invalid_count', 0],
 ]);
 
 export type BotAdapterMigrationVerification = Record<string, number>;
@@ -247,6 +252,10 @@ export async function runBotAdapterProtocolMigration(): Promise<{
       connection,
       readMigrationFile(NATMAP_COMMAND_MIGRATION_FILE),
     );
+    await executeMysqlScript(
+      connection,
+      readMigrationFile(PERMISSION_USER_SETS_MIGRATION_FILE),
+    );
     const verification = assertBotAdapterMigrationVerification({
       ...(await readVerificationResults(
         connection,
@@ -255,6 +264,10 @@ export async function runBotAdapterProtocolMigration(): Promise<{
       ...(await readVerificationResults(
         connection,
         readMigrationFile(NATMAP_COMMAND_VERIFICATION_FILE),
+      )),
+      ...(await readVerificationResults(
+        connection,
+        readMigrationFile(PERMISSION_USER_SETS_VERIFICATION_FILE),
       )),
     });
     return { migrated, verification };

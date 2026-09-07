@@ -35,6 +35,7 @@ import { BotAllowlist } from '@/modules/bot-adapter/core/infrastructure/persiste
 import { BotBlocklist } from '@/modules/bot-adapter/core/infrastructure/persistence/permission/bot-blocklist.entity';
 import { BotPermissionController } from '@/modules/bot-adapter/core/contract/permission/bot-permission.controller';
 import { BotPermissionService } from '@/modules/bot-adapter/core/application/permission/bot-permission.service';
+import { BotPermissionOptionsService } from '@/modules/bot-adapter/core/application/permission/bot-permission-options.service';
 import { BotRuleController } from '@/modules/bot-adapter/core/contract/rule/bot-rule.controller';
 import { BotRule } from '@/modules/bot-adapter/core/infrastructure/persistence/rule/bot-rule.entity';
 import { BotRuleEngineService } from '@/modules/bot-adapter/core/application/send/bot-rule-engine.service';
@@ -84,6 +85,7 @@ export const BOT_CORE_PROVIDERS = [
   BotEventService,
   BotMessageService,
   BotPermissionService,
+  BotPermissionOptionsService,
   BotRateLimitService,
   BotReplyTemplateService,
   BotReverseWsService,

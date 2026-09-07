@@ -50,7 +50,7 @@ export class NatmapPortApplication {
       );
     }
     if (resolution.kind === 'empty') {
-      return this.buildResult('empty', '当前没有已启用的 TCP NATMap 通道。');
+      return this.buildResult('empty', '当前没有已启用的 NATMap 通道。');
     }
     if (resolution.kind === 'ambiguous') {
       return this.buildResult(
@@ -140,6 +140,8 @@ export class NatmapPortApplication {
       return null;
     const candidate = value as Record<string, unknown>;
     const label = `${candidate.label || ''}`.trim();
+    const protocol = candidate.protocol;
+    if (protocol !== 'tcp' && protocol !== 'udp') return null;
     if (
       !label ||
       label.length > NATMAP_PORT_QUERY_POLICY.maxSelectorLength ||
@@ -164,6 +166,7 @@ export class NatmapPortApplication {
       return {
         label,
         observedAt: `${candidate.observedAt}`,
+        protocol,
         publicPort: Number(candidate.publicPort),
         status,
         validUntil: `${candidate.validUntil}`,
@@ -178,6 +181,7 @@ export class NatmapPortApplication {
     return {
       label,
       observedAt,
+      protocol,
       publicPort: null,
       status,
       validUntil: null,
@@ -198,7 +202,7 @@ export class NatmapPortApplication {
         [
           'NATMap 动态端口',
           `通道：${endpoint.label}`,
-          '协议：TCP',
+          `协议：${endpoint.protocol.toUpperCase()}`,
           `端口：${endpoint.publicPort}`,
           `采集时间（UTC）：${endpoint.observedAt}`,
           `有效至（UTC）：${endpoint.validUntil}`,

@@ -3,6 +3,7 @@ export type NatmapEndpointStatus = 'current' | 'stale' | 'unavailable';
 export type NatmapEndpointSnapshot = {
   label: string;
   observedAt: null | string;
+  protocol: 'tcp' | 'udp';
   publicPort: null | number;
   status: NatmapEndpointStatus;
   validUntil: null | string;

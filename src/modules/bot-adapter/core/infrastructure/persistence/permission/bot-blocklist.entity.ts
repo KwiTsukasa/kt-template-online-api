@@ -24,6 +24,9 @@ export class BotBlocklist {
   @Column({ default: '', length: 64, name: 'user_id' })
   userId: string;
 
+  @Column({ name: 'user_ids', nullable: true, type: 'json' })
+  userIds: null | string[];
+
   @Column({ default: false, name: 'precise_user' })
   preciseUser: boolean;
 

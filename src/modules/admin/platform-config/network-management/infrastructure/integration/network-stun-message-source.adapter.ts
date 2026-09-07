@@ -19,6 +19,7 @@ import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-manag
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import { classifyStunEndpointSource } from '../../domain/network-source-eligibility';
+import { encodeIp4pAddress } from '../../domain/network-ip4p';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 const SNOWFLAKE_ID_PATTERN = /^[1-9]\d{0,23}$/;
@@ -53,7 +54,7 @@ export class NetworkStunMessageSourceAdapter
 
   readonly definition: SystemMessageSourceDefinition = {
     description:
-      '当 UDP Keeper 或 UDP NATMap 映射端口变更且 IPv4 DDNS 已同步时发送消息。',
+      '当 UDP Keeper 或 UDP NATMap 映射端口变更且 A 或 IP4P AAAA DDNS 已同步时发送消息。',
     displayName: 'STUN 映射端口变更',
     sourceKey: SOURCE_KEY,
     subscriptionFields: [
@@ -67,7 +68,7 @@ export class NetworkStunMessageSourceAdapter
       {
         dependsOn: 'portForwardId',
         key: 'ddnsRecordId',
-        label: 'IPv4 DDNS 记录',
+        label: 'DDNS 记录（A / IP4P AAAA）',
         optionCollection: 'ddnsRecords',
         required: true,
         type: 'select',
@@ -212,7 +213,7 @@ export class NetworkStunMessageSourceAdapter
   }
 
   /**
-   * 读取有效端口组内的当前 UDP 映射及关联 A 记录，保留暂时不可用资源的禁用原因。
+   * 读取有效端口组内的当前 UDP 映射及关联 A 或 IP4P AAAA 记录，保留暂时不可用资源的禁用原因。
    * @returns 已排除删除资源、非 UDP 映射和不符合来源契约的 DDNS 的订阅选项。
    */
   async listSubscriptionOptions(): Promise<SystemMessageSourceOptionsResponse> {
@@ -241,8 +242,7 @@ export class NetworkStunMessageSourceAdapter
         .filter(
           (record) =>
             !record.isDeleted &&
-            record.recordType === 'A' &&
-            record.sourceType === 'port_forward_ipv4' &&
+            isStunDdnsRecord(record) &&
             mappingsById.has(String(record.portForwardId)),
         )
         .map((record) => {
@@ -391,7 +391,7 @@ export class NetworkStunMessageSourceAdapter
     const variables = deliveryVariables(resolved, event);
     if (
       resolved.ddnsRecord.syncStatus !== 'synced' ||
-      resolved.ddnsRecord.appliedAddress !== event.publicIpv4
+      !hasMatchingDdnsAddress(resolved.ddnsRecord, event)
     ) {
       return {
         reasonCode: 'ddns_not_synced',
@@ -403,7 +403,7 @@ export class NetworkStunMessageSourceAdapter
   }
 
   /**
-   * 校验当前 UDP 映射、所属端口组与关联 A 记录，拒绝已失效或暂不可用的订阅来源。
+   * 校验当前 UDP 映射、所属端口组与关联 A 或 IP4P AAAA 记录，拒绝已失效或暂不可用的订阅来源。
    * @param input - 包含端口转发和 DDNS 记录标识的订阅配置。
    * @returns 规范化配置、当前映射、关联 DDNS 与可读摘要。
    * @throws 配置格式错误、资源失效或来源不满足 STUN 契约时抛出 `SystemMessageContractError`。
@@ -605,9 +605,7 @@ function ddnsOptionReason(
   if (!record) return 'ddns_not_found';
   if (record.isDeleted) return 'ddns_deleted';
   if (!record.enabled) return 'ddns_disabled';
-  if (record.recordType !== 'A') return 'ddns_a_required';
-  if (record.sourceType !== 'port_forward_ipv4')
-    return 'ddns_source_type_invalid';
+  if (!isStunDdnsRecord(record)) return 'ddns_source_type_invalid';
   if (!mapping || String(record.portForwardId) !== String(mapping.id)) {
     return 'ddns_mapping_mismatch';
   }
@@ -666,7 +664,7 @@ function ddnsMessageSourceReason(
   | null {
   if (!record || record.isDeleted) return 'ddns_not_found';
   if (!record.enabled) return 'ddns_disabled';
-  if (record.recordType !== 'A' || record.sourceType !== 'port_forward_ipv4') {
+  if (!isStunDdnsRecord(record)) {
     return 'ddns_not_ipv4';
   }
   if (String(record.portForwardId) !== String(mapping.id)) {
@@ -691,6 +689,47 @@ function ddnsFqdn(record: NetworkDdnsRecord): string {
     return domain;
   }
   return `${subDomain}.${domain}`;
+}
+
+/**
+ * 将 DDNS 类型与来源限定为 A/IPv4 和 AAAA/IP4P 两种配对，原生 IPv6 不能作为 UDP 订阅依赖。
+ * @param record - 待核对记录类型与来源类型的 DDNS 记录。
+ * @returns 记录类型与端口映射来源匹配时返回 true。
+ */
+function isStunDdnsRecord(record: NetworkDdnsRecord): boolean {
+  if (record.recordType === 'A') {
+    return record.sourceType === 'port_forward_ipv4';
+  }
+  return (
+    record.recordType === 'AAAA' && record.sourceType === 'port_forward_ip4p'
+  );
+}
+
+/**
+ * 核对已同步 DNS 与本次 UDP 端点；IP4P 同时匹配公网地址和端口，并接受等价 IPv6 写法。
+ * @param record - 包含记录类型和供应商已应用地址的 DDNS 记录。
+ * @param event - 等待投递的 UDP 公网端点变更事件。
+ * @returns 已应用 DNS 地址与事件端点一致时返回 true。
+ */
+function hasMatchingDdnsAddress(
+  record: NetworkDdnsRecord,
+  event: StunEventPayload,
+): boolean {
+  if (record.recordType === 'A') {
+    return record.appliedAddress === event.publicIpv4;
+  }
+  const expected = encodeIp4pAddress(event.publicIpv4, event.currentPort);
+  if (
+    !expected ||
+    !record.appliedAddress ||
+    isIP(record.appliedAddress) !== 6
+  ) {
+    return false;
+  }
+  return (
+    new URL(`http://[${expected}]/`).hostname ===
+    new URL(`http://[${record.appliedAddress}]/`).hostname
+  );
 }
 
 /**

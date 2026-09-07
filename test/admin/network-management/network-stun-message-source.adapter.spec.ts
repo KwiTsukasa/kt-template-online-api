@@ -11,6 +11,7 @@ import { NetworkPortForward } from '../../../src/modules/admin/platform-config/n
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import { NetworkStunMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-stun-message-source.adapter';
 import { SystemMessageSourceRegistry } from '../../../src/modules/message-management/application/system-message-source.registry';
+import { encodeIp4pAddress } from '../../../src/modules/admin/platform-config/network-management/domain/network-ip4p';
 
 type Harness = {
   adapter: NetworkStunMessageSourceAdapter;
@@ -139,7 +140,7 @@ describe('NetworkStunMessageSourceAdapter', () => {
     );
   });
 
-  it('accepts only an enabled equal-port UDP Keeper and its linked enabled A record', async () => {
+  it('accepts an enabled equal-port UDP Keeper and its linked enabled A record', async () => {
     const { adapter } = createHarness();
     await expect(
       adapter.normalizeSubscriptionConfig({
@@ -221,6 +222,75 @@ describe('NetworkStunMessageSourceAdapter', () => {
       reasonCode: 'natmap_disabled',
     });
   });
+
+  it.each(['UDP Keeper', 'UDP NATMap'])(
+    'accepts linked IP4P AAAA for %s and waits for both IP and port to synchronize',
+    async (mechanism) => {
+      const h = createHarness();
+      if (mechanism === 'UDP NATMap') {
+        Object.assign(h.mapping, {
+          externalPort: 51_825,
+          internalPort: 51_820,
+          targetIpv4: '192.168.31.81',
+          natmapDesiredEnabled: true,
+          keeperDesiredEnabled: false,
+        });
+      }
+      Object.assign(h.ddns, {
+        recordType: 'AAAA',
+        sourceType: 'port_forward_ip4p',
+        appliedAddress: '2001:0:0:0:0:9545:cb00:710a',
+      });
+      const config = { portForwardId: h.mapping.id, ddnsRecordId: h.ddns.id };
+      await expect(
+        h.adapter.normalizeSubscriptionConfig(config),
+      ).resolves.toMatchObject({ canonicalConfig: config });
+      await expect(
+        h.adapter.inspectSubscription(config),
+      ).resolves.toMatchObject({ valid: true });
+      expect(
+        (await h.adapter.listSubscriptionOptions()).ddnsRecords[0],
+      ).toMatchObject({ value: h.ddns.id, disabled: false });
+      const resolve = () =>
+        h.adapter.resolveDelivery({
+          eventPayload: eventPayload(),
+          subscriptionConfig: config,
+        });
+      await expect(resolve()).resolves.toMatchObject({
+        status: 'ready',
+        variables: { endpoint: 'pal.kwitsukasa.top:38213' },
+      });
+      for (const stale of [
+        encodeIp4pAddress('203.0.113.10', 38212),
+        encodeIp4pAddress('203.0.113.11', 38213),
+        '203.0.113.10',
+        'invalid',
+        null,
+      ]) {
+        h.ddns.appliedAddress = stale;
+        await expect(resolve()).resolves.toMatchObject({
+          status: 'deferred',
+          reasonCode: 'ddns_not_synced',
+        });
+      }
+      h.ddns.appliedAddress = '2001::9545:cb00:710a';
+      await expect(resolve()).resolves.toMatchObject({ status: 'ready' });
+      h.ddns.syncStatus = 'pending';
+      await expect(resolve()).resolves.toMatchObject({ status: 'deferred' });
+      h.ddns.enabled = false;
+      await expect(resolve()).resolves.toMatchObject({
+        status: 'cancelled',
+        reasonCode: 'ddns_disabled',
+      });
+      expect(
+        (await h.adapter.listSubscriptionOptions()).ddnsRecords[0],
+      ).toMatchObject({ disabled: true, disabledReasonCode: 'ddns_disabled' });
+      h.ddns.isDeleted = true;
+      expect((await h.adapter.listSubscriptionOptions()).ddnsRecords).toEqual(
+        [],
+      );
+    },
+  );
 
   it('does not grant NATMap eligibility to mismatched targets or arbitrary unequal-port UDP mappings', async () => {
     const h = createHarness();
@@ -488,8 +558,11 @@ describe('NetworkStunMessageSourceAdapter', () => {
       'missing mapping',
       (h: Harness) => (h.ddns.portForwardId = '2041700000000000099'),
     ],
-    ['AAAA record', (h: Harness) => (h.ddns.recordType = 'AAAA')],
-    ['IP4P source', (h: Harness) => (h.ddns.sourceType = 'port_forward_ip4p')],
+    ['AAAA with IPv4 source', (h: Harness) => (h.ddns.recordType = 'AAAA')],
+    [
+      'A with IP4P source',
+      (h: Harness) => (h.ddns.sourceType = 'port_forward_ip4p'),
+    ],
     ['agent source', (h: Harness) => (h.ddns.sourceType = 'agent_ipv6')],
   ])(
     'omits %s without removing the current UDP mapping',
@@ -590,6 +663,8 @@ describe('NetworkStunMessageSourceAdapter', () => {
       const addedRecord = Object.assign(new NetworkDdnsRecord(), h.ddns, {
         id: '2041700000000000012',
         portForwardId: addedMapping.id,
+        recordType: 'AAAA',
+        sourceType: 'port_forward_ip4p',
       });
       h.mappings.push(addedMapping);
       h.records.push(addedRecord);

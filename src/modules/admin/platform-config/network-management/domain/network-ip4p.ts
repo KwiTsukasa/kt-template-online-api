@@ -1,9 +1,9 @@
 import { isIP } from 'node:net';
 
 /**
- * 把 NATMap 当前公网 IPv4 与动态端口编码为官方 IP4P AAAA 文本，非法或不完整端点返回空值。
- * @param publicIpv4 - NATMap 当前发布的规范公网 IPv4。
- * @param publicPort - NATMap 当前发布的动态公网 TCP 端口。
+ * 把当前公网 IPv4 与 TCP/UDP 动态端口编码为 IP4P AAAA 文本，非法或不完整端点返回空值。
+ * @param publicIpv4 - 当前发布的规范公网 IPv4。
+ * @param publicPort - 当前发布的动态公网 TCP 或 UDP 端口。
  * @returns `2001::端口:IPv4高两字节:IPv4低两字节` 的零填充文本；端点无效时为 `null`。
  */
 export function encodeIp4pAddress(

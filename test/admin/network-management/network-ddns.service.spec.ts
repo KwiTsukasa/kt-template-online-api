@@ -264,6 +264,14 @@ describe('NetworkDdnsService', () => {
         id: 'agent-ipv6',
         sourceType: 'agent_ipv6',
       }),
+      expect.objectContaining({
+        currentAddress: '2001::b26e:0808:0808',
+        currentPort: 45_678,
+        eligible: true,
+        mechanism: 'udp_stun',
+        name: '公网服务 / UDP Keeper IP4P',
+        sourceType: 'port_forward_ip4p',
+      }),
     ]);
   });
 
@@ -357,131 +365,183 @@ describe('NetworkDdnsService', () => {
     ]);
   });
 
-  it('exposes WireGuard UDP NATMap as a usable A-record source through the real local HTTP route', async () => {
-    jest.useRealTimers();
-    const harness = createHarness();
-    Object.assign(harness.mapping, {
-      externalPort: 51_825,
-      internalPort: 51_820,
-      targetIpv4: '192.168.31.81',
-      keeperDesiredEnabled: false,
-      natmapDesiredEnabled: true,
-      currentValidUntil: new KtDateTime(Date.now() + 60_000),
-    });
-    const module = await Test.createTestingModule({
-      controllers: [NetworkManagementController],
-      providers: [
-        { provide: NetworkManagementService, useValue: {} },
-        { provide: NetworkDdnsService, useValue: harness.service },
-        { provide: NetworkManagementEventStreamService, useValue: {} },
-      ],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
-      .overrideGuard(AdminSuperGuard)
-      .useValue({ canActivate: () => true })
-      .compile();
-    const app = module.createNestApplication();
-    try {
-      await app.listen(0, '127.0.0.1');
-      const response = await fetch(
-        (await app.getUrl()) +
-          '/system/network/ddns/source-options?recordType=A',
-        {
-          signal: AbortSignal.timeout(5000),
-        },
-      );
-      expect(response.status).toBe(200);
-      expect(response.headers.get('cache-control')).toContain('no-store');
-      expect(await response.json()).toMatchObject({
-        code: 200,
-        data: {
-          items: [
-            {
-              id: '100',
-              eligible: true,
-              disabledReasonCode: null,
-              mechanism: 'udp_natmap',
-              currentAddress: '8.8.8.8',
-            },
-          ],
-        },
+  it.each(['A', 'AAAA'])(
+    'exposes WireGuard UDP NATMap as a usable %s source through the real local HTTP route',
+    async (recordType) => {
+      jest.useRealTimers();
+      const harness = createHarness();
+      Object.assign(harness.mapping, {
+        externalPort: 51_825,
+        internalPort: 51_820,
+        targetIpv4: '192.168.31.81',
+        keeperDesiredEnabled: false,
+        natmapDesiredEnabled: true,
+        currentValidUntil: new KtDateTime(Date.now() + 60_000),
       });
-    } finally {
-      await app.close();
-    }
-  });
+      const module = await Test.createTestingModule({
+        controllers: [NetworkManagementController],
+        providers: [
+          { provide: NetworkManagementService, useValue: {} },
+          { provide: NetworkDdnsService, useValue: harness.service },
+          { provide: NetworkManagementEventStreamService, useValue: {} },
+        ],
+      })
+        .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(AdminSuperGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
+      const app = module.createNestApplication();
+      try {
+        await app.listen(0, '127.0.0.1');
+        const response = await fetch(
+          (await app.getUrl()) +
+            `/system/network/ddns/source-options?recordType=${recordType}`,
+          {
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get('cache-control')).toContain('no-store');
+        expect(await response.json()).toMatchObject({
+          code: 200,
+          data: {
+            items: expect.arrayContaining([
+              expect.objectContaining({
+                id: '100',
+                eligible: true,
+                disabledReasonCode: null,
+                mechanism: 'udp_natmap',
+                currentAddress:
+                  recordType === 'A' ? '8.8.8.8' : '2001::b26e:0808:0808',
+                sourceType:
+                  recordType === 'A'
+                    ? 'port_forward_ipv4'
+                    : 'port_forward_ip4p',
+              }),
+            ]),
+          },
+        });
+      } finally {
+        await app.close();
+      }
+    },
+  );
 
-  it('encodes a managed TCP NATMap endpoint as an IP4P AAAA source', async () => {
-    const harness = createHarness();
-    harness.group.protocolMode = 'tcp';
-    Object.assign(harness.group, {
-      externalPort: 8418,
-      internalPort: 2222,
-    });
-    Object.assign(harness.mapping, {
-      currentPublicIpv4: '112.32.126.33',
-      currentPublicPort: 51_522,
-      externalPort: 8418,
-      internalPort: 2222,
-      keeperDesiredEnabled: false,
-      natmapDesiredEnabled: true,
-      natmapStatus: 'active',
-      protocol: 'tcp',
-    });
+  it.each(['TCP NATMap', 'UDP NATMap', 'UDP Keeper'])(
+    'encodes a managed %s endpoint as IP4P AAAA and synchronizes port-only changes',
+    async (mechanismLabel) => {
+      const harness = createHarness();
+      harness.group.protocolMode = 'tcp';
+      Object.assign(harness.group, {
+        externalPort: 8418,
+        internalPort: 2222,
+      });
+      Object.assign(harness.mapping, {
+        currentPublicIpv4: '112.32.126.33',
+        currentPublicPort: 51_522,
+        externalPort: 8418,
+        internalPort: 2222,
+        keeperDesiredEnabled: false,
+        natmapDesiredEnabled: true,
+        natmapStatus: 'active',
+        protocol: 'tcp',
+      });
+      let mechanism = 'tcp_natmap';
+      if (mechanismLabel !== 'TCP NATMap') {
+        harness.group.protocolMode = 'udp';
+        harness.mapping.protocol = 'udp';
+        if (mechanismLabel === 'UDP NATMap') {
+          mechanism = 'udp_natmap';
+          Object.assign(harness.mapping, {
+            externalPort: 51_825,
+            internalPort: 51_820,
+            targetIpv4: '192.168.31.81',
+          });
+        } else {
+          mechanism = 'udp_stun';
+          Object.assign(harness.mapping, {
+            internalPort: 8418,
+            keeperDesiredEnabled: true,
+            natmapDesiredEnabled: false,
+          });
+        }
+      }
 
-    await expect(
-      harness.service.sourceOptions({ recordType: 'AAAA' }),
-    ).resolves.toEqual([
-      expect.objectContaining({ sourceType: 'agent_ipv6' }),
-      expect.objectContaining({
-        currentAddress: '2001::c942:7020:7e21',
-        currentPort: 51_522,
-        eligible: true,
-        id: '100',
-        mechanism: 'tcp_natmap',
-        name: '公网服务 / TCP NATMap IP4P',
-        sourceType: 'port_forward_ip4p',
-      }),
-    ]);
-    await expect(
-      harness.service.create({
-        domain: 'kwitsukasa.top',
-        enabled: false,
-        name: 'Gitea SSH IP4P',
+      await expect(
+        harness.service.sourceOptions({ recordType: 'AAAA' }),
+      ).resolves.toEqual([
+        expect.objectContaining({ sourceType: 'agent_ipv6' }),
+        expect.objectContaining({
+          currentAddress: '2001::c942:7020:7e21',
+          currentPort: 51_522,
+          eligible: true,
+          id: '100',
+          mechanism,
+          name: `公网服务 / ${mechanismLabel} IP4P`,
+          sourceType: 'port_forward_ip4p',
+        }),
+      ]);
+      await expect(
+        harness.service.create({
+          domain: 'kwitsukasa.top',
+          enabled: false,
+          name: 'Gitea SSH IP4P',
+          portForwardId: '100',
+          recordType: 'AAAA',
+          sourceType: 'port_forward_ip4p',
+          subDomain: 'git.nas4',
+        }),
+      ).resolves.toMatchObject({
         portForwardId: '100',
-        recordType: 'AAAA',
+        sourceAddress: null,
         sourceType: 'port_forward_ip4p',
-        subDomain: 'git.nas4',
-      }),
-    ).resolves.toMatchObject({
-      portForwardId: '100',
-      sourceAddress: null,
-      sourceType: 'port_forward_ip4p',
-    });
-    harness.client.reconcile.mockResolvedValueOnce({
-      appliedAddress: '2001::c942:7020:7e21',
-      changed: true,
-      providerRecordId: '302',
-    });
-    harness.records[0].enabled = true;
-    harness.records[0].syncStatus = 'pending';
+      });
+      harness.client.reconcile.mockResolvedValueOnce({
+        appliedAddress: '2001::c942:7020:7e21',
+        changed: true,
+        providerRecordId: '302',
+      });
+      harness.records[0].enabled = true;
+      harness.records[0].syncStatus = 'pending';
 
-    await harness.service.reconcileNow('200', true);
+      await harness.service.reconcileNow('200', true);
 
-    expect(harness.client.reconcile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        recordType: 'AAAA',
-        subDomain: 'git.nas4',
-        targetAddress: '2001::c942:7020:7e21',
-      }),
-    );
-    expect(harness.records[0]).toMatchObject({
-      appliedAddress: '2001::c942:7020:7e21',
-      sourceAddress: '2001::c942:7020:7e21',
-      syncStatus: 'synced',
-    });
-  });
+      expect(harness.client.reconcile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recordType: 'AAAA',
+          subDomain: 'git.nas4',
+          targetAddress: '2001::c942:7020:7e21',
+        }),
+      );
+      expect(harness.records[0]).toMatchObject({
+        appliedAddress: '2001::c942:7020:7e21',
+        sourceAddress: '2001::c942:7020:7e21',
+        syncStatus: 'synced',
+      });
+      harness.mapping.currentPublicPort = 51_523;
+      harness.client.reconcile.mockResolvedValueOnce({
+        appliedAddress: '2001::c943:7020:7e21',
+        changed: true,
+        providerRecordId: '302',
+      });
+      await harness.service.reconcileNow('200');
+      expect(harness.client.reconcile).toHaveBeenLastCalledWith(
+        expect.objectContaining({ targetAddress: '2001::c943:7020:7e21' }),
+      );
+      expect(harness.records[0]).toMatchObject({
+        appliedAddress: '2001::c943:7020:7e21',
+        syncStatus: 'synced',
+      });
+      harness.mapping.keeperDesiredEnabled = false;
+      harness.mapping.natmapDesiredEnabled = false;
+      await harness.service.reconcileNow('200');
+      expect(harness.records[0]).toMatchObject({
+        syncStatus: 'waiting_source',
+      });
+      expect(harness.client.reconcile).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('derives accessEndpoint from a synchronized A record without writing DNS for a port-only change', async () => {
     const harness = createHarness();

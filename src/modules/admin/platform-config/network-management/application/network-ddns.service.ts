@@ -171,7 +171,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 按记录类型返回 Agent IPv6、端口转发 IPv4 或 TCP NATMap IP4P 来源，IP4P 仅从 TCP 通道派生。
+   * 按记录类型返回 Agent IPv6、端口转发 IPv4 或由 TCP/UDP 公网端点编码的 IP4P 来源。
    * @param query - 限定输入约束并返回来源选项筛选、排序与分页范围的查询条件，包含 `recordType` 字段。
    * @returns 按输入顺序得到的输入约束并返回来源选项列表；没有匹配项时为空数组。
    */
@@ -198,15 +198,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       const agentIpv6 = await this.agentIpv6SourceOption();
       return [
         agentIpv6,
-        ...mappings
-          .filter((mapping) => mapping.protocol === 'tcp')
-          .map((mapping) =>
-            this.portForwardSourceOption(
-              mapping,
-              groupsById.get(String(mapping.groupId)),
-              'port_forward_ip4p',
-            ),
+        ...mappings.map((mapping) =>
+          this.portForwardSourceOption(
+            mapping,
+            groupsById.get(String(mapping.groupId)),
+            'port_forward_ip4p',
           ),
+        ),
       ];
     }
     return mappings.map((mapping) =>
@@ -856,9 +854,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return classifyStunEndpointSource(mapping);
     })();
     const disabledReasonCode = (() => {
-      if (sourceType === 'port_forward_ip4p' && mapping.protocol !== 'tcp') {
-        return 'IP4P_REQUIRES_TCP_NATMAP';
-      }
       if (group) {
         return sourceEligibility.disabledReasonCode;
       }
@@ -875,6 +870,15 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       mapping.currentPublicIpv4,
       mapping.currentPublicPort,
     );
+    let mechanismLabel = 'UDP Keeper';
+    if (mechanism === 'tcp_natmap') {
+      mechanismLabel = 'TCP NATMap';
+    } else if (mechanism === 'udp_natmap') {
+      mechanismLabel = 'UDP NATMap';
+    }
+    if (sourceType === 'port_forward_ip4p') {
+      mechanismLabel += ' IP4P';
+    }
     return {
       currentAddress: (() => {
         if (sourceUsable) {
@@ -897,18 +901,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       groupId: String(mapping.groupId),
       id: String(mapping.id),
       mechanism,
-      name: `${group?.name || mapping.name} / ${(() => {
-        if (sourceType === 'port_forward_ip4p') {
-          return 'TCP NATMap IP4P';
-        }
-        if (mechanism === 'tcp_natmap') {
-          return 'TCP NATMap';
-        }
-        if (mechanism === 'udp_natmap') {
-          return 'UDP NATMap';
-        }
-        return 'UDP Keeper';
-      })()}`,
+      name: `${group?.name || mapping.name} / ${mechanismLabel}`,
       observedAt: (() => {
         if (sourceUsable) {
           return mapping.currentObservedAt || null;
@@ -1147,7 +1140,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       /^\d{1,24}$/.test(portForwardId);
     if (recordType === 'AAAA' && !agentIpv6Shape && !ip4pShape) {
       throwVbenError(
-        'AAAA 记录必须使用 Agent IPv6，或选择有效的 TCP NATMap IP4P 来源',
+        'AAAA 记录必须使用 Agent IPv6，或选择有效的 TCP/UDP IP4P 来源',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1178,12 +1171,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return null;
     })();
     const sourceEligible = (() => {
-      if (sourceType === 'port_forward_ip4p') {
-        return (
-          mapping?.protocol === 'tcp' &&
-          classifyTcpNatmapEndpointSource(mapping).eligible
-        );
-      }
       if (mapping?.protocol === 'tcp') {
         return classifyTcpNatmapEndpointSource(mapping).eligible;
       }
@@ -1195,7 +1182,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     if (!mapping || !group || !sourceEligible) {
       if (sourceType === 'port_forward_ip4p') {
         throwVbenError(
-          'IP4P AAAA 来源必须是已启用的 TCP NATMap 通道',
+          'IP4P AAAA 来源必须是已启用的 UDP Keeper、UDP NATMap 或 TCP NATMap 通道',
           HttpStatus.BAD_REQUEST,
         );
       }

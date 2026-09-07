@@ -1,3 +1,10 @@
+import { Test } from '@nestjs/testing';
+import { MessageManagementController } from '../../../src/modules/message-management/contract/message-management.controller';
+import { MessageSubscriptionService } from '../../../src/modules/message-management/application/message-subscription.service';
+import { MessageTemplateService } from '../../../src/modules/message-management/application/message-template.service';
+import { MessageSubscriberRegistry } from '../../../src/modules/message-management/application/subscriber/message-subscriber.registry';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { MessageManagementPermissionGuard } from '../../../src/modules/message-management/contract/message-management-permission.guard';
 import type { Repository } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
 import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
@@ -166,6 +173,115 @@ describe('NetworkTcpNatmapMessageSourceAdapter', () => {
         },
       ],
     });
+  });
+
+  it('removes deleted, deleting and UDP resources while retaining disabled current TCP', async () => {
+    for (const patch of [
+      { isDeleted: true },
+      { desiredPresence: 'absent' },
+      { protocol: 'udp' },
+    ]) {
+      const h = createHarness();
+      Object.assign(h.mapping, patch);
+      expect(await h.adapter.listSubscriptionOptions()).toEqual({
+        tcpChannels: [],
+        ddnsRecords: [],
+      });
+    }
+    const h = createHarness();
+    h.ddns.isDeleted = true;
+    expect((await h.adapter.listSubscriptionOptions()).ddnsRecords).toEqual([]);
+    h.group.isDeleted = true;
+    expect((await h.adapter.listSubscriptionOptions()).tcpChannels).toEqual([]);
+    h.group.isDeleted = false;
+    h.mapping.natmapDesiredEnabled = false;
+    expect(
+      (await h.adapter.listSubscriptionOptions()).tcpChannels,
+    ).toHaveLength(1);
+  });
+
+  it('reads current resources again after deletion and recreation', async () => {
+    const h = createHarness();
+    expect(
+      (await h.adapter.listSubscriptionOptions()).tcpChannels[0].value,
+    ).toBe(h.mapping.id);
+    h.mapping.isDeleted = true;
+    expect((await h.adapter.listSubscriptionOptions()).tcpChannels).toEqual([]);
+    h.mapping.isDeleted = false;
+    h.mapping.id = '2041700000000000042';
+    h.ddns.portForwardId = h.mapping.id;
+    expect(
+      (await h.adapter.listSubscriptionOptions()).tcpChannels[0].value,
+    ).toBe(h.mapping.id);
+  });
+
+  it('supports same-channel IP4P records and defers notifications until both IP and port match', async () => {
+    const h = createHarness();
+    Object.assign(h.ddns, {
+      recordType: 'AAAA',
+      sourceType: 'port_forward_ip4p',
+      appliedAddress: '2001:0:0:0:0:9545:cb00:710a',
+    });
+    expect(
+      (await h.adapter.listSubscriptionOptions()).ddnsRecords[0].disabled,
+    ).toBe(false);
+    const input = {
+      eventPayload: eventPayload(),
+      subscriptionConfig: subscriptionConfig(),
+    };
+    expect((await h.adapter.resolveDelivery(input)).status).toBe('ready');
+    h.ddns.appliedAddress = '2001::9546:cb00:710a';
+    expect((await h.adapter.resolveDelivery(input)).reasonCode).toBe(
+      'ddns_not_synced',
+    );
+    h.ddns.sourceType = 'agent_ipv6';
+    expect((await h.adapter.listSubscriptionOptions()).ddnsRecords).toEqual([]);
+    await expect(
+      h.adapter.normalizeSubscriptionConfig(subscriptionConfig()),
+    ).rejects.toMatchObject({ code: 'ddns_not_ipv4' });
+  });
+
+  it('serves fresh source options through the real local Nest HTTP route', async () => {
+    jest.useRealTimers();
+    const h = createHarness();
+    h.adapter.onModuleInit();
+    const module = await Test.createTestingModule({
+      controllers: [MessageManagementController],
+      providers: [
+        { provide: SystemMessageSourceRegistry, useValue: h.registry },
+        { provide: MessageSubscriberRegistry, useValue: {} },
+        { provide: MessageSubscriptionService, useValue: {} },
+        { provide: MessageTemplateService, useValue: {} },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(MessageManagementPermissionGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    const app = module.createNestApplication();
+    await app.listen(0, '127.0.0.1');
+    try {
+      const url =
+        (await app.getUrl()) +
+        '/message-management/sources/network.tcp.natmap-endpoint-changed/subscription-options';
+      const first = await fetch(url);
+      expect(first.status).toBe(200);
+      expect((await first.json()).data.tcpChannels).toHaveLength(1);
+      h.mapping.isDeleted = true;
+      const second = await fetch(url);
+      expect((await second.json()).data).toEqual({
+        tcpChannels: [],
+        ddnsRecords: [],
+      });
+      h.mapping.isDeleted = false;
+      h.ddns.recordType = 'AAAA';
+      h.ddns.sourceType = 'port_forward_ip4p';
+      const third = await fetch(url);
+      expect((await third.json()).data.ddnsRecords[0].disabled).toBe(false);
+    } finally {
+      await app.close();
+    }
   });
 
   it('freezes the exact delivery variables from the event tuple and DDNS FQDN', async () => {

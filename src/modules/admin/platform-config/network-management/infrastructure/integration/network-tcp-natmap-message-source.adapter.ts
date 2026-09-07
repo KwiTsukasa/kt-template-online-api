@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { encodeIp4pAddress } from '../../domain/network-ip4p';
 import { SystemMessageSourceRegistry } from '@/modules/message-management/application/system-message-source.registry';
 import {
   SystemMessageContractError,
@@ -62,7 +63,8 @@ export class NetworkTcpNatmapMessageSourceAdapter
   private registered = false;
 
   readonly definition: SystemMessageSourceDefinition = {
-    description: '当 TCP NATMap 公网端点变更且 IPv4 DDNS 已同步时发送消息。',
+    description:
+      '当 TCP NATMap 公网端点变更且对应 A 或 IP4P DDNS 已同步时发送消息。',
     displayName: 'TCP NATMap 端点变更',
     sourceKey: SOURCE_KEY,
     subscriptionFields: [
@@ -76,7 +78,7 @@ export class NetworkTcpNatmapMessageSourceAdapter
       {
         dependsOn: 'tcpChannelId',
         key: 'ddnsRecordId',
-        label: 'IPv4 DDNS 记录',
+        label: 'DDNS 记录（A / IP4P）',
         optionCollection: 'ddnsRecords',
         required: true,
         type: 'select',
@@ -227,43 +229,59 @@ export class NetworkTcpNatmapMessageSourceAdapter
       this.groupRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
       this.ddnsRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
     ]);
-    const mappingsById = new Map(
-      mappings.map((mapping) => [String(mapping.id), mapping]),
-    );
     const groupsById = new Map(
-      groups.map((group) => [String(group.id), group]),
+      groups
+        .filter((group) => !group.isDeleted)
+        .map((group) => [String(group.id), group]),
+    );
+    const currentMappings = mappings.filter(
+      (mapping) =>
+        !mapping.isDeleted &&
+        mapping.desiredPresence === 'present' &&
+        mapping.protocol === 'tcp' &&
+        groupsById.has(String(mapping.groupId)),
+    );
+    const mappingsById = new Map(
+      currentMappings.map((mapping) => [String(mapping.id), mapping]),
     );
     return {
-      ddnsRecords: records.map((record) => {
-        const mapping = (() => {
-          if (record.portForwardId) {
-            return mappingsById.get(String(record.portForwardId));
-          }
-          return undefined;
-        })();
-        const group = (() => {
-          if (mapping) {
-            return groupsById.get(String(mapping.groupId));
-          }
-          return undefined;
-        })();
-        const disabledReasonCode = ddnsOptionReason(record, mapping, group);
-        return {
-          ...(() => {
+      ddnsRecords: records
+        .filter(
+          (record) =>
+            !record.isDeleted &&
+            isTcpDdnsRecord(record) &&
+            mappingsById.has(String(record.portForwardId)),
+        )
+        .map((record) => {
+          const mapping = (() => {
             if (record.portForwardId) {
-              return { dependsOnValue: String(record.portForwardId) };
+              return mappingsById.get(String(record.portForwardId));
             }
-            return {};
-          })(),
-          disabled: disabledReasonCode !== null,
-          disabledReasonCode,
-          label: [record.name, ddnsFqdn(record), disabledReasonCode]
-            .filter((value) => value !== null)
-            .join(' · '),
-          value: String(record.id),
-        };
-      }),
-      tcpChannels: mappings.map((mapping) => {
+            return undefined;
+          })();
+          const group = (() => {
+            if (mapping) {
+              return groupsById.get(String(mapping.groupId));
+            }
+            return undefined;
+          })();
+          const disabledReasonCode = ddnsOptionReason(record, mapping, group);
+          return {
+            ...(() => {
+              if (record.portForwardId) {
+                return { dependsOnValue: String(record.portForwardId) };
+              }
+              return {};
+            })(),
+            disabled: disabledReasonCode !== null,
+            disabledReasonCode,
+            label: [record.name, ddnsFqdn(record), disabledReasonCode]
+              .filter((value) => value !== null)
+              .join(' · '),
+            value: String(record.id),
+          };
+        }),
+      tcpChannels: currentMappings.map((mapping) => {
         const group = groupsById.get(String(mapping.groupId));
         const source = classifyTcpNatmapEndpointSource(mapping);
         const groupMissing = !group || group.isDeleted;
@@ -372,7 +390,7 @@ export class NetworkTcpNatmapMessageSourceAdapter
     const variables = deliveryVariables(resolved, event);
     if (
       resolved.ddnsRecord.syncStatus !== 'synced' ||
-      resolved.ddnsRecord.appliedAddress !== event.publicIpv4
+      !hasMatchingDdnsAddress(resolved.ddnsRecord, event)
     ) {
       return {
         reasonCode: 'ddns_not_synced',
@@ -538,8 +556,7 @@ function ddnsOptionReason(
 ): null | string {
   if (record.isDeleted) return 'ddns_deleted';
   if (!record.enabled) return 'ddns_disabled';
-  if (record.recordType !== 'A') return 'ddns_a_required';
-  if (record.sourceType !== 'port_forward_ipv4') {
+  if (!isTcpDdnsRecord(record)) {
     return 'ddns_source_type_invalid';
   }
   if (
@@ -570,7 +587,7 @@ function ddnsMessageSourceReason(
   | null {
   if (!record || record.isDeleted) return 'ddns_not_found';
   if (!record.enabled) return 'ddns_disabled';
-  if (record.recordType !== 'A' || record.sourceType !== 'port_forward_ipv4') {
+  if (!isTcpDdnsRecord(record)) {
     return 'ddns_not_ipv4';
   }
   if (String(record.portForwardId) !== String(mapping.id)) {
@@ -641,4 +658,38 @@ function deliveryVariables(
     publicIpv4: event.publicIpv4,
     publicPort: event.publicPort,
   };
+}
+
+/**
+ * 仅接受端口映射驱动的 A 或 IP4P AAAA，原生 IPv6 与其他来源不能订阅 TCP 端点。
+ * @param record - 当前 DDNS 记录。
+ * @returns 记录类型与来源契约相符时为真。
+ */
+function isTcpDdnsRecord(record: NetworkDdnsRecord): boolean {
+  if (record.recordType === 'A')
+    return record.sourceType === 'port_forward_ipv4';
+  return (
+    record.recordType === 'AAAA' && record.sourceType === 'port_forward_ip4p'
+  );
+}
+
+/**
+ * 校验供应商已同步的地址对应本次端点；IP4P 同时验证地址和端口并容许等价 IPv6 写法。
+ * @param record - 含已应用地址的 DDNS 记录。
+ * @param event - 待投递的当前 TCP 端点事件。
+ * @returns DNS 地址与事件完全匹配时为真。
+ */
+function hasMatchingDdnsAddress(
+  record: NetworkDdnsRecord,
+  event: TcpNatmapEventPayload,
+): boolean {
+  if (record.recordType === 'A')
+    return record.appliedAddress === event.publicIpv4;
+  const expected = encodeIp4pAddress(event.publicIpv4, event.publicPort);
+  if (!expected || !record.appliedAddress || isIP(record.appliedAddress) !== 6)
+    return false;
+  return (
+    new URL(`http://[${expected}]/`).hostname ===
+    new URL(`http://[${record.appliedAddress}]/`).hostname
+  );
 }

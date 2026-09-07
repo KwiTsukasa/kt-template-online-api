@@ -2,6 +2,7 @@ import type { NetworkPortForward } from '@/modules/admin/platform-config/network
 
 export type StunEndpointSourceDisabledReason =
   | 'KEEPER_DISABLED'
+  | 'NATMAP_DISABLED'
   | 'PORT_MISMATCH'
   | 'SOURCE_DELETING'
   | 'UDP_REQUIRED';
@@ -12,9 +13,9 @@ export type StunEndpointSourceEligibility = {
 };
 
 /**
- * 分类STUN端点来源，并输出固定投影 `disabledReasonCode`、`eligible` 字段。
- * @param mapping - 用于classifyStun端点来源的领域对象，包含 `isDeleted`、`desiredPresence`、`protocol`、`externalPort` 字段。
- * @returns 包含 `disabledReasonCode`、`eligible` 字段的classifyStun端点来源；无法解析或未命中时为 `null`。
+ * 按 UDP 运行机制检查来源资格：WireGuard NATMap 使用自身开关，其余 Keeper 保留同端口约束。
+ * @param mapping - 包含资源存续状态、端口、目标与保活机制开关的映射。
+ * @returns 来源是否可用及对应机制的禁用原因。
  */
 export function classifyStunEndpointSource(
   mapping: Pick<
@@ -24,7 +25,9 @@ export function classifyStunEndpointSource(
     | 'internalPort'
     | 'isDeleted'
     | 'keeperDesiredEnabled'
+    | 'natmapDesiredEnabled'
     | 'protocol'
+    | 'targetIpv4'
   >,
 ): StunEndpointSourceEligibility {
   let disabledReasonCode: null | StunEndpointSourceDisabledReason = null;
@@ -32,6 +35,10 @@ export function classifyStunEndpointSource(
     disabledReasonCode = 'SOURCE_DELETING';
   } else if (mapping.protocol !== 'udp') {
     disabledReasonCode = 'UDP_REQUIRED';
+  } else if (isUdpNatmapEndpointSource(mapping)) {
+    if (!mapping.natmapDesiredEnabled) {
+      disabledReasonCode = 'NATMAP_DISABLED';
+    }
   } else if (mapping.externalPort !== mapping.internalPort) {
     disabledReasonCode = 'PORT_MISMATCH';
   } else if (!mapping.keeperDesiredEnabled) {
@@ -41,4 +48,23 @@ export function classifyStunEndpointSource(
     disabledReasonCode,
     eligible: disabledReasonCode === null,
   };
+}
+
+/**
+ * 按现有 Agent 固定转发身份识别 WireGuard UDP NATMap，禁用时仍保留机制身份。
+ * @param mapping - 待核对协议、绑定端口、目标端口和目标地址的映射。
+ * @returns 映射为发往 R4SE 的 WireGuard UDP NATMap 时返回 true。
+ */
+export function isUdpNatmapEndpointSource(
+  mapping: Pick<
+    NetworkPortForward,
+    'protocol' | 'externalPort' | 'internalPort' | 'targetIpv4'
+  >,
+): boolean {
+  return (
+    mapping.protocol === 'udp' &&
+    mapping.externalPort === 51_825 &&
+    mapping.internalPort === 51_820 &&
+    mapping.targetIpv4 === '192.168.31.81'
+  );
 }

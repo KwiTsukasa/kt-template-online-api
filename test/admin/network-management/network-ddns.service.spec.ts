@@ -1,4 +1,9 @@
 import { HttpException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { NetworkManagementController } from '../../../src/modules/admin/platform-config/network-management/presentation/network-management.controller';
+import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/application/network-management.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
@@ -9,7 +14,7 @@ import {
   NetworkDnsPodClient,
   NetworkDnsPodClientError,
 } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-dnspod.client';
-import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
+import { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 
@@ -297,6 +302,114 @@ describe('NetworkDdnsService', () => {
       portForwardId: '100',
       source: expect.objectContaining({ mechanism: 'tcp_natmap' }),
     });
+  });
+
+  it('accepts WireGuard UDP NATMap for linked A records and waits when NATMap is disabled', async () => {
+    const harness = createHarness();
+    Object.assign(harness.mapping, {
+      externalPort: 51_825,
+      internalPort: 51_820,
+      targetIpv4: '192.168.31.81',
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+    });
+    await expect(
+      harness.service.sourceOptions({ recordType: 'A' }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        currentAddress: '8.8.8.8',
+        currentPort: 45_678,
+        eligible: true,
+        disabledReasonCode: null,
+        mechanism: 'udp_natmap',
+        name: '公网服务 / UDP NATMap',
+      }),
+    ]);
+    await prepareEnabledA(harness);
+    Object.assign(harness.records[0], {
+      appliedAddress: '8.8.8.8',
+      providerRecordId: '300',
+      sourceAddress: '8.8.8.8',
+      syncStatus: 'synced',
+    });
+    harness.mapping.currentPublicPort = 45_679;
+    await harness.service.reconcileNow('200');
+    expect(harness.client.reconcile).not.toHaveBeenCalled();
+    await expect(harness.service.list()).resolves.toMatchObject({
+      items: [
+        {
+          accessEndpoint: 'pal.kwitsukasa.top:45679',
+          source: { mechanism: 'udp_natmap' },
+        },
+      ],
+    });
+    harness.mapping.natmapDesiredEnabled = false;
+    await harness.service.reconcileNow('200');
+    expect(harness.records[0]).toMatchObject({ syncStatus: 'waiting_source' });
+    await expect(
+      harness.service.sourceOptions({ recordType: 'A' }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        eligible: false,
+        disabledReasonCode: 'NATMAP_DISABLED',
+        mechanism: 'udp_natmap',
+      }),
+    ]);
+  });
+
+  it('exposes WireGuard UDP NATMap as a usable A-record source through the real local HTTP route', async () => {
+    jest.useRealTimers();
+    const harness = createHarness();
+    Object.assign(harness.mapping, {
+      externalPort: 51_825,
+      internalPort: 51_820,
+      targetIpv4: '192.168.31.81',
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      currentValidUntil: new KtDateTime(Date.now() + 60_000),
+    });
+    const module = await Test.createTestingModule({
+      controllers: [NetworkManagementController],
+      providers: [
+        { provide: NetworkManagementService, useValue: {} },
+        { provide: NetworkDdnsService, useValue: harness.service },
+        { provide: NetworkManagementEventStreamService, useValue: {} },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(AdminSuperGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    const app = module.createNestApplication();
+    try {
+      await app.listen(0, '127.0.0.1');
+      const response = await fetch(
+        (await app.getUrl()) +
+          '/system/network/ddns/source-options?recordType=A',
+        {
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(await response.json()).toMatchObject({
+        code: 200,
+        data: {
+          items: [
+            {
+              id: '100',
+              eligible: true,
+              disabledReasonCode: null,
+              mechanism: 'udp_natmap',
+              currentAddress: '8.8.8.8',
+            },
+          ],
+        },
+      });
+    } finally {
+      await app.close();
+    }
   });
 
   it('encodes a managed TCP NATMap endpoint as an IP4P AAAA source', async () => {

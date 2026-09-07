@@ -52,7 +52,8 @@ export class NetworkStunMessageSourceAdapter
   private registered = false;
 
   readonly definition: SystemMessageSourceDefinition = {
-    description: '当 UDP STUN 映射端口变更且 IPv4 DDNS 已同步时发送消息。',
+    description:
+      '当 UDP Keeper 或 UDP NATMap 映射端口变更且 IPv4 DDNS 已同步时发送消息。',
     displayName: 'STUN 映射端口变更',
     sourceKey: SOURCE_KEY,
     subscriptionFields: [
@@ -615,9 +616,9 @@ function ddnsOptionReason(
 }
 
 /**
- * 按输入分支映射消息来源可用资格原因。
- * @param reason - 决定按输入分支映射消息来源可用资格原因内容、边界或目标的 `reason` 值。
- * @returns 当前状态对应的按输入分支映射消息来源可用资格原因，取值为 `'keeper_disabled'`、`'mapping_port_mismatch'`、`'mapping_not_managed'`、`'mapping_not_udp'`。
+ * 将 UDP 资源或运行机制的禁用原因转换为消息订阅错误码。
+ * @param reason - 来源资格分类返回的禁用原因。
+ * @returns 可用于订阅校验与取消投递的稳定错误码。
  */
 function messageSourceEligibilityReason(
   reason: NonNullable<
@@ -627,10 +628,13 @@ function messageSourceEligibilityReason(
   | 'keeper_disabled'
   | 'mapping_not_managed'
   | 'mapping_not_udp'
+  | 'natmap_disabled'
   | 'mapping_port_mismatch' {
   switch (reason) {
     case 'KEEPER_DISABLED':
       return 'keeper_disabled';
+    case 'NATMAP_DISABLED':
+      return 'natmap_disabled';
     case 'PORT_MISMATCH':
       return 'mapping_port_mismatch';
     case 'SOURCE_DELETING':
@@ -657,6 +661,7 @@ function ddnsMessageSourceReason(
   | 'keeper_disabled'
   | 'mapping_not_managed'
   | 'mapping_not_udp'
+  | 'natmap_disabled'
   | 'mapping_port_mismatch'
   | null {
   if (!record || record.isDeleted) return 'ddns_not_found';

@@ -157,6 +157,87 @@ describe('NetworkStunMessageSourceAdapter', () => {
     });
   });
 
+  it('accepts WireGuard UDP NATMap independently of Keeper and preserves delivery readiness', async () => {
+    const h = createHarness();
+    Object.assign(h.mapping, {
+      externalPort: 51_825,
+      internalPort: 51_820,
+      targetIpv4: '192.168.31.81',
+      natmapDesiredEnabled: true,
+      keeperDesiredEnabled: false,
+    });
+    const config = { portForwardId: h.mapping.id, ddnsRecordId: h.ddns.id };
+    await expect(
+      h.adapter.normalizeSubscriptionConfig(config),
+    ).resolves.toMatchObject({
+      canonicalConfig: config,
+    });
+    const options = await h.adapter.listSubscriptionOptions();
+    expect(options.portForwards[0]).toMatchObject({
+      disabled: false,
+      disabledReasonCode: null,
+    });
+    expect(options.ddnsRecords[0]).toMatchObject({
+      disabled: false,
+      disabledReasonCode: null,
+    });
+    await expect(
+      h.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: config,
+      }),
+    ).resolves.toMatchObject({
+      status: 'ready',
+      variables: { endpoint: 'pal.kwitsukasa.top:38213' },
+    });
+    h.ddns.syncStatus = 'pending';
+    await expect(
+      h.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: config,
+      }),
+    ).resolves.toMatchObject({
+      status: 'deferred',
+      reasonCode: 'ddns_not_synced',
+    });
+    h.mapping.natmapDesiredEnabled = false;
+    h.mapping.keeperDesiredEnabled = true;
+    expect(
+      (await h.adapter.listSubscriptionOptions()).portForwards[0],
+    ).toMatchObject({
+      disabled: true,
+      disabledReasonCode: 'NATMAP_DISABLED',
+    });
+    await expect(
+      h.adapter.normalizeSubscriptionConfig(config),
+    ).rejects.toMatchObject({ code: 'natmap_disabled' });
+    await expect(
+      h.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: config,
+      }),
+    ).resolves.toEqual({
+      status: 'cancelled',
+      reasonCode: 'natmap_disabled',
+    });
+  });
+
+  it('does not grant NATMap eligibility to mismatched targets or arbitrary unequal-port UDP mappings', async () => {
+    const h = createHarness();
+    Object.assign(h.mapping, {
+      externalPort: 51_825,
+      internalPort: 51_820,
+      targetIpv4: '192.168.31.224',
+      natmapDesiredEnabled: true,
+    });
+    expect(
+      (await h.adapter.listSubscriptionOptions()).portForwards[0],
+    ).toMatchObject({
+      disabled: true,
+      disabledReasonCode: 'PORT_MISMATCH',
+    });
+  });
+
   it.each([
     [
       'tcp',
@@ -500,6 +581,11 @@ describe('NetworkStunMessageSourceAdapter', () => {
       const addedMapping = Object.assign(new NetworkPortForward(), h.mapping, {
         id: '2041700000000000011',
         desiredPresence: 'present',
+        externalPort: 51_825,
+        internalPort: 51_820,
+        targetIpv4: '192.168.31.81',
+        natmapDesiredEnabled: true,
+        keeperDesiredEnabled: false,
       });
       const addedRecord = Object.assign(new NetworkDdnsRecord(), h.ddns, {
         id: '2041700000000000012',
@@ -508,6 +594,8 @@ describe('NetworkStunMessageSourceAdapter', () => {
       h.mappings.push(addedMapping);
       h.records.push(addedRecord);
       const created = await readOptions();
+      expect(created.portForwards[0].disabled).toBe(false);
+      expect(created.ddnsRecords[0].disabled).toBe(false);
       expect(
         created.portForwards.map((item: { value: string }) => item.value),
       ).toEqual([addedMapping.id]);

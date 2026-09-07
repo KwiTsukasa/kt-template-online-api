@@ -25,7 +25,10 @@ import {
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
-import { classifyStunEndpointSource } from '../domain/network-source-eligibility';
+import {
+  classifyStunEndpointSource,
+  isUdpNatmapEndpointSource,
+} from '../domain/network-source-eligibility';
 import { classifyTcpNatmapEndpointSource } from '../domain/network-tcp-natmap-source-eligibility';
 import type {
   NetworkDdnsListQuery,
@@ -841,6 +844,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       if (mapping.protocol === 'tcp') {
         return 'tcp_natmap';
       }
+      if (isUdpNatmapEndpointSource(mapping)) {
+        return 'udp_natmap';
+      }
       return 'udp_stun';
     })();
     const sourceEligibility = (() => {
@@ -897,6 +903,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         }
         if (mechanism === 'tcp_natmap') {
           return 'TCP NATMap';
+        }
+        if (mechanism === 'udp_natmap') {
+          return 'UDP NATMap';
         }
         return 'UDP Keeper';
       })()}`,
@@ -1191,7 +1200,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         );
       }
       throwVbenError(
-        'A 记录来源必须是已启用的 UDP Keeper 或 TCP NATMap 通道',
+        'A 记录来源必须是已启用的 UDP Keeper、UDP NATMap 或 TCP NATMap 通道',
         HttpStatus.BAD_REQUEST,
       );
     }

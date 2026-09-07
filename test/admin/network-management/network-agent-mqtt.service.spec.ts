@@ -2102,6 +2102,69 @@ describe('NetworkAgentMqttService', () => {
       });
     });
 
+    it('stages a WireGuard UDP NATMap port change once through the STUN message source', async () => {
+      const h = createV2Harness();
+      Object.assign(h.channels[1], {
+        externalPort: 51_825,
+        internalPort: 51_820,
+        keeperDesiredEnabled: false,
+        natmapDesiredEnabled: true,
+        targetIpv4: '192.168.31.81',
+      });
+      h.histories.push(
+        Object.assign(new NetworkEndpointHistory(), {
+          eventId: 'udp-natmap-initial',
+          eventType: 'published',
+          id: '1',
+          mappingId: '102',
+          mechanism: 'udp_natmap',
+          occurredAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+          publicIpv4: '8.8.8.8',
+          publicPort: 45101,
+        }),
+      );
+      const endpoint = v2Endpoint('udp_natmap', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await h.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          h,
+          {
+            '102': {
+              candidateEndpoint: endpoint,
+              currentEndpoint: endpoint,
+              lastObservedEndpoint: endpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+      expect(h.stagedEvents).toHaveLength(0);
+      const event = v2EndpointEvent({ mechanism: 'udp_natmap', endpoint });
+      await h.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        event,
+      );
+      await h.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        event,
+      );
+      expect(h.stagedEvents).toHaveLength(1);
+      expect(h.stagedEvents[0]).toMatchObject({
+        sourceKey: 'network.stun.mapping-port-changed',
+        resourceKey: '102',
+        payload: {
+          portForwardId: '102',
+          previousPort: 45101,
+          currentPort: 45103,
+          publicIpv4: '8.8.8.8',
+        },
+      });
+    });
+
     it('publishes a direct TCP endpoint only with confirmed NAS reply routing', async () => {
       const harness = createV2Harness();
       const tcp = harness.channels[0];

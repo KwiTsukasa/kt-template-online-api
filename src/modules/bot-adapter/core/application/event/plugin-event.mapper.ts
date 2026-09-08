@@ -9,9 +9,9 @@ const EMBEDDED_JSON_MAX_BYTES = 64 * 1024;
 const LINK_SCAN_MAX_DEPTH = 10;
 
 /**
- * 将当前 Bot 适配器消息转换为不暴露平台账号标识的插件事件信封，并提前抽取通用链接。
+ * 将适配器消息投影为 opaque 插件信封，区分真正的图片附件和正文中的普通链接。
  * @param message - 已由 NapCat 或 Tencent 适配器归一化的消息。
- * @returns 插件协议层可消费的 opaque 会话、发送者、正文和链接上下文。
+ * @returns 插件协议层可消费的会话、发送者、正文、图片与链接上下文。
  */
 export function toBotPluginMessageEvent(
   message: BotNormalizedMessage,
@@ -23,6 +23,7 @@ export function toBotPluginMessageEvent(
       message.targetId,
     ]),
     eventId: message.messageId,
+    imageUrls: collectImageUrls(message),
     isSelf: message.userId === message.selfId,
     links: collectHttpLinks([
       message.messageText,
@@ -35,6 +36,62 @@ export function toBotPluginMessageEvent(
     senderKey: hashOpaqueKey([message.selfId, message.userId]),
     text: message.messageText,
   };
+}
+
+/**
+ * 只从官方图片附件或 OneBot 图片段提取图片，不把卡片预览和普通 URL 当成用户发图。
+ * @param message - 保留适配器附件及消息段的规范消息。
+ * @returns 按附件顺序去重的图片地址；空地址保留为不可读取的图片，供消费方明确提示。
+ */
+function collectImageUrls(message: BotNormalizedMessage): string[] {
+  const images: string[] = [];
+  const attachments = message.rawEvent?.attachments;
+  if (Array.isArray(attachments)) {
+    for (const attachment of attachments) {
+      if (!attachment || typeof attachment !== 'object') continue;
+      if (
+        typeof attachment.content_type !== 'string' ||
+        !attachment.content_type.toLowerCase().startsWith('image/')
+      ) {
+        continue;
+      }
+      images.push(normalizeImageUrl(attachment.url));
+    }
+  }
+  const segments = message.rawEvent?.message;
+  if (Array.isArray(segments)) {
+    for (const segment of segments) {
+      if (segment?.type !== 'image') continue;
+      images.push(normalizeImageUrl(segment.data?.url || segment.data?.file));
+    }
+  }
+  return [...new Set(images)];
+}
+
+/**
+ * 将平台图片地址规范为 HTTP(S)，拒绝本地文件、内联载荷、凭据及无法解析的地址。
+ * @param value - 平台附件携带的图片 URL。
+ * @returns 可交给多模态接口的远程 URL；附件地址不可用时返回空字符串。
+ */
+function normalizeImageUrl(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || value.length > 8192) {
+    return '';
+  }
+  let source = value.trim();
+  if (source.startsWith('//')) source = `https:${source}`;
+  try {
+    const url = new URL(source);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password
+    ) {
+      return '';
+    }
+    return url.toString();
+  } catch {
+    return '';
+  }
 }
 
 /**

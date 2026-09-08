@@ -33,6 +33,7 @@ export type BotEventPluginDefinition = {
 export type BotPluginMessageEvent = {
   conversationKey: string;
   eventId: string;
+  imageUrls?: string[];
   isSelf: boolean;
   links: string[];
   metadata: Record<string, unknown>;

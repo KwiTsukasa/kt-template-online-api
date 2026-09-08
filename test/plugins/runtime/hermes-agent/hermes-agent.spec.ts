@@ -1,4 +1,5 @@
 import { createPlugin } from '@/modules/plugins/hermes-agent/src';
+import { toBotPluginMessageEvent } from '@/modules/bot-adapter/core/application/event/plugin-event.mapper';
 
 const event = {
   conversationKey: 'conversation',
@@ -30,6 +31,114 @@ const makePlugin = (requestJson: jest.Mock, installationId = 'installation') =>
   });
 
 describe('Hermes Agent message integration', () => {
+  it('routes a real-shape official pure-image event into vision and returns a reply intent', async () => {
+    const request = jest
+      .fn()
+      .mockResolvedValue({
+        choices: [
+          { finish_reason: 'stop', message: { content: '这猫一脸不想上班' } },
+        ],
+      });
+    const mapped = toBotPluginMessageEvent({
+      connectionMode: 'official-websocket',
+      eventTime: new Date(),
+      messageId: 'official-image',
+      messageText: '',
+      messageType: 'group',
+      rawMessage: '',
+      selfId: 'qq-official:test',
+      targetId: 'group-openid',
+      userId: 'user-openid',
+      rawEvent: {
+        attachments: [
+          {
+            content_type: 'image/jpeg',
+            url: 'https://multimedia.nt.qq.com.cn/image?key=test',
+            width: 1080,
+            height: 1324,
+            size: 155671,
+          },
+        ],
+      },
+    });
+    const result = await makePlugin(request).handleEvent('message', mapped);
+    expect(result).toEqual({
+      handled: true,
+      replies: [{ kind: 'text', content: '这猫一脸不想上班' }],
+    });
+    expect(JSON.parse(request.mock.calls[0][0].body).messages[1]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: mapped.imageUrls![0] } },
+      ],
+    });
+  });
+
+  it('preserves captions and image order without exposing CQ markup, using the same sender session as text', async () => {
+    const request = jest
+      .fn()
+      .mockResolvedValue({
+        choices: [{ finish_reason: 'stop', message: { content: '看到了' } }],
+      });
+    const plugin = makePlugin(request);
+    await plugin.handleEvent('message', event);
+    await plugin.handleEvent('message', {
+      ...event,
+      eventId: 'image-next',
+      text: '[CQ:at,qq=bot]这两张哪个好看[CQ:image,file=first][CQ:image,file=second]',
+      imageUrls: [
+        'https://gchat.qpic.cn/first',
+        'https://gchat.qpic.cn/second',
+      ],
+    });
+    expect(
+      JSON.parse(request.mock.calls[1][0].body).messages[1].content,
+    ).toEqual([
+      { type: 'text', text: '这两张哪个好看' },
+      { type: 'image_url', image_url: { url: 'https://gchat.qpic.cn/first' } },
+      { type: 'image_url', image_url: { url: 'https://gchat.qpic.cn/second' } },
+    ]);
+    expect(request.mock.calls[1][0].headers['X-Hermes-Session-Id']).toBe(
+      request.mock.calls[0][0].headers['X-Hermes-Session-Id'],
+    );
+  });
+
+  it('answers unavailable or excessive image attachments without making a partial inference request', async () => {
+    const request = jest.fn();
+    const plugin = makePlugin(request);
+    for (const imageUrls of [
+      [''],
+      Array.from({ length: 9 }, (_, index) => `https://gchat.qpic.cn/${index}`),
+    ]) {
+      const result = await plugin.handleEvent('message', {
+        ...event,
+        text: '',
+        imageUrls,
+      });
+      expect(result.handled).toBe(true);
+      expect(result.replies[0].content).toBeTruthy();
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('keeps commands and self messages outside image inference and replies when the provider cannot read an image', async () => {
+    const request = jest.fn().mockRejectedValue(new Error('image URL expired'));
+    const plugin = makePlugin(request);
+    const withImage = { ...event, imageUrls: ['https://gchat.qpic.cn/image'] };
+    expect(
+      (await plugin.handleEvent('message', { ...withImage, text: '/natmap' }))
+        .handled,
+    ).toBe(false);
+    expect(
+      (await plugin.handleEvent('message', { ...withImage, isSelf: true }))
+        .handled,
+    ).toBe(false);
+    expect(
+      (await plugin.handleEvent('message', { ...withImage, text: '' })).handled,
+    ).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('leaves self messages and commands to the host without an inference request', async () => {
     const request = jest.fn();
     const plugin = makePlugin(request);
@@ -47,11 +156,9 @@ describe('Hermes Agent message integration', () => {
   });
 
   it('preserves one sender history but separates conversations, senders, and installations', async () => {
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: '你好呀' } }],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '你好呀' } }],
+    });
     const plugin = makePlugin(request);
     expect(await plugin.handleEvent('message', event)).toEqual({
       handled: true,
@@ -173,13 +280,11 @@ describe('Hermes Agent message integration', () => {
   });
 
   it('makes budget truncation explicit and obeys direct and group reply limits', async () => {
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [
-          { finish_reason: 'stop', message: { content: '文'.repeat(12000) } },
-        ],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [
+        { finish_reason: 'stop', message: { content: '文'.repeat(12000) } },
+      ],
+    });
     const plugin = makePlugin(request);
     const direct = await plugin.handleEvent('message', event);
     const group = await plugin.handleEvent('message', {

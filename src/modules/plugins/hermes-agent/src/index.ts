@@ -25,7 +25,7 @@ type HermesResponse = {
 };
 
 /**
- * 构造只返回回复意图的 Hermes 事件插件；账号权限和消息发送继续由宿主负责。
+ * 将普通消息事件路由到文字与图片会话处理，只返回回复意图并保留宿主发送边界。
  * @param options - 插件定义、受控网络能力以及当前安装实例的配置快照。
  * @returns 可由通用插件工作线程加载的消息处理实例。
  */
@@ -64,14 +64,39 @@ class HermesMessageApplication {
     if (!event || event.isSelf || typeof event.text !== 'string') {
       return { handled: false, replies: [] };
     }
-    const text = event.text.trim();
-    if (!text || /^[!！/]/u.test(text) || /\[CQ:/u.test(text)) {
+    const imageUrls = event.imageUrls ?? [];
+    let text = event.text.trim();
+    if (imageUrls.length > 0) {
+      text = text.replace(/\[CQ:(?:image|at|reply)(?:,[^\]]*)?\]/gu, '').trim();
+    }
+    if (
+      (!text && imageUrls.length === 0) ||
+      /^[!！/]/u.test(text) ||
+      /\[CQ:/u.test(text)
+    ) {
       return { handled: false, replies: [] };
     }
     if (!event.conversationKey || !event.senderKey || !event.eventId) {
       return { handled: false, replies: [] };
     }
     if (text.length > 8000) return reply('消息有点长，请分段发送。');
+    if (imageUrls.length > 8) return reply('图片有点多，一次最多发 8 张。');
+    if (imageUrls.some((imageUrl) => !imageUrl)) {
+      return reply('这张图片暂时读取不了，重新发一下。');
+    }
+    let userContent:
+      | string
+      | Array<
+          | { type: 'text'; text: string }
+          | { type: 'image_url'; image_url: { url: string } }
+        > = text;
+    if (imageUrls.length > 0) {
+      userContent = [];
+      if (text) userContent.push({ type: 'text', text });
+      for (const imageUrl of imageUrls) {
+        userContent.push({ type: 'image_url', image_url: { url: imageUrl } });
+      }
+    }
 
     const sessionKey = createHash('sha256')
       .update(
@@ -145,7 +170,7 @@ class HermesMessageApplication {
                 '这是 QQ 普通聊天。尽量简洁回复，不提供会话管理命令。长期记忆共享，但记录他人事实时保留发送者来源，避免混淆人物。' +
                 `当前发送者标识：${JSON.stringify(event.senderKey)}；当前聊天标识：${sessionKey}。`,
             },
-            { role: 'user', content: text },
+            { role: 'user', content: userContent },
           ],
           stream: false,
         }),

@@ -8,6 +8,22 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
 
   beforeEach(async () => {
     server = http.createServer((request, response) => {
+      if (request.url === '/large') {
+        response.writeHead(200, { 'Content-Length': 1024 });
+        response.end(Buffer.alloc(1024));
+        return;
+      }
+      if (request.url === '/chunked') {
+        response.writeHead(200, { 'Transfer-Encoding': 'chunked' });
+        response.write(Buffer.alloc(80));
+        response.end(Buffer.alloc(80));
+        return;
+      }
+      if (request.url === '/slow') {
+        const timer = setInterval(() => response.write('.'), 10);
+        response.once('close', () => clearInterval(timer));
+        return;
+      }
       if (request.url === '/short') {
         response.writeHead(302, { Location: '/video/BV1xx411c7mD' });
         response.end();
@@ -39,7 +55,9 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    await new Promise<void>((resolveClose) =>
+      server.close(() => resolveClose()),
+    );
   });
 
   it('returns the final URL and redirect chain for relative Location headers', async () => {
@@ -80,5 +98,36 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
         url: `${baseUrl}/missing`,
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('bounds declared and streamed binary response sizes while preserving ordinary requests', async () => {
+    const client = new PluginHttpClientService();
+    for (const path of ['/large', '/chunked']) {
+      await expect(
+        client.requestBuffer({
+          url: baseUrl + path,
+          maxResponseBytes: 100,
+          timeoutMs: 1000,
+        }),
+      ).rejects.toThrow('响应超过大小上限');
+    }
+    await expect(
+      client.requestBuffer({ url: baseUrl, maxResponseBytes: 100 }),
+    ).resolves.toEqual(Buffer.from('ok'));
+    await expect(
+      client.requestBuffer({ url: baseUrl + '/large' }),
+    ).resolves.toHaveLength(1024);
+  });
+
+  it('enforces a total deadline for bounded downloads even when bytes keep arriving', async () => {
+    const started = Date.now();
+    await expect(
+      new PluginHttpClientService().requestBuffer({
+        url: baseUrl + '/slow',
+        maxResponseBytes: 1024,
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow('请求超时');
+    expect(Date.now() - started).toBeLessThan(1200);
   });
 });

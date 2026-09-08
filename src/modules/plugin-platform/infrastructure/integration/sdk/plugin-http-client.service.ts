@@ -9,6 +9,7 @@ export type PluginHttpClientRequest = {
   headers?: Record<string, string>;
   invalidJsonMessage?: string;
   method?: string;
+  maxResponseBytes?: number;
   timeoutMessage?: string;
   timeoutMs?: number;
   url: string | URL;
@@ -81,9 +82,10 @@ export class PluginHttpClientService {
   }
 
   /**
-   * 按 URL 协议、方法、请求头与超时发起插件 HTTP 请求，并将成功响应合并为 Buffer。
-   * @param input - 用于缓冲区的结构化输入，包含 `url`、`method`、`timeoutMs`、`context` 字段。
-   * @returns 完成初始化并携带当前边界配置的缓冲区。
+   * 读取二进制响应；声明大小上限时按响应头、实际字节及总耗时中止超限请求。
+   * @param input - 请求地址及超时；可选的字节上限同时启用总耗时约束，未设置时保留既有行为。
+   * @returns 请求成功后按原顺序合并的二进制响应。
+   * @throws 字节上限不是有效正整数或超过 32 MiB 时拒绝请求。
    */
   requestBuffer(input: PluginHttpClientRequest): Promise<Buffer> {
     const url = (() => {
@@ -95,6 +97,15 @@ export class PluginHttpClientService {
     const method = input.method || 'GET';
     const timeoutMs = input.timeoutMs || 8000;
     const context = input.context || '插件 HTTP 接口';
+    const maxBytes = input.maxResponseBytes;
+    if (
+      maxBytes !== undefined &&
+      (!Number.isSafeInteger(maxBytes) ||
+        maxBytes <= 0 ||
+        maxBytes > 32 * 1024 * 1024)
+    ) {
+      throw new Error('插件 HTTP 响应大小上限无效');
+    }
 
     return new Promise<Buffer>((resolve, reject) => {
       const client = (() => {
@@ -116,13 +127,29 @@ export class PluginHttpClientService {
         },
         (response) => {
           const chunks: Buffer[] = [];
+          let receivedBytes = 0;
+          response.on('error', reject);
+          if (
+            maxBytes !== undefined &&
+            Number(response.headers['content-length']) > maxBytes
+          ) {
+            const error = new Error('插件 HTTP 响应超过大小上限');
+            reject(error);
+            request.destroy(error);
+            response.destroy();
+            return;
+          }
           response.on('data', (chunk) => {
-            chunks.push((() => {
-              if (Buffer.isBuffer(chunk)) {
-                return chunk;
-              }
-              return Buffer.from(chunk);
-            })());
+            const bytes = Buffer.from(chunk);
+            receivedBytes += bytes.length;
+            if (maxBytes !== undefined && receivedBytes > maxBytes) {
+              const error = new Error('插件 HTTP 响应超过大小上限');
+              reject(error);
+              request.destroy(error);
+              response.destroy();
+              return;
+            }
+            chunks.push(bytes);
           });
           response.on('end', () => {
             const statusCode = response.statusCode || 500;
@@ -140,6 +167,14 @@ export class PluginHttpClientService {
           });
         },
       );
+      if (maxBytes !== undefined) {
+        const deadline = setTimeout(() => {
+          request.destroy(
+            new Error(input.timeoutMessage || `${context}请求超时`),
+          );
+        }, timeoutMs);
+        request.once('close', () => clearTimeout(deadline));
+      }
       request.on('timeout', () => {
         request.destroy(
           new Error(input.timeoutMessage || `${context}请求超时`),

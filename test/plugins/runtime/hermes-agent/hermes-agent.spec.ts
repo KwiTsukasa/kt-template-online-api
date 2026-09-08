@@ -15,11 +15,17 @@ const event = {
 const manifest = {
   pluginKey: 'hermes-agent',
   name: 'Hermes Agent',
-  version: '1.0.0',
+  version: '1.0.2',
 };
-const makePlugin = (requestJson: jest.Mock, installationId = 'installation') =>
+const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+const jpegDataUrl = `data:image/jpeg;base64,${jpegBytes.toString('base64')}`;
+const makePlugin = (
+  requestJson: jest.Mock,
+  installationId = 'installation',
+  requestBuffer = jest.fn().mockResolvedValue(jpegBytes),
+) =>
   createPlugin({
-    host: { requestJson, warn: jest.fn() },
+    host: { requestJson, requestBuffer, warn: jest.fn() },
     manifest,
     runtime: {
       installationId,
@@ -32,13 +38,11 @@ const makePlugin = (requestJson: jest.Mock, installationId = 'installation') =>
 
 describe('Hermes Agent message integration', () => {
   it('routes a real-shape official pure-image event into vision and returns a reply intent', async () => {
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [
-          { finish_reason: 'stop', message: { content: '这猫一脸不想上班' } },
-        ],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [
+        { finish_reason: 'stop', message: { content: '这猫一脸不想上班' } },
+      ],
+    });
     const mapped = toBotPluginMessageEvent({
       connectionMode: 'official-websocket',
       eventTime: new Date(),
@@ -68,18 +72,14 @@ describe('Hermes Agent message integration', () => {
     });
     expect(JSON.parse(request.mock.calls[0][0].body).messages[1]).toEqual({
       role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: mapped.imageUrls![0] } },
-      ],
+      content: [{ type: 'image_url', image_url: { url: jpegDataUrl } }],
     });
   });
 
   it('preserves captions and image order without exposing CQ markup, using the same sender session as text', async () => {
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: '看到了' } }],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '看到了' } }],
+    });
     const plugin = makePlugin(request);
     await plugin.handleEvent('message', event);
     await plugin.handleEvent('message', {
@@ -95,8 +95,8 @@ describe('Hermes Agent message integration', () => {
       JSON.parse(request.mock.calls[1][0].body).messages[1].content,
     ).toEqual([
       { type: 'text', text: '这两张哪个好看' },
-      { type: 'image_url', image_url: { url: 'https://gchat.qpic.cn/first' } },
-      { type: 'image_url', image_url: { url: 'https://gchat.qpic.cn/second' } },
+      { type: 'image_url', image_url: { url: jpegDataUrl } },
+      { type: 'image_url', image_url: { url: jpegDataUrl } },
     ]);
     expect(request.mock.calls[1][0].headers['X-Hermes-Session-Id']).toBe(
       request.mock.calls[0][0].headers['X-Hermes-Session-Id'],
@@ -119,6 +119,49 @@ describe('Hermes Agent message integration', () => {
       expect(result.replies[0].content).toBeTruthy();
     }
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('uses bounded host image reads and never forwards signed URLs or credentials to the image downloader', async () => {
+    const request = jest
+      .fn()
+      .mockResolvedValue({
+        choices: [{ finish_reason: 'stop', message: { content: '看见了' } }],
+      });
+    const download = jest.fn().mockResolvedValue(new Uint8Array(jpegBytes));
+    const plugin = makePlugin(request, 'image-host', download);
+    await plugin.handleEvent('message', {
+      ...event,
+      imageUrls: [
+        'https://multimedia.nt.qq.com.cn/image?key=private-image-key',
+      ],
+    });
+    expect(download.mock.calls[0][0]).toMatchObject({
+      method: 'GET',
+      maxResponseBytes: 4 * 1024 * 1024,
+      timeoutMs: 8000,
+    });
+    expect(download.mock.calls[0][0].headers).toBeUndefined();
+    expect(request.mock.calls[0][0].body).toContain(jpegDataUrl);
+    expect(request.mock.calls[0][0].body).not.toContain('private-image-key');
+  });
+
+  it('does not send an image inference request after a failed download or unsupported file signature', async () => {
+    for (const download of [
+      jest.fn().mockRejectedValue(new Error('expired')),
+      jest.fn().mockResolvedValue(Buffer.from('<html>error</html>')),
+    ]) {
+      const request = jest.fn();
+      const result = await makePlugin(
+        request,
+        'invalid-image',
+        download,
+      ).handleEvent('message', {
+        ...event,
+        imageUrls: ['https://gchat.qpic.cn/image'],
+      });
+      expect(result.handled).toBe(true);
+      expect(request).not.toHaveBeenCalled();
+    }
   });
 
   it('keeps commands and self messages outside image inference and replies when the provider cannot read an image', async () => {

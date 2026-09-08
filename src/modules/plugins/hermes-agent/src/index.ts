@@ -90,14 +90,6 @@ class HermesMessageApplication {
           | { type: 'text'; text: string }
           | { type: 'image_url'; image_url: { url: string } }
         > = text;
-    if (imageUrls.length > 0) {
-      userContent = [];
-      if (text) userContent.push({ type: 'text', text });
-      for (const imageUrl of imageUrls) {
-        userContent.push({ type: 'image_url', image_url: { url: imageUrl } });
-      }
-    }
-
     const sessionKey = createHash('sha256')
       .update(
         JSON.stringify([
@@ -149,6 +141,41 @@ class HermesMessageApplication {
         url.hash
       ) {
         return reply('对话服务配置需要检查。');
+      }
+      if (imageUrls.length > 0) {
+        const requestBuffer = this.options.host.requestBuffer;
+        if (typeof requestBuffer !== 'function')
+          return reply('图片服务尚未就绪。');
+        userContent = [];
+        if (text) userContent.push({ type: 'text', text });
+        let remainingBytes = 6 * 1024 * 1024;
+        for (const imageUrl of imageUrls) {
+          if (remainingBytes <= 0)
+            return reply('图片总大小超过 6 MiB，请分开发送。');
+          const remainingMs = 55000 - (Date.now() - startedAt);
+          if (remainingMs < 1000) return reply('图片读取超时，请重新发一下。');
+          let bytes: Buffer;
+          try {
+            bytes = Buffer.from(
+              (await requestBuffer({
+                url: imageUrl,
+                method: 'GET',
+                timeoutMs: Math.min(8000, remainingMs),
+                maxResponseBytes: Math.min(4 * 1024 * 1024, remainingBytes),
+                context: 'QQ 图片读取',
+              })) as Uint8Array,
+            );
+          } catch {
+            return reply('图片读取失败或文件过大，请重新发一下。');
+          }
+          remainingBytes -= bytes.length;
+          const imageDataUrl = toImageDataUrl(bytes);
+          if (!imageDataUrl) return reply('这张图片的格式暂不支持。');
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: imageDataUrl },
+          });
+        }
       }
       const response = (await requestJson({
         url: url.toString(),
@@ -212,6 +239,33 @@ class HermesMessageApplication {
       release();
     }
   }
+}
+
+/**
+ * 依据文件签名编码常见图片，避免把临时 QQ 链接或伪装成图片的文本传给上游。
+ * @param bytes - 宿主在大小与耗时边界内取得的图片二进制内容。
+ * @returns 含真实 MIME 类型的图片数据地址；签名不支持时为空字符串。
+ */
+function toImageDataUrl(bytes: Buffer): string {
+  let mime = '';
+  if (bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    mime = 'image/jpeg';
+  } else if (
+    bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    mime = 'image/png';
+  } else if (
+    ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))
+  ) {
+    mime = 'image/gif';
+  } else if (
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    mime = 'image/webp';
+  }
+  if (!mime) return '';
+  return `data:${mime};base64,${bytes.toString('base64')}`;
 }
 
 /**

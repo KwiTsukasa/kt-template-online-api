@@ -232,16 +232,17 @@ export class PersonaExecutor {
       if (!frame) return false;
       await browser.frame(frame);
       let qr = await browser.find('img[src*="ptqrshow"]');
-      while (!qr && Date.now() < deadline) {
+      while ((!qr || !(await browser.imageReady(qr))) && Date.now() < deadline) {
         await pause(400);
         qr = await browser.find('img[src*="ptqrshow"]');
       }
-      if (!qr) return false;
+      if (!qr || !(await browser.imageReady(qr))) return false;
       await scanner.show(await browser.screenshot(qr));
       if (!(await scanner.confirm())) return false;
       await browser.frame(null);
       for (let attempt = 0; attempt < 12; attempt++) {
         // 部分已有开发者账号需要在扫码后确认归属，按钮不唯一时保持待处理。
+        await browser.confirmDeveloper(this.options.adminQq);
         await browser.clickText('登录');
         await browser.clickText('确认');
         await pause(700);

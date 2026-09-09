@@ -84,7 +84,7 @@ export class AndroidScanner {
   }
 
   /**
-   * 核对容器相机与目录权限后通过手机 QQ 的正常入口开启扫一扫。
+   * 核对容器相机与目录权限，复用已打开的扫一扫或从手机 QQ 首页进入。
    * @throws 当前设备不是已适配虚拟相机或 QQ 尚未登录时停止自动确认。
    */
   async prepare() {
@@ -122,6 +122,11 @@ export class AndroidScanner {
     );
     await wait(700);
     const nodes = await this.nodes();
+    if (
+      nodes.some((node) => node.text === '请对准需要识别的二维码') &&
+      nodes.some((node) => node['content-desc'] === '扫码')
+    )
+      return;
     if (!(await this.tap(nodes, '快捷入口')))
       throw new Error('手机 QQ 需要登录或界面处理。');
     await wait(300);

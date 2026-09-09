@@ -114,6 +114,34 @@ export class BrowserSession {
   }
 
   /**
+   * 等待二维码图片完成解码，避免把尚未加载的空白元素送入摄像头。
+   * @param element - 当前登录框架中的二维码图片。
+   * @returns 图片已加载且具有有效尺寸时为真。
+   */
+  async imageReady(element: Element): Promise<boolean> {
+    return (await this.command('POST', '/execute/sync', {
+      script:
+        'const image=arguments[0]; return image.complete && image.naturalWidth>0 && image.naturalHeight>0;',
+      args: [element],
+    })) as boolean;
+  }
+
+  /**
+   * 仅在当前 QQ 身份相符且只有一个开发者主体时完成新版登录选择。
+   * @param adminQq - NAS 配置中固定的管理员 QQ 号。
+   * @returns 是否已选择唯一主体并点击确认登录；多主体或注册页面保持待处理。
+   */
+  async confirmDeveloper(adminQq: string): Promise<boolean> {
+    const selected = (await this.command('POST', '/execute/sync', {
+      script:
+        "const cookies=Object.fromEntries(document.cookie.split(';').map(s=>s.trim().split('='))); const uin=String(parseInt((cookies.p_uin||cookies.uin||'').replace(/^o/,''),10)); if(uin!==arguments[0])return false; const items=[...document.querySelectorAll('.entity-picker-dialog .picker__item')].filter(e=>e.getClientRects().length); if(items.length!==1)return false; items[0].click(); return true;",
+      args: [adminQq],
+    })) as boolean;
+    if (!selected) return false;
+    return this.clickText('确认登录');
+  }
+
+  /**
    * 截取当前二维码元素，保持授权码与当前浏览器会话绑定。
    * @param element - 当前页面的二维码图片。
    * @returns PNG 字节，仅供 NAS 虚拟摄像头使用。

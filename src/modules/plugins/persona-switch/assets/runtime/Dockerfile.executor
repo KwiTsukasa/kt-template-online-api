@@ -4,7 +4,12 @@ FROM ${API_IMAGE}
 USER root
 RUN test -f /app/dist/apps/persona-executor/server.js \
  && apt-get update \
- && apt-get install -y --no-install-recommends chromium chromium-driver adb \
+ && apt-get install -y --no-install-recommends chromium chromium-driver ca-certificates curl unzip \
+ && curl --fail --location --retry 2 https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip -o /tmp/platform-tools.zip \
+ && echo 'd230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1  /tmp/platform-tools.zip' | sha256sum --check - \
+ && mkdir -p /opt/android \
+ && unzip -q /tmp/platform-tools.zip -d /opt/android \
+ && rm /tmp/platform-tools.zip \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /data/browser /data/avatars /data/jobs \
  && chown -R node:node /data
@@ -12,6 +17,7 @@ COPY src/modules/plugins/persona-switch/assets/runtime/executor-entrypoint.sh /a
 RUN chmod 755 /app/persona-executor-entrypoint.sh
 USER node
 ENV HOME=/data
+ENV PATH=/opt/android/platform-tools:$PATH
 ENV NODE_ENV=production
 EXPOSE 8643
 ENTRYPOINT ["/app/persona-executor-entrypoint.sh"]

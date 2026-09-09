@@ -3,6 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Repository } from 'typeorm';
+import {
+  Plugin,
+  PluginConfig,
+} from '../../persistence/plugin-platform.entities';
+import type {
+  PluginStateSnapshot,
+  PluginStateWrite,
+} from '@/modules/plugin-platform/contract/plugin-state';
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { UDP_NATMAP_ENDPOINT_IDENTITY } from '@/modules/admin/platform-config/network-management/domain/network-source-eligibility';
@@ -36,6 +44,9 @@ export class PluginHostBridgeService {
     @Optional()
     @InjectRepository(NetworkPortForward)
     private readonly networkPortForwardRepository?: Repository<NetworkPortForward>,
+    @Optional()
+    @InjectRepository(Plugin)
+    private readonly pluginRepository?: Repository<Plugin>,
   ) {}
 
   /**
@@ -78,6 +89,19 @@ export class PluginHostBridgeService {
     const args = request.args || {};
 
     switch (request.method) {
+      case 'readPluginState':
+        this.assertManifestPermission(descriptor, 'plugin.storage.read');
+        return this.accessPluginState(descriptor);
+      case 'compareAndSwapPluginState':
+        this.assertManifestPermission(descriptor, 'plugin.storage.write');
+        if (!isRecord(args.input)) throw new Error('插件状态写入参数无效');
+        return this.accessPluginState(
+          descriptor,
+          args.input as PluginStateWrite,
+        );
+      case 'requestResponse':
+        this.assertManifestPermission(descriptor, 'runtime.http');
+        return this.httpClient.requestResponse(getHttpRequestOptions(args));
       case 'getDictByKey':
         return this.dictService.getDictByKey(getDictCode(args));
       case 'getDictItemsByKey':
@@ -118,6 +142,75 @@ export class PluginHostBridgeService {
       default:
         throw new Error(`未知插件 Host 调用：${request.method}`);
     }
+  }
+
+  /**
+   * 在插件主记录行锁下读取或条件更新私有状态，安装版本变更不丢失状态且不能指定其他插件。
+   * @param descriptor - 由宿主绑定的可信插件身份。
+   * @param input - 可选的预期版本及新状态；省略时只读。
+   * @returns 当前状态或写入后的版本快照。
+   * @throws 存储未接线、状态损坏、版本冲突或载荷超过 48 KiB 时拒绝操作。
+   */
+  private async accessPluginState(
+    descriptor: PluginPackageDescriptor,
+    input?: PluginStateWrite,
+  ): Promise<PluginStateSnapshot> {
+    if (!this.pluginRepository) throw new Error('插件状态存储未接线');
+    if (
+      input !== undefined &&
+      (!isRecord(input) ||
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 0 ||
+        !isRecord(input.value))
+    ) {
+      throw new Error('插件状态写入参数无效');
+    }
+    if (
+      input &&
+      Buffer.byteLength(JSON.stringify(input.value), 'utf8') > 48 * 1024
+    ) {
+      throw new Error('插件状态超过 48 KiB 上限');
+    }
+    return this.pluginRepository.manager.transaction(async (manager) => {
+      const plugin = await manager.findOne(Plugin, {
+        where: { pluginKey: descriptor.manifest.pluginKey },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!plugin || plugin.status === 'uninstalled')
+        throw new Error('插件未安装');
+      const repository = manager.getRepository(PluginConfig);
+      const stored = await repository.findOne({
+        where: { pluginId: plugin.id, configKey: '__runtime_state_v1' },
+      });
+      let snapshot: PluginStateSnapshot = { revision: 0, value: null };
+      if (stored) {
+        const candidate = stored.configValue;
+        if (
+          !candidate ||
+          !Number.isSafeInteger(candidate.revision) ||
+          Number(candidate.revision) < 1 ||
+          !isRecord(candidate.value)
+        ) {
+          throw new Error('插件状态损坏，拒绝覆盖');
+        }
+        snapshot = candidate as PluginStateSnapshot;
+      }
+      if (input === undefined) return snapshot;
+      if (snapshot.revision !== input.expectedRevision)
+        throw new Error('插件状态版本冲突，请重试');
+      if (!Number.isSafeInteger(snapshot.revision + 1))
+        throw new Error('插件状态版本超出范围');
+      const next = { revision: snapshot.revision + 1, value: input.value };
+      const entity =
+        stored ??
+        repository.create({
+          pluginId: plugin.id,
+          configKey: '__runtime_state_v1',
+        });
+      entity.configValue = next;
+      await repository.save(entity);
+      return next;
+    });
   }
 
   /**

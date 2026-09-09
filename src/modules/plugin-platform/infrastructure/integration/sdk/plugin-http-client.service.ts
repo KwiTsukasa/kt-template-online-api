@@ -87,7 +87,23 @@ export class PluginHttpClientService {
    * @returns 请求成功后按原顺序合并的二进制响应。
    * @throws 字节上限不是有效正整数或超过 32 MiB 时拒绝请求。
    */
-  requestBuffer(input: PluginHttpClientRequest): Promise<Buffer> {
+  async requestBuffer(input: PluginHttpClientRequest): Promise<Buffer> {
+    return (await this.requestResponse(input)).body;
+  }
+
+  /**
+   * 在二进制大小和耗时边界内保留响应头与状态码，供需要会话 Cookie 的插件完成认证。
+   * @param input - 请求地址、正文、请求头及可选响应大小上限。
+   * @returns 成功响应的原始字节、状态码与响应头；不自动跟随重定向。
+   * @throws 响应大小上限不是有效正整数或超过 32 MiB 时拒绝请求。
+   */
+  requestResponse(
+    input: PluginHttpClientRequest,
+  ): Promise<{
+    body: Buffer;
+    statusCode: number;
+    headers: http.IncomingHttpHeaders;
+  }> {
     const url = (() => {
       if (input.url instanceof URL) {
         return input.url;
@@ -107,7 +123,7 @@ export class PluginHttpClientService {
       throw new Error('插件 HTTP 响应大小上限无效');
     }
 
-    return new Promise<Buffer>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const client = (() => {
         if (url.protocol === 'http:') {
           return http;
@@ -163,7 +179,11 @@ export class PluginHttpClientService {
               );
               return;
             }
-            resolve(Buffer.concat(chunks));
+            resolve({
+              body: Buffer.concat(chunks),
+              headers: response.headers,
+              statusCode,
+            });
           });
         },
       );

@@ -1,0 +1,10 @@
+FROM nousresearch/hermes-agent@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+USER root
+COPY src/modules/plugins/persona-switch/assets/runtime/hermes-soul-hot-reload.patch /tmp/kt-soul-hot-reload.patch
+RUN cd /opt/hermes \
+ && printf '%s  %s\n' 86a4f6c61183167850046b025a8f5c7b8601fb910f8a9ee464535afccc541c06 agent/turn_context.py | sha256sum -c - \
+ && git apply --check /tmp/kt-soul-hot-reload.patch \
+ && git apply /tmp/kt-soul-hot-reload.patch \
+ && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py \
+ && rm /tmp/kt-soul-hot-reload.patch
+ENV KT_SOUL_HOT_RELOAD=1

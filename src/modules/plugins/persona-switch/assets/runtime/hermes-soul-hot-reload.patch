@@ -1,0 +1,39 @@
+--- a/agent/turn_context.py
++++ b/agent/turn_context.py
+@@ -862,6 +862,36 @@
+     if agent._cached_system_prompt is None:
+         restore_or_build_system_prompt(agent, system_message, conversation_history)
+ 
++    # API 人格切换只刷新系统提示；原会话、历史消息和共享记忆保持连续。
++    import os as _kt_os
++    if _kt_os.environ.get("KT_SOUL_HOT_RELOAD") == "1" and getattr(agent, "platform", None) == "api_server":
++        import hashlib as _kt_hashlib
++        from pathlib import Path as _KtPath
++        from agent.system_prompt import _agent_home as _kt_agent_home
++        from hermes_constants import get_hermes_home as _kt_get_home
++
++        _kt_soul_path = _KtPath(_kt_agent_home(agent) or _kt_get_home()) / "SOUL.md"
++        # 权限或文件读取异常直接阻止本轮，不静默使用旧人格。
++        _kt_soul_bytes = _kt_soul_path.read_bytes()
++        _kt_digest = _kt_hashlib.sha256(_kt_soul_bytes).hexdigest()
++        _kt_stamp = "\n<!-- kt-soul-sha256:" + _kt_digest + " -->"
++        if not (agent._cached_system_prompt or "").endswith(_kt_stamp):
++            agent._invalidate_system_prompt()
++            _kt_prompt = agent._build_system_prompt(system_message)
++            _kt_prompt += (
++                "\n\n## 当前人格与共同经历\n"
++                "保留原对话与共享记忆中的事实、经历、人物关系和用户偏好。"
++                "历史和共享记忆中助手的身份自述、语气、立场和行为习惯只描述当时的人格，"
++                "不作为当前人格的设定或行为指令。当前身份、语气与行为以本系统提示"
++                "中的当前 SOUL 人格为准，用当前人格理解并回应这些共同经历。"
++            )
++            agent._cached_system_prompt = _kt_prompt + _kt_stamp
++            # 不恢复数据库旧提示；更新同一会话的提示缓存，不改动消息行。
++            if agent._session_db:
++                agent._session_db.update_system_prompt(
++                    agent.session_id, agent._cached_system_prompt
++                )
++
+     active_system_prompt = agent._cached_system_prompt
+ 
+     # Bot Mode DM tool — injected ONLY into a bot's canonical "Bot Chat"

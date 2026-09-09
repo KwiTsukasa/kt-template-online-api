@@ -1,0 +1,17 @@
+ARG API_IMAGE
+FROM ${API_IMAGE}
+
+USER root
+RUN test -f /app/dist/apps/persona-executor/server.js \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends chromium chromium-driver adb \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /data/browser /data/avatars /data/jobs \
+ && chown -R node:node /data
+COPY src/modules/plugins/persona-switch/assets/runtime/executor-entrypoint.sh /app/persona-executor-entrypoint.sh
+RUN chmod 755 /app/persona-executor-entrypoint.sh
+USER node
+ENV HOME=/data
+ENV NODE_ENV=production
+EXPOSE 8643
+ENTRYPOINT ["/app/persona-executor-entrypoint.sh"]

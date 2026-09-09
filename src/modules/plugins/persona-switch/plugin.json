@@ -1,0 +1,89 @@
+{
+  "pluginKey": "persona-switch",
+  "name": "共享人格切换",
+  "version": "1.1.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "图文保存共享人格，通过 NAS 浏览器与 Android 同步 Bot 名称和头像，保留原对话与共享记忆。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "permissions": [
+    "runtime.http",
+    "plugin.config.read",
+    "plugin.storage.read",
+    "plugin.storage.write"
+  ],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 30000,
+    "memoryMb": 128,
+    "maxConcurrency": 1,
+    "configKeys": [
+      "HERMES_DASHBOARD_BASE_URL",
+      "HERMES_DASHBOARD_USERNAME",
+      "HERMES_DASHBOARD_PASSWORD",
+      "PERSONA_EXECUTOR_BASE_URL",
+      "PERSONA_EXECUTOR_TOKEN"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "operations": [
+    {
+      "key": "persona.manage",
+      "name": "管理共享人格",
+      "handlerName": "managePersona",
+      "aliases": ["人格", "persona"],
+      "description": "/persona 或 /人格：s/保存（名称、正文分行并附图）、c/切换、d/删除、h/使用说明。",
+      "timeoutMs": 25000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": {
+            "type": "string",
+            "maxLength": 8200
+          },
+          "imageUrls": {
+            "type": "array",
+            "items": { "type": "string", "maxLength": 8192 }
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["replyText"],
+        "properties": {
+          "replyText": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": [],
+  "tasks": [
+    {
+      "name": "恢复未完成的人格切换",
+      "enabled": true,
+      "handlerName": "reconcile",
+      "defaultCron": "*/2 * * * *",
+      "permissions": [
+        "runtime.http",
+        "plugin.storage.read",
+        "plugin.storage.write"
+      ],
+      "key": "persona.reconcile",
+      "timeoutMs": 25000
+    }
+  ]
+}

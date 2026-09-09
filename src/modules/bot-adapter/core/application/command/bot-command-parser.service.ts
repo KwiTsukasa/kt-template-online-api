@@ -6,6 +6,7 @@ import {
   type PluginExecutionPort,
 } from '../../domain/plugin-execution.port';
 import type { BotCommand } from '../../infrastructure/persistence/command/bot-command.entity';
+import { collectImageUrls } from '../event/plugin-event.mapper';
 
 @Injectable()
 export class BotCommandParserService {
@@ -34,7 +35,10 @@ export class BotCommandParserService {
         if (rawArgs === null) continue;
         return {
           alias,
-          input: this.parseRawInput(rawArgs),
+          input: {
+            ...this.parseRawInput(rawArgs),
+            imageUrls: collectImageUrls(message),
+          },
           matched: true,
           rawArgs,
         } satisfies BotCommandMatchResult;
@@ -73,7 +77,10 @@ export class BotCommandParserService {
   private pickArgs(source: string, commandText: string) {
     if (!commandText) return null;
     if (source === commandText) return '';
-    if (source.startsWith(`${commandText} `)) {
+    if (
+      source.startsWith(commandText) &&
+      /^\s/u.test(source.slice(commandText.length))
+    ) {
       return source.slice(commandText.length).trim();
     }
     return null;

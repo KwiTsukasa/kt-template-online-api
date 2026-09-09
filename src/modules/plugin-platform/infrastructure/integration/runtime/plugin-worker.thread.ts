@@ -78,6 +78,9 @@ type PendingHostCall = {
 type HostArgumentMapper = (...args: unknown[]) => Record<string, unknown>;
 
 const HOST_ARGUMENT_MAPPERS: Record<string, HostArgumentMapper> = {
+  readPluginState: () => ({}),
+  compareAndSwapPluginState: (input) => ({ input }),
+  requestResponse: (options) => ({ options }),
   getDictByKey: (dictCode) => ({ dictCode }),
   getDictItemsByKey: (dictCode) => ({ dictCode }),
   readAssetFile: (path) => ({ path }),

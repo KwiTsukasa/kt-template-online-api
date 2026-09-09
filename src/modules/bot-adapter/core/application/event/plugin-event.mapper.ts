@@ -43,7 +43,7 @@ export function toBotPluginMessageEvent(
  * @param message - 保留适配器附件及消息段的规范消息。
  * @returns 按附件顺序去重的图片地址；空地址保留为不可读取的图片，供消费方明确提示。
  */
-function collectImageUrls(message: BotNormalizedMessage): string[] {
+export function collectImageUrls(message: BotNormalizedMessage): string[] {
   const images: string[] = [];
   const attachments = message.rawEvent?.attachments;
   if (Array.isArray(attachments)) {

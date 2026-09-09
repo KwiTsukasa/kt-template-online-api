@@ -1,0 +1,29 @@
+name: kt-persona-executor
+services:
+  persona-executor:
+    image: ${PERSONA_EXECUTOR_IMAGE:?Set the reviewed immutable image}
+    container_name: kt-persona-executor
+    restart: unless-stopped
+    user: "1000:1000"
+    init: true
+    network_mode: bridge
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PERSONA_EXECUTOR_TOKEN: ${PERSONA_EXECUTOR_TOKEN:?Required private service token}
+      PERSONA_BOT_APP_ID: ${PERSONA_BOT_APP_ID:?Required Bot AppID}
+      PERSONA_ADMIN_QQ: ${PERSONA_ADMIN_QQ:?Required administrator QQ}
+      PERSONA_ANDROID_SERIAL: ${PERSONA_ANDROID_SERIAL:?Required NAS Android address}
+      ADB_VENDOR_KEYS: /run/secrets/adbkey
+    ports:
+      - "10.66.66.2:18643:8643"
+    volumes:
+      - ./data:/data
+      - ${PERSONA_ADB_KEY_PATH:?Required NAS ADB key}:/run/secrets/adbkey:ro
+    tmpfs:
+      - /tmp:mode=1777
+    shm_size: 256m
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}

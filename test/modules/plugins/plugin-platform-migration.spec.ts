@@ -35,6 +35,7 @@ describe('existing plugin platform migration', () => {
       'fflogs',
       'hermes-agent',
       'natmap-port',
+      'persona-switch',
       'repeater',
     ]);
 
@@ -52,6 +53,7 @@ describe('existing plugin platform migration', () => {
       'fflogs',
       'hermes-agent',
       'natmap-port',
+      'persona-switch',
       'repeater',
     ].map((pluginName) => {
       const root = join(pluginRoot, pluginName);
@@ -71,6 +73,7 @@ describe('existing plugin platform migration', () => {
       'fflogs',
       'hermes-agent',
       'natmap-port',
+      'persona-switch',
       'repeater',
     ]);
     expect(

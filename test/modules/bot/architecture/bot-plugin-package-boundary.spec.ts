@@ -125,6 +125,7 @@ describe('QQBot plugin package boundary', () => {
       'fflogs',
       'hermes-agent',
       'natmap-port',
+      'persona-switch',
       'repeater',
     ]);
   });

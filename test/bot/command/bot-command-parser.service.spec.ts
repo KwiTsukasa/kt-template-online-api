@@ -49,6 +49,7 @@ describe('BotCommandParserService', () => {
       alias: 'logs',
       input: {
         args: ['Kwi柊司', '琥珀原', '上位护锁刃龙'],
+        imageUrls: [],
         raw: 'Kwi柊司 琥珀原 上位护锁刃龙',
         text: 'Kwi柊司 琥珀原 上位护锁刃龙',
       },

@@ -34,6 +34,110 @@ export class BotCommandEngineService {
   ) {}
 
   /**
+   * 返回当前会话实际启用的命令及输入说明，排除已停用的插件能力。
+   * @param message - 由入站链绑定的真实身份与会话。
+   * @param adapterContext - 已重新读取的适配器授权目录。
+   * @returns 模型可检索和调用的命令摘要。
+   */
+  async listForTools(
+    message: BotNormalizedMessage,
+    adapterContext?: BotAdapterExecutionContext,
+  ) {
+    const commands = await this.commandService.listEnabledForMessage(
+      message,
+      adapterContext,
+    );
+    const result: Record<string, unknown>[] = [];
+    for (const command of commands) {
+      const operation =
+        await this.pluginExecution.getOperationByCommand(command);
+      if (!operation) continue;
+      result.push({
+        commandId: command.id,
+        name: command.name,
+        aliases: await this.commandParser.getAliases(command),
+        prefixes: this.commandParser.getPrefixes(command),
+        description: operation.description || command.remark,
+        inputSchema: operation.inputSchema,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * 通过原命令解析、冷却、插件运行与审计入口执行工具请求，结果交给当前对话汇总。
+   * @param message - 已绑定的真实消息身份及原始附件。
+   * @param adapterContext - 调用时重新取得的插件授权。
+   * @param commandId - 本次查询目录中的命令标识。
+   * @param text - 包含命令前缀和参数的完整文本。
+   * @returns 原命令的执行结果及渲染后的回复文本。
+   * @throws 命令不可用、参数不匹配、冷却中或执行失败时拒绝调用。
+   */
+  async executeForTools(
+    message: BotNormalizedMessage,
+    adapterContext: BotAdapterExecutionContext | undefined,
+    commandId: string,
+    text: string,
+  ) {
+    const commands = await this.commandService.listEnabledForMessage(
+      message,
+      adapterContext,
+    );
+    const command = commands.find((item) => item.id === commandId);
+    if (
+      !command ||
+      !(await this.pluginExecution.getOperationByCommand(command))
+    )
+      throw new Error('命令未启用或当前账号未获授权');
+    const toolMessage = { ...message, messageText: text, rawMessage: text };
+    const matched = await this.commandParser.match(command, toolMessage);
+    if (!matched) throw new Error('完整命令文本与所选命令不匹配');
+    if (this.commandService.isInCooldown(command))
+      throw new Error('命令冷却中，请稍后再试');
+    const decision = this.sessionBehaviorService?.decideAutomation({
+      automationKind: 'command_reply',
+      stage: this.getBehaviorStage(message),
+    });
+    if (decision && !decision.allowed)
+      throw new Error('当前会话阶段不允许自动执行命令');
+    const input = this.mergeInput(command, matched.input);
+    await this.commandService.markHit(command);
+    try {
+      const output = await this.pluginExecution.executeOperation({
+        context: { arguments: matched.input },
+        input,
+        operationKey: command.operationKey,
+        pluginKey: command.pluginKey,
+      });
+      await this.commandService.logExecution({
+        command,
+        input,
+        message,
+        output,
+        status: 'success',
+      });
+      return {
+        status: 'success',
+        output,
+        replyText: this.buildReplyText(command, input, output),
+      };
+    } catch (error) {
+      const errorMessage = this.toolsService.getErrorMessage(
+        error,
+        '命令执行失败',
+      );
+      await this.commandService.logExecution({
+        command,
+        input,
+        message,
+        errorMessage,
+        status: 'failed',
+      });
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
    * 根据`message`处理消息；当 `!behaviorDecision.allowed` 成立时返回 `true`。
    * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `channelId`、`rawEvent`、`selfId`、`targetId` 字段。
    * @param adapterContext - 当前 transport 已授权的插件键；缺省时沿用非插件限定的命令目录。

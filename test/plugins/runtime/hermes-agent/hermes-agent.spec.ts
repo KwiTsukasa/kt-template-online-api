@@ -37,6 +37,35 @@ const makePlugin = (
   });
 
 describe('Hermes Agent message integration', () => {
+  it('keeps tool context outside model messages and preserves the durable session', async () => {
+    const request = jest
+      .fn()
+      .mockResolvedValue({
+        choices: [{ finish_reason: 'stop', message: { content: '查到了' } }],
+      });
+    const plugin = makePlugin(request);
+    await plugin.handleEvent('message', {
+      ...event,
+      metadata: { toolContextId: 'turn-one' },
+    });
+    await plugin.handleEvent('message', {
+      ...event,
+      eventId: 'next',
+      metadata: { toolContextId: 'turn-two' },
+    });
+    expect(request.mock.calls[0][0].headers['X-KT-Tool-Context']).toBe(
+      'turn-one',
+    );
+    expect(request.mock.calls[1][0].headers['X-KT-Tool-Context']).toBe(
+      'turn-two',
+    );
+    expect(request.mock.calls[0][0].headers['X-Hermes-Session-Id']).toBe(
+      request.mock.calls[1][0].headers['X-Hermes-Session-Id'],
+    );
+    expect(request.mock.calls[0][0].body).not.toContain('turn-one');
+    expect(request.mock.calls[0][0].timeoutMs).toBeGreaterThan(200_000);
+  });
+
   it('routes a real-shape official pure-image event into vision and returns a reply intent', async () => {
     const request = jest.fn().mockResolvedValue({
       choices: [
@@ -122,11 +151,9 @@ describe('Hermes Agent message integration', () => {
   });
 
   it('uses bounded host image reads and never forwards signed URLs or credentials to the image downloader', async () => {
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: '看见了' } }],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '看见了' } }],
+    });
     const download = jest.fn().mockResolvedValue(new Uint8Array(jpegBytes));
     const plugin = makePlugin(request, 'image-host', download);
     await plugin.handleEvent('message', {

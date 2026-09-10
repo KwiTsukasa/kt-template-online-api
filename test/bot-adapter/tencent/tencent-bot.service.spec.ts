@@ -8,6 +8,43 @@ const flushPromises = () =>
   new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('TencentBotService', () => {
+  it('refreshes native private typing and stops the timer on completion, skipping groups', async () => {
+    jest.useFakeTimers();
+    try {
+      const bot = createBotClient();
+      const service = createService(
+        jest.fn(),
+        createAccountService({}),
+        createEventService(),
+      );
+      const runtime = { bot };
+      const privateMessage = {
+        kind: 'c2c',
+        replyTarget: { scope: 'c2c', targetId: 'sender', msgId: 'real-event' },
+      };
+      const stop = (service as any).startThinking(runtime, privateMessage);
+      await Promise.resolve();
+      expect(bot.sendTyping).toHaveBeenCalledWith(
+        privateMessage.replyTarget,
+        30,
+      );
+      jest.advanceTimersByTime(25_000);
+      await Promise.resolve();
+      expect(bot.sendTyping).toHaveBeenCalledTimes(2);
+      stop();
+      jest.advanceTimersByTime(50_000);
+      await Promise.resolve();
+      expect(bot.sendTyping).toHaveBeenCalledTimes(2);
+      (service as any).startThinking(runtime, {
+        kind: 'group',
+        replyTarget: { scope: 'group' },
+      })();
+      expect(bot.sendTyping).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('starts Gateway only for WebSocket mode and sends normalized group events into the shared core', async () => {
     const eventHandlers = new Map<string, (...args: any[]) => unknown>();
     const bot = createBotClient(eventHandlers);
@@ -137,7 +174,7 @@ describe('TencentBotService', () => {
         targetId: 'group_openid_1',
         userId: 'user_openid_1',
       }),
-      { pluginKeys: [] },
+      expect.objectContaining({ pluginKeys: [] }),
     );
     expect(eventService.handleNormalizedMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -150,7 +187,7 @@ describe('TencentBotService', () => {
         },
         targetId: 'user_openid_private',
       }),
-      { pluginKeys: [] },
+      expect.objectContaining({ pluginKeys: [] }),
     );
     expect(eventService.handleNormalizedMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -161,7 +198,7 @@ describe('TencentBotService', () => {
         messageType: 'channel',
         targetId: 'channel_openid_1',
       }),
-      { pluginKeys: [] },
+      expect.objectContaining({ pluginKeys: [] }),
     );
     expect(eventService.handleNormalizedMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -171,7 +208,7 @@ describe('TencentBotService', () => {
         messageType: 'channel',
         targetId: 'guild_openid_dm',
       }),
-      { pluginKeys: [] },
+      expect.objectContaining({ pluginKeys: [] }),
     );
     expect(eventService.handleNormalizedMessage).toHaveBeenCalledTimes(4);
   });
@@ -283,7 +320,7 @@ describe('TencentBotService', () => {
         messageType: 'private',
         targetId: 'user_openid_2',
       }),
-      { pluginKeys: [] },
+      expect.objectContaining({ pluginKeys: [] }),
     );
 
     verifyWebhookSignature.mockReturnValueOnce(false);
@@ -644,6 +681,7 @@ const createBotClient = (
       },
       upload: { file_info: 'file-info' },
     }),
+    sendTyping: jest.fn().mockResolvedValue({}),
     sendText: jest.fn().mockResolvedValue({
       id: 'official-text-message',
       timestamp: 1,

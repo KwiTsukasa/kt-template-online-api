@@ -17,6 +17,7 @@ import { toBotPluginMessageEvent } from '../event/plugin-event.mapper';
 import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from './bot-send.service';
 import { BotRuleService } from '../rule/bot-rule.service';
+import { BotToolSessionService } from '../command/bot-tool-session.service';
 
 @Injectable()
 export class BotRuleEngineService {
@@ -33,6 +34,8 @@ export class BotRuleEngineService {
     private readonly toolsService: ToolsService,
     @Optional()
     private readonly sessionBehaviorService?: NapcatSessionBehaviorService,
+    @Optional()
+    private readonly toolSessions?: BotToolSessionService,
   ) {}
 
   /**
@@ -101,9 +104,20 @@ export class BotRuleEngineService {
       );
     }
     if (pluginKeys.length === 0) return;
+    const event = toBotPluginMessageEvent(message);
+    let toolContextId = '';
+    let stopThinking: (() => void) | undefined;
+    if (
+      pluginKeys.includes('hermes-agent') &&
+      !/^[!！/]/u.test(event.text.trim())
+    ) {
+      toolContextId = this.toolSessions?.open(message, adapterContext) || '';
+      if (toolContextId) event.metadata.toolContextId = toolContextId;
+    }
     try {
+      if (toolContextId) stopThinking = adapterContext?.startThinking?.();
       const result = await this.pluginExecution.dispatchEvent({
-        event: toBotPluginMessageEvent(message),
+        event,
         eventKey: 'message',
         pluginKeys,
       });
@@ -125,6 +139,9 @@ export class BotRuleEngineService {
         'Bot 插件事件处理失败',
       );
       this.logger.warn(`Bot 插件事件处理失败: ${errorMessage}`);
+    } finally {
+      if (toolContextId) this.toolSessions?.close(toolContextId);
+      stopThinking?.();
     }
   }
 

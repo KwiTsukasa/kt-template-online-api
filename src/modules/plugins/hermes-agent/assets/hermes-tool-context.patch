@@ -1,0 +1,89 @@
+diff --git a/gateway/platforms/api_server.py b/gateway/platforms/api_server.py
+index 567d5b9..a151ed1 100644
+--- a/gateway/platforms/api_server.py
++++ b/gateway/platforms/api_server.py
+@@ -49,6 +49,8 @@ import itertools
+ import json
+ from contextlib import contextmanager, nullcontext, suppress
+ from contextvars import ContextVar
++
++_kt_tool_context = ContextVar("kt_tool_context", default="")
+ from functools import wraps
+ import logging
+ import os
+@@ -2187,6 +2189,10 @@ class APIServerAdapter(BasePlatformAdapter):
+                     {"error": "Unknown or unconfigured profile"},
+                     status=404,
+                 )
++            tool_context = request.headers.get("X-KT-Tool-Context", "")
++            if not re.fullmatch(r"[0-9a-f-]{36}", tool_context):
++                tool_context = ""
++            tool_token = _kt_tool_context.set(tool_context)
+             token = _api_request_profile.set(profile)
+             try:
+                 with self._profile_scope(profile):
+@@ -2204,6 +2210,7 @@ class APIServerAdapter(BasePlatformAdapter):
+                         _api_request_browser_control_principal.reset(principal_token)
+             finally:
+                 _api_request_profile.reset(token)
++                _kt_tool_context.reset(tool_token)
+ 
+         return profile_prefix_middleware
+ 
+@@ -7213,6 +7220,7 @@ class APIServerAdapter(BasePlatformAdapter):
+         chat_id: str = "",
+         session_key: str = "",
+         session_id: str = "",
++        message_id: str = "",
+         browser_control_principal: str = "",
+         browser_control_transport_family: str = "",
+     ) -> list:
+@@ -7238,6 +7246,7 @@ class APIServerAdapter(BasePlatformAdapter):
+             chat_id=chat_id,
+             session_key=session_key,
+             session_id=session_id,
++            message_id=message_id,
+             browser_control_principal=browser_control_principal,
+             browser_control_transport_family=browser_control_transport_family,
+             async_delivery=False,
+@@ -7300,6 +7309,7 @@ class APIServerAdapter(BasePlatformAdapter):
+         # run_in_executor threads, so the profile scope must be re-entered
+         # inside _run() from this explicit value.
+         request_profile = _api_request_profile.get()
++        tool_context = _kt_tool_context.get()
+         request_browser_control_principal = (
+             _api_request_browser_control_principal.get()
+         )
+@@ -7315,6 +7325,7 @@ class APIServerAdapter(BasePlatformAdapter):
+                     chat_id=session_id or "",
+                     session_key=gateway_session_key or session_id or "",
+                     session_id=session_id or "",
++                    message_id=tool_context,
+                     browser_control_principal=request_browser_control_principal,
+                     browser_control_transport_family=(
+                         request_browser_control_transport_family
+diff --git a/tools/mcp_tool.py b/tools/mcp_tool.py
+index ffcdff5..7db8489 100644
+--- a/tools/mcp_tool.py
++++ b/tools/mcp_tool.py
+@@ -6075,6 +6075,8 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+     """
+ 
+     def _handler(args: dict, **kwargs) -> str:
++        from gateway.session_context import get_session_env
++        kt_meta = {"kt/context-id": get_session_env("HERMES_SESSION_MESSAGE_ID")}
+         # Trust-tier gate (security boundary): write-capable tools on
+         # servers configured ``trust: untrusted`` must be approved by the
+         # user before ANY transport work happens — including the lazy
+@@ -6182,7 +6184,10 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+                             f"exited; failing the call fast instead of "
+                             f"waiting {float(tool_timeout):.0f}s"
+                         )
+-                    _call_coro = server.session.call_tool(tool_name, arguments=args)
++                    if server_name == "kt":
++                        _call_coro = server.session.call_tool(tool_name, arguments=args, meta=kt_meta)
++                    else:
++                        _call_coro = server.session.call_tool(tool_name, arguments=args)
+                     _watch_children = getattr(server, "_watch_stdio_children", None)
+                     _watch_ok = (
+                         _watch_children is not None

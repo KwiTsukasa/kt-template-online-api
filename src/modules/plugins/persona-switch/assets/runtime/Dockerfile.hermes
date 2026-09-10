@@ -8,3 +8,13 @@ RUN cd /opt/hermes \
  && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py \
  && rm /tmp/kt-soul-hot-reload.patch
 ENV KT_SOUL_HOT_RELOAD=1
+LABEL top.kwitsukasa.hermes.kt-tools="1"
+COPY src/modules/plugins/hermes-agent/assets/hermes-tool-context.patch /tmp/kt-tool-context.patch
+COPY src/modules/plugins/hermes-agent/assets/kt-tools.mjs /opt/kt-tools/server.mjs
+COPY src/modules/plugins/hermes-agent/assets/kt-research /opt/kt-tools/kt-research
+RUN cd /opt/hermes \
+ && git apply --check /tmp/kt-tool-context.patch \
+ && git apply /tmp/kt-tool-context.patch \
+ && /opt/hermes/.venv/bin/python -m py_compile gateway/platforms/api_server.py tools/mcp_tool.py \
+ && node --check /opt/kt-tools/server.mjs \
+ && rm /tmp/kt-tool-context.patch

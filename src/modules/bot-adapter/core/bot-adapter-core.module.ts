@@ -44,6 +44,8 @@ import { BotRateLimitService } from '@/modules/bot-adapter/core/application/send
 import { BotSendController } from '@/modules/bot-adapter/core/contract/send/bot-send.controller';
 import { BotSendLog } from '@/modules/bot-adapter/core/infrastructure/persistence/send/bot-send-log.entity';
 import { BotSendService } from '@/modules/bot-adapter/core/application/send/bot-send.service';
+import { BotToolSessionService } from './application/command/bot-tool-session.service';
+import { BotToolController } from './contract/command/bot-tool.controller';
 
 export { BOT_CORE_DOMAIN_CONTRACT } from './contract/bot-core.contract';
 
@@ -63,6 +65,7 @@ export const BOT_CORE_ENTITIES = [
 ];
 
 export const BOT_CORE_CONTROLLERS = [
+  BotToolController,
   BotAccountController,
   BotCommandController,
   BotDashboardController,
@@ -73,6 +76,7 @@ export const BOT_CORE_CONTROLLERS = [
 ];
 
 export const BOT_CORE_PROVIDERS = [
+  BotToolSessionService,
   BotAccountExtensionRegistry,
   BotAccountService,
   BotBusService,

@@ -102,6 +102,10 @@ type OfficialBotClient = {
     target: OfficialReplyTarget,
     content: string,
   ): Promise<OfficialMessageResponse>;
+  sendTyping(
+    target: OfficialReplyTarget,
+    durationSec?: number,
+  ): Promise<{ refIdx?: string }>;
   on(
     event: string,
     handler: (...args: any[]) => Promise<void> | void,
@@ -1254,12 +1258,59 @@ export class TencentBotService
       );
       await this.eventService.handleNormalizedMessage(normalized, {
         pluginKeys,
+        refreshPluginKeys: async () => {
+          const enabled =
+            await this.accountService.findEnabledOfficialBySelfIdWithSecret(
+              account.selfId,
+            );
+          if (!enabled) return [];
+          return this.pluginBindingService.listBoundPluginKeys(
+            account.accountId,
+          );
+        },
+        startThinking: () => this.startThinking(account, message),
       });
     } catch (error) {
       this.logger.warn(
         `QQ 官方 Bot 消息失败 ${account.selfId}：${this.safeError(error)}`,
       );
     }
+  }
+
+  /**
+   * 对已获准交给 Hermes 的官方私聊续发输入状态，群聊与频道保持原发送协议。
+   * @param account - 当前事件所属的官方账号运行态。
+   * @param message - 带有真实被动回复锚点的入站消息。
+   * @returns 在推理与回复结束后停止续发的清理函数。
+   */
+  private startThinking(
+    account: OfficialAccountRuntime,
+    message: OfficialInboundMessage,
+  ): () => void {
+    if (message.kind !== 'c2c' || !message.replyTarget) return () => undefined;
+    const target = message.replyTarget;
+    let pending = false;
+    let stopped = false;
+    const send = async () => {
+      if (pending || stopped) return;
+      pending = true;
+      try {
+        await account.bot.sendTyping(target, 30);
+      } catch {
+        this.logger.debug('QQ 官方私聊输入状态发送失败；继续正常对话');
+      } finally {
+        pending = false;
+      }
+    };
+    void send();
+    const timer = setInterval(() => {
+      void send();
+    }, 25_000);
+    timer.unref();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
   }
 
   /**

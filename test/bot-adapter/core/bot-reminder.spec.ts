@@ -12,6 +12,7 @@ jest.mock('bullmq', () => ({
   Worker: jest.fn(),
 }));
 import { BotReminderService } from '@/modules/bot-adapter/core/application/message/bot-reminder.service';
+import { Queue } from 'bullmq';
 
 const message = {
   selfId: 'qq-official:1',
@@ -32,7 +33,12 @@ describe('Persistent reminders', () => {
   const send = { sendText: jest.fn() };
   const adapter = { listBoundPluginKeys: jest.fn() };
   const service = new BotReminderService(
-    { get: () => undefined, getOrThrow: () => '127.0.0.1' } as never,
+    {
+      get: (key: string) => {
+        if (key === 'PLUGIN_QUEUE_REDIS_HOST') return '127.0.0.1';
+        return undefined;
+      },
+    } as never,
     permissions as never,
     account as never,
     send as never,
@@ -45,6 +51,42 @@ describe('Persistent reminders', () => {
     permissions.isBlocked.mockResolvedValue(false);
     permissions.isAllowed.mockResolvedValue(true);
     adapter.listBoundPluginKeys.mockResolvedValue(['hermes-agent']);
+  });
+  it('uses the deployed queue connection keys and leaves API startup available when reminders are not configured', async () => {
+    new BotReminderService(
+      {
+        get: (key: string) =>
+          ({
+            PLUGIN_QUEUE_REDIS_HOST: 'kt-plugin-redis',
+            PLUGIN_QUEUE_REDIS_PORT: '6380',
+          })[key],
+      } as never,
+      permissions as never,
+      account as never,
+      send as never,
+      { require: () => adapter } as never,
+    );
+    expect(Queue).toHaveBeenCalledWith(
+      'bot-reminders',
+      expect.objectContaining({
+        connection: expect.objectContaining({
+          host: 'kt-plugin-redis',
+          port: 6380,
+        }),
+        prefix: 'kt:bot:reminders',
+      }),
+    );
+    const disabled = new BotReminderService(
+      { get: () => undefined } as never,
+      permissions as never,
+      account as never,
+      send as never,
+      { require: () => adapter } as never,
+    );
+    await expect(disabled.onApplicationBootstrap()).resolves.toBeUndefined();
+    await expect(
+      disabled.manage(message, { operation: 'list' }, 'hermes-agent'),
+    ).rejects.toThrow('尚未配置');
   });
   it('persists a daily reminder with Shanghai timezone and omits stale reply credentials', async () => {
     await expect(

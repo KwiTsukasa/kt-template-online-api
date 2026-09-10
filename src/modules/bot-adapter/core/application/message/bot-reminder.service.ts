@@ -28,7 +28,7 @@ export class BotReminderService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(BotReminderService.name);
-  private readonly queue: Queue<ReminderData>;
+  private readonly queue?: Queue<ReminderData>;
   private worker?: Worker<ReminderData>;
   constructor(
     private readonly config: ConfigService,
@@ -37,11 +37,16 @@ export class BotReminderService
     private readonly send: BotSendService,
     private readonly adapters: BotAdapterRegistry,
   ) {
+    if (!this.connectionValue('HOST')) {
+      this.logger.error('提醒队列缺少 Redis 连接，提醒功能暂不可用');
+      return;
+    }
     this.queue = new Queue<ReminderData>('bot-reminders', this.queueOptions());
     this.queue.on('error', (error) => this.logger.error(error.message));
   }
 
   async onApplicationBootstrap() {
+    if (!this.queue) return;
     this.worker = new Worker<ReminderData>(
       'bot-reminders',
       async (job) => this.deliver(job),
@@ -51,12 +56,14 @@ export class BotReminderService
       },
     );
     this.worker.on('error', (error) => this.logger.error(error.message));
-    await this.worker.waitUntilReady();
+    void this.worker
+      .waitUntilReady()
+      .catch((error) => this.logger.error(error.message));
   }
 
   async onModuleDestroy() {
     await this.worker?.close();
-    await this.queue.close();
+    await this.queue?.close();
   }
 
   /**
@@ -66,15 +73,34 @@ export class BotReminderService
   private queueOptions() {
     return {
       connection: {
-        host: this.config.getOrThrow<string>('REDIS_HOST'),
-        port: Number(this.config.get('REDIS_PORT') || 6379),
-        db: Number(this.config.get('REDIS_DB') || 0),
-        password: this.config.get<string>('REDIS_PASSWORD') || undefined,
+        host: this.connectionValue('HOST'),
+        port: Number(this.connectionValue('PORT') || 6379),
+        db: Number(this.connectionValue('DB') || 0),
+        password: this.connectionValue('PASSWORD') || undefined,
+        connectTimeout: 5000,
       },
       prefix:
         this.config.get<string>('BOT_REMINDER_QUEUE_PREFIX') ||
         'kt:bot:reminders',
     };
+  }
+
+  /**
+   * 提醒可单独指定 Redis，缺省时沿用现有队列基础设施连接而不依赖插件调度代码。
+   * @param field - Redis 主机、端口、数据库或认证字段。
+   * @returns 第一项非空连接设置，全部缺失时返回空字符串。
+   */
+  private connectionValue(field: 'HOST' | 'PORT' | 'DB' | 'PASSWORD'): string {
+    for (const prefix of [
+      'BOT_REMINDER_REDIS_',
+      'PLUGIN_QUEUE_REDIS_',
+      'REDIS_',
+    ]) {
+      const value = this.config.get<string | number>(prefix + field);
+      if (value !== undefined && value !== null && String(value).trim())
+        return String(value).trim();
+    }
+    return '';
   }
 
   /**
@@ -108,6 +134,7 @@ export class BotReminderService
     input: Record<string, unknown>,
     sourcePluginKey: string,
   ) {
+    if (!this.queue) throw new Error('提醒队列连接尚未配置');
     const owner = this.owner(message);
     const schedulers = (await this.queue.getJobSchedulers(0, -1)).filter(
       (item) => item.key.startsWith(owner + '-'),

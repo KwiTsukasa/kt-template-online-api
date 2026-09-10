@@ -13,6 +13,7 @@ services:
     environment:
       PERSONA_EXECUTOR_TOKEN: ${PERSONA_EXECUTOR_TOKEN:?Required private service token}
       PERSONA_BOT_APP_ID: ${PERSONA_BOT_APP_ID:?Required Bot AppID}
+      PERSONA_BOT_APP_SECRET: ${PERSONA_BOT_APP_SECRET:?Required private Bot credential for OpenAPI readback}
       PERSONA_ADMIN_QQ: ${PERSONA_ADMIN_QQ:?Required administrator QQ}
       PERSONA_ANDROID_SERIAL: ${PERSONA_ANDROID_SERIAL:?Required NAS Android address}
       ADB_VENDOR_KEYS: /run/secrets/adbkey

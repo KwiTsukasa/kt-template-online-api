@@ -195,7 +195,11 @@ class PersonaApplication {
     state: PersonaState,
   ): Promise<PersonaState> {
     const job = state.botProfile;
-    if (!job || !['queued', 'running', 'uncertain'].includes(job.status))
+    if (
+      !job ||
+      (!['queued', 'running', 'uncertain'].includes(job.status) &&
+        !(job.status === 'applied' && !job.verifiedBy))
+    )
       return state;
     try {
       let response: Record<string, unknown>;

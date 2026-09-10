@@ -12,6 +12,7 @@ export type ProfileResult = {
   id: string;
   status: ProfileJobStatus;
   detail: string;
+  verifiedBy?: 'qq-openapi-v1';
 };
 
 /**
@@ -87,12 +88,20 @@ export function readProfileResult(
       'uncertain',
     ].includes(String(value.status)) ||
     typeof value.detail !== 'string' ||
-    value.detail.length > 200
+    value.detail.length > 200 ||
+    (value.verifiedBy !== undefined && value.verifiedBy !== 'qq-openapi-v1')
   )
     throw new Error('NAS 资料操作响应无效。');
+  if (value.status === 'applied' && value.verifiedBy !== 'qq-openapi-v1')
+    return {
+      id: expectedId,
+      status: 'uncertain',
+      detail: '旧结果仅验证网页，等待核对 QQ 实际昵称和头像。',
+    };
   return {
     id: expectedId,
     status: value.status as ProfileJobStatus,
     detail: value.detail,
+    verifiedBy: value.verifiedBy as ProfileResult['verifiedBy'],
   };
 }

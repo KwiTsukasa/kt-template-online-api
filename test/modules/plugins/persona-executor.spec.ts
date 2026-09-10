@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { Canvas } from 'skia-canvas';
 import { PersonaExecutor } from '@/apps/persona-executor/server';
 import { BrowserSession } from '@/apps/persona-executor/webdriver';
+import { OfficialProfileReader } from '@/apps/persona-executor/official-profile';
 import {
   normalizeAvatar,
   avatarsMatch,
@@ -37,6 +38,20 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     currentName = '当前';
     uncertain = false;
     modifications = 0;
+    jest
+      .spyOn(OfficialProfileReader.prototype, 'read')
+      .mockImplementation(async () => ({
+        name: currentName,
+        avatar: 'https://gchat.qpic.cn/current.png',
+        uin: '4013209631',
+      }));
+    const originalTimeout = global.setTimeout;
+    jest
+      .spyOn(global, 'setTimeout')
+      .mockImplementation((callback, delay, ...args) => {
+        if (delay === 1500) return originalTimeout(callback, 0, ...args);
+        return originalTimeout(callback, delay, ...args);
+      });
     api = jest.fn(async (path: string, body: any) => {
       if (path.endsWith('/query'))
         return {
@@ -46,6 +61,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
             data: {
               base_info: {
                 bot_appid: '1905461123',
+                bot_uin: '4013209631',
                 bot_name: currentName,
                 bot_avatar: 'https://gchat.qpic.cn/current.png',
               },
@@ -83,6 +99,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
       root,
       token,
       appId: '1905461123',
+      appSecret: 'test-secret',
       adminQq: '3229486494',
       androidSerial: 'nas-android:5555',
     });
@@ -99,6 +116,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     base = 'http://127.0.0.1:' + address.port;
   });
   afterEach(async () => {
+    jest.restoreAllMocks();
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));
     const path = relative(artifacts, root);

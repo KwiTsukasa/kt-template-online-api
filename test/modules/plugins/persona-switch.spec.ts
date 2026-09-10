@@ -171,6 +171,7 @@ describe('persona state and native Hermes synchronization', () => {
           JSON.stringify({
             id: job.id,
             status: 'applied',
+            verifiedBy: 'qq-openapi-v1',
             detail: 'Bot 昵称和头像已读回一致。',
           }),
         );

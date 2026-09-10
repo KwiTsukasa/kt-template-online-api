@@ -11,6 +11,7 @@ import type { ProfileJobStatus } from '../../modules/plugins/persona-switch/src/
 import { BrowserSession } from './webdriver';
 import { AndroidScanner } from './android';
 import { avatarsMatch, imageHash, normalizeAvatar } from './media';
+import { OfficialProfileReader } from './official-profile';
 
 type Job = {
   id: string;
@@ -20,11 +21,15 @@ type Job = {
   stage: 'queued' | 'login' | 'upload' | 'submit' | 'verify' | 'done';
   detail: string;
   uploadId?: string;
+  submittedFields?: Array<'name' | 'avatar'>;
+  verifiedBy?: 'qq-openapi-v1';
+  platformErrorCode?: number;
 };
 type Options = {
   root: string;
   token: string;
   appId: string;
+  appSecret: string;
   adminQq: string;
   androidSerial: string;
 };
@@ -37,7 +42,10 @@ export class PersonaExecutor {
   private active: string | null = null;
   private unresolved: string | null = null;
   private storageFault = false;
-  constructor(private readonly options: Options) {}
+  private readonly official: OfficialProfileReader;
+  constructor(private readonly options: Options) {
+    this.official = new OfficialProfileReader(options.appId, options.appSecret);
+  }
 
   /**
    * 启动唯一任务并收束持久化异常，磁盘故障后停止新任务而不丢弃错误。
@@ -114,7 +122,15 @@ export class PersonaExecutor {
       !['queued', 'login', 'upload', 'submit', 'verify', 'done'].includes(
         job.stage,
       ) ||
-      (job.status === 'uncertain' && !['submit', 'verify'].includes(job.stage))
+      (job.status === 'uncertain' &&
+        !['submit', 'verify'].includes(job.stage)) ||
+      (job.submittedFields !== undefined &&
+        (!Array.isArray(job.submittedFields) ||
+          job.submittedFields.some(
+            (field) => !['name', 'avatar'].includes(field),
+          ) ||
+          new Set(job.submittedFields).size !== job.submittedFields.length)) ||
+      (job.verifiedBy !== undefined && job.verifiedBy !== 'qq-openapi-v1')
     )
       throw new Error('执行记录损坏。');
     return job;
@@ -128,6 +144,7 @@ export class PersonaExecutor {
     if (
       this.options.token.length < 32 ||
       !/^\d{5,12}$/u.test(this.options.appId) ||
+      !this.options.appSecret ||
       !/^\d{5,12}$/u.test(this.options.adminQq)
     )
       throw new Error('NAS 人格执行器配置无效。');
@@ -181,7 +198,7 @@ export class PersonaExecutor {
    */
   private async query(
     browser: BrowserSession,
-  ): Promise<{ name: string; avatar: string } | null> {
+  ): Promise<{ name: string; avatar: string; uin: string } | null> {
     const result = await browser.profileApi('/cgi-bin/v2/info/query', {
       bot_appid: Number(this.options.appId),
       filter: {
@@ -204,10 +221,15 @@ export class PersonaExecutor {
       String(base?.bot_appid) !== this.options.appId ||
       String(developer?.admin_uin) !== this.options.adminQq ||
       typeof base.bot_name !== 'string' ||
-      typeof base.bot_avatar !== 'string'
+      typeof base.bot_avatar !== 'string' ||
+      !/^\d{5,12}$/u.test(String(base.bot_uin))
     )
       throw new Error('当前 Bot 或管理员身份不符。');
-    return { name: base.bot_name, avatar: base.bot_avatar };
+    return {
+      name: base.bot_name,
+      avatar: base.bot_avatar,
+      uin: String(base.bot_uin),
+    };
   }
 
   /**
@@ -264,6 +286,8 @@ export class PersonaExecutor {
    */
   private async readPublicAvatar(address: string) {
     const url = new URL(address);
+    if (url.protocol === 'http:' && url.hostname.endsWith('.qlogo.cn'))
+      url.protocol = 'https:';
     const allowed = [
       '.qpic.cn',
       '.qlogo.cn',
@@ -301,20 +325,29 @@ export class PersonaExecutor {
   }
 
   /**
-   * 读回名称并逐像素比较头像，禁止只凭提交成功码声称资料已生效。
+   * 比较官方 Bot OpenAPI 昵称和实际头像，后台网页资料只用于核对账号归属。
    * @param browser - 当前登录浏览器。
    * @param job - 目标资料身份。
    * @param avatar - 目标头像字节。
-   * @returns 两项资料是否均已读回一致。
+   * @returns 昵称和头像各自的实际一致状态。
+   * @throws 官方账号与后台机器人 QQ 号不一致时拒绝确认。
    */
   private async matches(browser: BrowserSession, job: Job, avatar: Buffer) {
     const profile = await this.query(browser);
-    if (!profile || profile.name !== job.name) return false;
-    return avatarsMatch(avatar, await this.readPublicAvatar(profile.avatar));
+    if (!profile) throw new Error('后台登录已失效。');
+    const live = await this.official.read();
+    if (live.uin !== profile.uin) throw new Error('QQ 资料与后台账号不符。');
+    return {
+      name: live.name === job.name,
+      avatar: await avatarsMatch(
+        avatar,
+        await this.readPublicAvatar(live.avatar),
+      ),
+    };
   }
 
   /**
-   * 持久记录提交阶段，以昵称和头像读回确认实际结果；平台错误码不能证明未生效，提交后只核对而不重提。
+   * 按官网交互分别提交昵称和头像，先记录每项尝试，再以 QQ 实际资料恢复未完成操作。
    * @param job - 已通过 API 条件写入登记的目标记录。
    * @throws 头像预上传或上传失败时在本方法内捕获并登记失败；记录无法持久化时向启动边界传播。
    */
@@ -344,82 +377,98 @@ export class PersonaExecutor {
         }
       }
       const avatar = await this.avatar(job.avatarHash);
-      if (await this.matches(browser, job, avatar)) {
+      let matched = await this.matches(browser, job, avatar);
+      if (matched.name && matched.avatar) {
         job.status = 'applied';
         job.stage = 'done';
-        job.detail = 'Bot 昵称和头像已读回一致。';
+        job.verifiedBy = 'qq-openapi-v1';
+        job.detail = 'QQ 官方昵称和头像已读回一致。';
         return;
       }
-      if (possiblySubmitted) {
+      if (possiblySubmitted && !job.submittedFields) {
         job.status = 'uncertain';
         job.detail =
-          '上次资料提交结果仍未读回，已停止重复提交；请核对新版后台。';
+          '旧操作仅核对过网页；QQ 实际资料仍不一致，已停止重复提交。';
         return;
       }
-      job.stage = 'upload';
-      job.detail = 'NAS 正在上传人格头像。';
-      await this.persist(job);
-      const upload = await browser.profileApi(
-        '/cgi-bin/v2/resource/pre_upload',
-        { type: 2, bot_appid: Number(this.options.appId) },
-      );
-      if (
-        upload.status !== 200 ||
-        upload.data.retcode !== 0 ||
-        typeof upload.data.data?.upload_url !== 'string' ||
-        typeof upload.data.data?.upload_id !== 'string'
-      )
-        throw new Error('头像预上传失败。');
-      if (!(await browser.upload(upload.data.data.upload_url, avatar)))
-        throw new Error('头像上传失败。');
-      job.uploadId = upload.data.data.upload_id;
-      job.stage = 'submit';
-      job.detail = '正在提交 Bot 昵称和头像。';
-      await this.persist(job);
-      const submitted = await browser.profileApi('/cgi-bin/v2/info/modify', {
-        bot_appid: Number(this.options.appId),
-        filter: { name: 1, avatar: 1, desc: 0, feature_preview: 0 },
-        name: job.name,
-        avatar_id: job.uploadId,
-        desc: '',
-        preview_items: [],
-      });
-      let platformErrorCode: number | undefined;
-      if (
-        submitted.status === 200 &&
-        typeof submitted.data.retcode === 'number' &&
-        submitted.data.retcode !== 0
-      )
-        platformErrorCode = submitted.data.retcode;
-      if (
-        submitted.status !== 200 ||
-        (submitted.data.retcode !== 0 && platformErrorCode === undefined)
-      ) {
-        job.status = 'uncertain';
-        job.detail = '资料提交响应不确定，已停止重复提交。';
-        return;
-      }
-      job.stage = 'verify';
-      job.detail = '正在读回 Bot 昵称和头像，核对实际生效结果。';
-      await this.persist(job);
-      for (let attempt = 0; attempt < 8; attempt++) {
-        if (await this.matches(browser, job, avatar)) {
-          job.status = 'applied';
-          job.stage = 'done';
-          job.detail = 'Bot 昵称和头像已读回一致。';
+      job.submittedFields ??= [];
+      for (const field of ['name', 'avatar'] as const) {
+        if (matched[field]) continue;
+        if (job.submittedFields.includes(field)) {
+          job.status = 'uncertain';
+          job.detail = '已提交的 QQ 资料仍未一致；保留原操作，只读核验。';
           return;
         }
-        await pause(1500);
+        const body = {
+          bot_appid: Number(this.options.appId),
+          filter: { name: 0, avatar: 0, desc: 0, feature_preview: 0 },
+          name: '',
+          avatar_id: '',
+          desc: '',
+          preview_items: [],
+        };
+        body.filter[field] = 1;
+        if (field === 'name') body.name = job.name;
+        else {
+          job.stage = 'upload';
+          job.detail = 'NAS 正在上传人格头像。';
+          await this.persist(job);
+          const upload = await browser.profileApi(
+            '/cgi-bin/v2/resource/pre_upload',
+            { type: 2, bot_appid: Number(this.options.appId) },
+          );
+          if (
+            upload.status !== 200 ||
+            upload.data.retcode !== 0 ||
+            typeof upload.data.data?.upload_url !== 'string' ||
+            typeof upload.data.data?.upload_id !== 'string'
+          )
+            throw new Error('头像预上传失败。');
+          if (!(await browser.upload(upload.data.data.upload_url, avatar)))
+            throw new Error('头像上传失败。');
+          job.uploadId = upload.data.data.upload_id;
+          body.avatar_id = job.uploadId;
+        }
+        job.submittedFields.push(field);
+        job.stage = 'submit';
+        job.detail = '正在分项提交 QQ 资料。';
+        await this.persist(job);
+        const submitted = await browser.profileApi(
+          '/cgi-bin/v2/info/modify',
+          body,
+        );
+        delete job.platformErrorCode;
+        if (
+          typeof submitted.data.retcode === 'number' &&
+          submitted.data.retcode !== 0
+        )
+          job.platformErrorCode = submitted.data.retcode;
+        job.stage = 'verify';
+        job.detail = '正在核对 QQ 实际昵称和头像。';
+        await this.persist(job);
+        for (let attempt = 0; attempt < 8; attempt++) {
+          matched = await this.matches(browser, job, avatar);
+          if (matched[field]) break;
+          await pause(1500);
+        }
+        if (!matched[field]) {
+          job.status = 'uncertain';
+          job.detail = 'QQ 实际资料尚未一致，已停止重复提交。';
+          if (job.platformErrorCode !== undefined)
+            job.detail += '平台错误码：' + job.platformErrorCode + '。';
+          return;
+        }
       }
-      job.status = 'uncertain';
-      if (platformErrorCode !== undefined) {
-        job.detail =
-          '平台返回错误码 ' +
-          platformErrorCode +
-          '，资料暂未读回一致；已停止重复提交，后续只核对结果。';
-        return;
+      if (matched.name && matched.avatar) {
+        job.status = 'applied';
+        job.stage = 'done';
+        job.verifiedBy = 'qq-openapi-v1';
+        job.detail = 'QQ 官方昵称和头像已读回一致。';
+      } else {
+        job.status = 'uncertain';
+        job.stage = 'verify';
+        job.detail = 'QQ 实际资料发生变化，需继续只读核对。';
       }
-      job.detail = '资料已提交，暂未全部读回；需核对生效或审核状态。';
     } catch {
       if (['submit', 'verify'].includes(job.stage)) {
         job.status = 'uncertain';
@@ -520,7 +569,14 @@ export class PersonaExecutor {
           this.respond(response, 404, { error: 'not_found' });
           return;
         }
-        if (job.status === 'uncertain' && !this.active) {
+        if (job.status === 'applied' && !job.verifiedBy && !this.active) {
+          this.active = job.id;
+          job.status = 'uncertain';
+          job.stage = 'verify';
+          job.detail = '旧结果仅验证网页，正在重新核对 QQ 实际资料。';
+          await this.persist(job);
+          this.launch(job);
+        } else if (job.status === 'uncertain' && !this.active) {
           this.active = job.id;
           this.launch(job);
         }
@@ -528,6 +584,7 @@ export class PersonaExecutor {
           id: job.id,
           status: job.status,
           detail: job.detail,
+          verifiedBy: job.verifiedBy,
         });
         return;
       }
@@ -575,6 +632,7 @@ export class PersonaExecutor {
             id: existing.id,
             status: existing.status,
             detail: existing.detail,
+            verifiedBy: existing.verifiedBy,
           });
           return;
         }
@@ -621,6 +679,7 @@ async function main() {
     root: process.env.PERSONA_EXECUTOR_DATA || '/data',
     token: process.env.PERSONA_EXECUTOR_TOKEN || '',
     appId: process.env.PERSONA_BOT_APP_ID || '',
+    appSecret: process.env.PERSONA_BOT_APP_SECRET || '',
     adminQq: process.env.PERSONA_ADMIN_QQ || '',
     androidSerial: process.env.PERSONA_ANDROID_SERIAL || '',
   });

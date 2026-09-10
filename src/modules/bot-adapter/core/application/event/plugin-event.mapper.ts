@@ -30,12 +30,35 @@ export function toBotPluginMessageEvent(
       message.rawMessage,
       message.rawEvent,
     ]),
-    metadata: {},
+    metadata: { mentioned: isBotMentioned(message) },
     rawText: message.rawMessage,
     scope: toPluginScope(message.messageType),
     senderKey: hashOpaqueKey([message.selfId, message.userId]),
     text: message.messageText,
   };
+}
+
+/**
+ * 从已接收的平台事件类型或结构化提及段确认当前 Bot 被点名，不把正文中的相似文字当作提及。
+ * @param message - 带平台来源及原始协议事件的规范消息。
+ * @returns 官方提及事件或明确指向当前账号的 OneBot 提及段存在时返回真。
+ */
+function isBotMentioned(message: BotNormalizedMessage): boolean {
+  if (
+    ['official-websocket', 'official-webhook'].includes(message.connectionMode)
+  ) {
+    return ['GROUP_AT_MESSAGE_CREATE', 'AT_MESSAGE_CREATE'].includes(
+      String(message.rawEvent?.official_event_type || ''),
+    );
+  }
+  if (message.connectionMode !== 'reverse-ws') return false;
+  const segments = message.rawEvent?.message;
+  if (!Array.isArray(segments)) return false;
+  return segments.some(
+    (segment) =>
+      segment?.type === 'at' &&
+      String(segment.data?.qq || '') === message.selfId,
+  );
 }
 
 /**

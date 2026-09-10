@@ -16,6 +16,51 @@ const imageMessage = (rawEvent: Record<string, unknown>) =>
   }) as BotNormalizedMessage;
 
 describe('Bot plugin event mapper', () => {
+  it('preserves official mention evidence even when the SDK has removed the mention from text', () => {
+    for (const connectionMode of [
+      'official-websocket',
+      'official-webhook',
+    ] as const) {
+      const mapped = toBotPluginMessageEvent({
+        ...imageMessage({ official_event_type: 'GROUP_AT_MESSAGE_CREATE' }),
+        connectionMode,
+        rawMessage: ' 晚上吃什么',
+        messageText: '晚上吃什么',
+      });
+      expect(mapped.metadata.mentioned).toBe(true);
+      expect(mapped.text).toBe('晚上吃什么');
+    }
+  });
+
+  it('does not infer a mention from ordinary text, another account, everyone, or a forged cross-platform event type', () => {
+    for (const qq of ['another', 'all']) {
+      const mapped = toBotPluginMessageEvent({
+        ...imageMessage({
+          official_event_type: 'GROUP_AT_MESSAGE_CREATE',
+          message: [{ type: 'at', data: { qq } }],
+        }),
+        connectionMode: 'reverse-ws',
+        selfId: '12345',
+        messageText: '@12345',
+      });
+      expect(mapped.metadata.mentioned).toBe(false);
+    }
+    expect(
+      toBotPluginMessageEvent({
+        ...imageMessage({ message: [{ type: 'at', data: { qq: '12345' } }] }),
+        connectionMode: 'reverse-ws',
+        selfId: '12345',
+      }).metadata.mentioned,
+    ).toBe(true);
+    expect(
+      toBotPluginMessageEvent({
+        ...imageMessage({ official_event_type: 'MESSAGE_CREATE' }),
+        connectionMode: 'official-websocket',
+        messageText: 'GROUP_AT_MESSAGE_CREATE',
+      }).metadata.mentioned,
+    ).toBe(false);
+  });
+
   it('preserves an official image-only message without treating other attachments or previews as images', () => {
     const mapped = toBotPluginMessageEvent(
       imageMessage({

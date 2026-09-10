@@ -37,12 +37,71 @@ const makePlugin = (
   });
 
 describe('Hermes Agent message integration', () => {
-  it('keeps tool context outside model messages and preserves the durable session', async () => {
+  it('reports actual addressing without changing the user text, persona, or durable session', async () => {
     const request = jest
       .fn()
       .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: '查到了' } }],
+        choices: [{ finish_reason: 'stop', message: { content: '收到' } }],
       });
+    const plugin = makePlugin(request);
+    for (const metadata of [
+      { mentioned: true },
+      { mentioned: false },
+      { mentioned: 'true' },
+    ]) {
+      await plugin.handleEvent('message', {
+        ...event,
+        scope: 'group',
+        text: '晚上吃什么',
+        metadata,
+      });
+    }
+    const bodies = request.mock.calls.map(([input]) => JSON.parse(input.body));
+    expect(bodies[0].messages[0].content).toContain('用户明确 @ 了你');
+    expect(bodies[1].messages[0].content).not.toContain('用户明确 @ 了你');
+    expect(bodies[2].messages[0].content).not.toContain('用户明确 @ 了你');
+    expect(bodies[0].messages[1]).toEqual({
+      role: 'user',
+      content: '晚上吃什么',
+    });
+    expect(
+      new Set(
+        request.mock.calls.map(
+          ([input]) => input.headers['X-Hermes-Session-Id'],
+        ),
+      ).size,
+    ).toBe(1);
+    await plugin.handleEvent('message', event);
+    expect(
+      JSON.parse(request.mock.calls[3][0].body).messages[0].content,
+    ).toContain('用户直接发给你的私聊');
+  });
+
+  it('rejects Hermes diagnostic text incorrectly marked as completed with stop', async () => {
+    for (const content of [
+      '⚠️ No reply: the model returned empty content after retries and any fallback providers. Try `continue`, switch model/provider, or inspect the tool output above.',
+      '  (empty)  ',
+      '⚠️ Provider authentication failed: private detail',
+      '⚠️ The model produced only internal reasoning and no final answer, despite retries. Its last reasoning: private detail',
+    ]) {
+      const request = jest
+        .fn()
+        .mockResolvedValue({
+          hermes: { completed: true, failed: false },
+          choices: [{ finish_reason: 'stop', message: { content } }],
+        });
+      const result = await makePlugin(request).handleEvent('message', event);
+      expect(result.replies).toEqual([
+        { kind: 'text', content: '这次没能生成回复，请稍后再试。' },
+      ]);
+      expect(request).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('keeps tool context outside model messages and preserves the durable session', async () => {
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '查到了' } }],
+    });
     const plugin = makePlugin(request);
     await plugin.handleEvent('message', {
       ...event,

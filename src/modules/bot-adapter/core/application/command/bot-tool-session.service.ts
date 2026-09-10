@@ -164,9 +164,9 @@ export class BotToolSessionService {
     if (turn.closed || turn.expiresAt <= Date.now())
       throw new Error('当前消息已结束');
     const text = String(input.text || '').trim();
-    if (text.length > 1200 || /\[CQ:|<@/u.test(text))
+    if (text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))
       throw new Error('提及正文无效');
-    let tag = `<@${member}>`;
+    let tag = `<qqbot-at-user id="${member}" />`;
     if (turn.message.connectionMode === 'reverse-ws')
       tag = `[CQ:at,qq=${member}]`;
     return this.send.sendText({

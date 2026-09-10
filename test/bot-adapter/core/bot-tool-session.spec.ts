@@ -164,7 +164,7 @@ describe('Bot conversation tool authorization', () => {
       expect(send.sendText).toHaveBeenCalledWith(
         expect.objectContaining({
           targetId: 'group',
-          message: '<@confirmed-member> 一起讨论',
+          message: '<qqbot-at-user id="confirmed-member" /> 一起讨论',
         }),
       );
       expect(reminders.manage).toHaveBeenCalledWith(
@@ -189,6 +189,35 @@ describe('Bot conversation tool authorization', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('rejects injected interaction tags and retains the OneBot mention protocol', async () => {
+    history.requireMember.mockResolvedValue('member');
+    const official = service.open(message);
+    for (const text of [
+      '<@other>',
+      '<qqbot-at-user id="other" />',
+      '<qqbot-cmd-enter text="command" />',
+      '[CQ:at,qq=other]',
+    ]) {
+      await expect(
+        service.call(official, {
+          action: 'mention',
+          platformId: 'member',
+          text,
+        }),
+      ).rejects.toThrow('正文无效');
+    }
+    expect(send.sendText).not.toHaveBeenCalled();
+    const onebot = service.open({ ...message, connectionMode: 'reverse-ws' });
+    await service.call(onebot, {
+      action: 'mention',
+      platformId: 'member',
+      text: '一起讨论',
+    });
+    expect(send.sendText).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '[CQ:at,qq=member] 一起讨论' }),
+    );
   });
 
   it('rejects revoked plugin binding and closes an in-flight mention before sending', async () => {

@@ -1,7 +1,7 @@
 {
   "pluginKey": "hermes-agent",
   "name": "Hermes Agent",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "minApiSdkVersion": "1.0.0",
   "description": "将已授权会话的文字与图片交给独立 Hermes Agent，并由当前 Bot 回复队列发送结果。",
   "author": "KT",
@@ -27,7 +27,7 @@
       "name": "对话回复",
       "eventName": "message",
       "handlerName": "handleMessage",
-      "description": "命令由宿主处理；文字与图片按安装实例、会话和发送者保持连续上下文。"
+      "description": "命令由宿主处理；同群全部成员共用带身份的持久会话，私聊独立；未提及时只保留群消息不触发回复。"
     }
   ],
   "assets": [],

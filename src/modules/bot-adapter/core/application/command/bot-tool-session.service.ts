@@ -1,15 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { BotNormalizedMessage } from '../../contract/bot.types';
 import type { BotAdapterExecutionContext } from '../../domain/bot-adapter-execution-context';
 import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotCommandEngineService } from './bot-command-engine.service';
+import { BotChatHistoryService } from '../message/bot-chat-history.service';
+import { BotReminderService } from '../message/bot-reminder.service';
+import { BotSendService } from '../send/bot-send.service';
 
 type ToolTurn = {
   message: BotNormalizedMessage;
   adapterContext?: BotAdapterExecutionContext;
   expiresAt: number;
   calls: Map<string, Promise<unknown>>;
+  closed: boolean;
 };
 
 @Injectable()
@@ -19,6 +23,9 @@ export class BotToolSessionService {
   constructor(
     private readonly permissions: BotPermissionService,
     private readonly commands: BotCommandEngineService,
+    @Optional() private readonly history?: BotChatHistoryService,
+    @Optional() private readonly reminders?: BotReminderService,
+    @Optional() private readonly send?: BotSendService,
   ) {}
 
   /**
@@ -40,6 +47,7 @@ export class BotToolSessionService {
       adapterContext,
       expiresAt: Date.now() + 240_000,
       calls: new Map(),
+      closed: false,
     });
     return id;
   }
@@ -49,6 +57,8 @@ export class BotToolSessionService {
    * @param id - 当前事件创建的上下文标识。
    */
   close(id: string) {
+    const turn = this.turns.get(id);
+    if (turn) turn.closed = true;
     this.turns.delete(id);
   }
 
@@ -75,6 +85,35 @@ export class BotToolSessionService {
     }
     if (this.turns.get(id) !== turn || turn.expiresAt <= Date.now())
       throw new Error('当前消息已结束');
+    if (context?.pluginKeys && !context.pluginKeys.includes('hermes-agent'))
+      throw new Error('当前Bot的Hermes授权已撤销');
+    if (input.action === 'history') {
+      if (!this.history) throw new Error('同群历史服务未就绪');
+      return this.history.read(turn.message, input);
+    }
+    if (input.action === 'platform_api') {
+      if (
+        !context?.readPlatformApi ||
+        input.method !== 'GET' ||
+        typeof input.path !== 'string'
+      )
+        throw new Error(
+          '当前适配器只开放本会话官方资料读取；写操作请使用已授权的消息、提醒或命令工具',
+        );
+      return context.readPlatformApi({
+        path: input.path,
+        query: input.query as Record<string, string> | undefined,
+      });
+    }
+    if (input.action === 'reminder' || input.action === 'mention') {
+      const key = JSON.stringify(input);
+      const previous = turn.calls.get(key);
+      if (previous) return previous;
+      if (turn.calls.size >= 8) throw new Error('本轮工具调用次数已达上限');
+      const result = this.runChatAction(turn, input);
+      turn.calls.set(key, result);
+      return result;
+    }
     if (input.action === 'list')
       return this.commands.listForTools(turn.message, context);
     if (
@@ -99,5 +138,46 @@ export class BotToolSessionService {
     );
     turn.calls.set(key, result);
     return result;
+  }
+
+  /**
+   * 通过宿主消息能力创建提醒或提及已确认群成员，目标和权限始终由当前消息绑定。
+   * @param turn - 尚未失效的消息授权及发送上下文。
+   * @param input - 模型提出的提醒或成员提及参数。
+   * @returns 真实任务状态或发送结果。
+   * @throws 能力未加载、目标身份未知或非群聊提及时拒绝执行。
+   */
+  private async runChatAction(
+    turn: ToolTurn,
+    input: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (input.action === 'reminder') {
+      if (!this.reminders) throw new Error('提醒服务未就绪');
+      return this.reminders.manage(turn.message, input, 'hermes-agent');
+    }
+    if (!this.history || !this.send || turn.message.messageType === 'private')
+      throw new Error('当前会话不支持成员提及');
+    const member = await this.history.requireMember(
+      turn.message,
+      String(input.platformId || ''),
+    );
+    if (turn.closed || turn.expiresAt <= Date.now())
+      throw new Error('当前消息已结束');
+    const text = String(input.text || '').trim();
+    if (text.length > 1200 || /\[CQ:|<@/u.test(text))
+      throw new Error('提及正文无效');
+    let tag = `<@${member}>`;
+    if (turn.message.connectionMode === 'reverse-ws')
+      tag = `[CQ:at,qq=${member}]`;
+    return this.send.sendText({
+      selfId: turn.message.selfId,
+      targetType: turn.message.messageType,
+      targetId: turn.message.targetId,
+      channelId: turn.message.channelId,
+      guildId: turn.message.guildId,
+      adapterReplyContext: turn.message.adapterReplyContext,
+      replyMessageId: turn.message.replyMessageId,
+      message: `${tag} ${text}`.trim(),
+    });
   }
 }

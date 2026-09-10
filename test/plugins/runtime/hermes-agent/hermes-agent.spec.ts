@@ -37,12 +37,80 @@ const makePlugin = (
   });
 
 describe('Hermes Agent message integration', () => {
-  it('reports actual addressing without changing the user text, persona, or durable session', async () => {
+  it('shares one ordered group transcript across senders and adds only unseen group context', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const response = {
+      choices: [{ finish_reason: 'stop', message: { content: '收到' } }],
+    };
     const request = jest
       .fn()
-      .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: '收到' } }],
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue(response);
+    const plugin = makePlugin(request);
+    const history = {
+      messageId: 'earlier',
+      direction: 'inbound',
+      sender: { platformId: 'bob' },
+      text: '我就是小龙',
+    };
+    const first = plugin.handleEvent('message', {
+      ...event,
+      scope: 'group',
+      senderKey: 'alice',
+      metadata: { mentioned: true, recentMessages: [history] },
+    });
+    const second = plugin.handleEvent('message', {
+      ...event,
+      eventId: 'second',
+      scope: 'group',
+      senderKey: 'bob',
+      metadata: { mentioned: true, recentMessages: [history] },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(request).toHaveBeenCalledTimes(1);
+    finish(response);
+    await Promise.all([first, second]);
+    expect(request.mock.calls[0][0].headers['X-Hermes-Session-Id']).toBe(
+      request.mock.calls[1][0].headers['X-Hermes-Session-Id'],
+    );
+    const bodies = request.mock.calls.map(([input]) => JSON.parse(input.body));
+    expect(bodies[0].messages[1].content).toContain('我就是小龙');
+    expect(bodies[1].messages[1].content).not.toContain('我就是小龙');
+    expect(bodies[1].messages[1].content).toContain('bob');
+    await plugin.handleEvent('message', {
+      ...event,
+      scope: 'group',
+      conversationKey: 'different-group',
+      metadata: { mentioned: true },
+    });
+    expect(request.mock.calls[2][0].headers['X-Hermes-Session-Id']).not.toBe(
+      request.mock.calls[0][0].headers['X-Hermes-Session-Id'],
+    );
+  });
+
+  it('never calls inference for unmentioned group messages, including images and quoted messages', async () => {
+    const request = jest.fn();
+    const plugin = makePlugin(request);
+    for (const metadata of [{}, { mentioned: false }, { mentioned: 'true' }]) {
+      const result = await plugin.handleEvent('message', {
+        ...event,
+        scope: 'group',
+        metadata,
+        imageUrls: ['https://image.test/a'],
       });
+      expect(result).toEqual({ handled: false, replies: [] });
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('reports actual addressing without changing the user text, persona, or durable session', async () => {
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '收到' } }],
+    });
     const plugin = makePlugin(request);
     for (const metadata of [
       { mentioned: true },
@@ -58,11 +126,10 @@ describe('Hermes Agent message integration', () => {
     }
     const bodies = request.mock.calls.map(([input]) => JSON.parse(input.body));
     expect(bodies[0].messages[0].content).toContain('用户明确 @ 了你');
-    expect(bodies[1].messages[0].content).not.toContain('用户明确 @ 了你');
-    expect(bodies[2].messages[0].content).not.toContain('用户明确 @ 了你');
+    expect(bodies).toHaveLength(1);
     expect(bodies[0].messages[1]).toEqual({
       role: 'user',
-      content: '晚上吃什么',
+      content: expect.stringContaining('\n晚上吃什么'),
     });
     expect(
       new Set(
@@ -73,7 +140,7 @@ describe('Hermes Agent message integration', () => {
     ).toBe(1);
     await plugin.handleEvent('message', event);
     expect(
-      JSON.parse(request.mock.calls[3][0].body).messages[0].content,
+      JSON.parse(request.mock.calls[1][0].body).messages[0].content,
     ).toContain('用户直接发给你的私聊');
   });
 
@@ -84,12 +151,10 @@ describe('Hermes Agent message integration', () => {
       '⚠️ Provider authentication failed: private detail',
       '⚠️ The model produced only internal reasoning and no final answer, despite retries. Its last reasoning: private detail',
     ]) {
-      const request = jest
-        .fn()
-        .mockResolvedValue({
-          hermes: { completed: true, failed: false },
-          choices: [{ finish_reason: 'stop', message: { content } }],
-        });
+      const request = jest.fn().mockResolvedValue({
+        hermes: { completed: true, failed: false },
+        choices: [{ finish_reason: 'stop', message: { content } }],
+      });
       const result = await makePlugin(request).handleEvent('message', event);
       expect(result.replies).toEqual([
         { kind: 'text', content: '这次没能生成回复，请稍后再试。' },
@@ -142,6 +207,7 @@ describe('Hermes Agent message integration', () => {
       targetId: 'group-openid',
       userId: 'user-openid',
       rawEvent: {
+        official_event_type: 'GROUP_AT_MESSAGE_CREATE',
         attachments: [
           {
             content_type: 'image/jpeg',
@@ -160,7 +226,10 @@ describe('Hermes Agent message integration', () => {
     });
     expect(JSON.parse(request.mock.calls[0][0].body).messages[1]).toEqual({
       role: 'user',
-      content: [{ type: 'image_url', image_url: { url: jpegDataUrl } }],
+      content: [
+        { type: 'text', text: expect.stringContaining('QQ消息上下文') },
+        { type: 'image_url', image_url: { url: jpegDataUrl } },
+      ],
     });
   });
 
@@ -182,7 +251,7 @@ describe('Hermes Agent message integration', () => {
     expect(
       JSON.parse(request.mock.calls[1][0].body).messages[1].content,
     ).toEqual([
-      { type: 'text', text: '这两张哪个好看' },
+      { type: 'text', text: expect.stringContaining('\n这两张哪个好看') },
       { type: 'image_url', image_url: { url: jpegDataUrl } },
       { type: 'image_url', image_url: { url: jpegDataUrl } },
     ]);
@@ -314,7 +383,7 @@ describe('Hermes Agent message integration', () => {
       model: 'kwitsukasa',
       messages: [
         { role: 'system', content: expect.stringContaining('长期记忆共享') },
-        { role: 'user', content: '你好' },
+        { role: 'user', content: expect.stringContaining('\n你好') },
       ],
       stream: false,
     });
@@ -419,6 +488,7 @@ describe('Hermes Agent message integration', () => {
     const group = await plugin.handleEvent('message', {
       ...event,
       scope: 'group',
+      metadata: { mentioned: true },
     });
     expect(direct.replies).toHaveLength(4);
     expect(group.replies).toHaveLength(5);
@@ -449,7 +519,7 @@ describe('Hermes Agent message integration', () => {
         ...event,
         eventId: 'expired',
       });
-      jest.advanceTimersByTime(15000);
+      jest.advanceTimersByTime(200000);
       await new Promise((resolve) => setImmediate(resolve));
       expect((await expired).replies[0].content).toContain('请稍后再发这条');
       const third = plugin.handleEvent('message', {

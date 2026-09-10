@@ -18,6 +18,7 @@ import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from './bot-send.service';
 import { BotRuleService } from '../rule/bot-rule.service';
 import { BotToolSessionService } from '../command/bot-tool-session.service';
+import { BotChatHistoryService } from '../message/bot-chat-history.service';
 
 @Injectable()
 export class BotRuleEngineService {
@@ -36,6 +37,8 @@ export class BotRuleEngineService {
     private readonly sessionBehaviorService?: NapcatSessionBehaviorService,
     @Optional()
     private readonly toolSessions?: BotToolSessionService,
+    @Optional()
+    private readonly chatHistory?: BotChatHistoryService,
   ) {}
 
   /**
@@ -105,6 +108,17 @@ export class BotRuleEngineService {
     }
     if (pluginKeys.length === 0) return;
     const event = toBotPluginMessageEvent(message);
+    if (pluginKeys.includes('hermes-agent') && event.scope !== 'direct') {
+      // 未被点名的消息仍由消息库保存供同群后续读取，不触发推理或 Loading。
+      if (event.metadata.mentioned !== true) {
+        pluginKeys = pluginKeys.filter((key) => key !== 'hermes-agent');
+      } else if (this.chatHistory) {
+        event.metadata.recentMessages = (
+          await this.chatHistory.read(message)
+        ).messages;
+      }
+    }
+    if (pluginKeys.length === 0) return;
     let toolContextId = '';
     let stopThinking: (() => void) | undefined;
     if (

@@ -30,6 +30,8 @@ import { BotConversation } from '@/modules/bot-adapter/core/infrastructure/persi
 import { BotMessageController } from '@/modules/bot-adapter/core/contract/message/bot-message.controller';
 import { BotMessage } from '@/modules/bot-adapter/core/infrastructure/persistence/message/bot-message.entity';
 import { BotMessageService } from '@/modules/bot-adapter/core/application/message/bot-message.service';
+import { BotChatHistoryService } from './application/message/bot-chat-history.service';
+import { BotReminderService } from './application/message/bot-reminder.service';
 import { BotBusService } from '@/modules/bot-adapter/core/infrastructure/integration/bus/bot-bus.service';
 import { BotAllowlist } from '@/modules/bot-adapter/core/infrastructure/persistence/permission/bot-allowlist.entity';
 import { BotBlocklist } from '@/modules/bot-adapter/core/infrastructure/persistence/permission/bot-blocklist.entity';
@@ -76,6 +78,8 @@ export const BOT_CORE_CONTROLLERS = [
 ];
 
 export const BOT_CORE_PROVIDERS = [
+  BotChatHistoryService,
+  BotReminderService,
   BotToolSessionService,
   BotAccountExtensionRegistry,
   BotAccountService,

@@ -62,6 +62,19 @@ index 567d5b9..a151ed1 100644
                      browser_control_principal=request_browser_control_principal,
                      browser_control_transport_family=(
                          request_browser_control_transport_family
+@@ -7320,7 +7331,11 @@
+                 agent = None
+                 try:
++                    _kt_prompt = ephemeral_system_prompt or ""
++                    if tool_context:
++                        from pathlib import Path as _KtPath
++                        _kt_prompt += "\n\n" + _KtPath("/opt/kt-tools/persona-identity.md").read_text(encoding="utf-8")
+                     agent = self._create_agent(
+-                        ephemeral_system_prompt=ephemeral_system_prompt,
++                        ephemeral_system_prompt=_kt_prompt,
+                         session_id=session_id,
+                         stream_delta_callback=stream_delta_callback,
+                         tool_progress_callback=tool_progress_callback,
 diff --git a/tools/mcp_tool.py b/tools/mcp_tool.py
 index ffcdff5..7db8489 100644
 --- a/tools/mcp_tool.py

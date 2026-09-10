@@ -1269,12 +1269,66 @@ export class TencentBotService
           );
         },
         startThinking: () => this.startThinking(account, message),
+        readPlatformApi: (input) =>
+          this.readConversationApi(account, normalized, input),
       });
     } catch (error) {
       this.logger.warn(
         `QQ 官方 Bot 消息失败 ${account.selfId}：${this.safeError(error)}`,
       );
     }
+  }
+
+  /**
+   * 通过当前账号官方 SDK 读取本会话资料，阻止跨群访问、凭据读取及任意接口调用。
+   * @param account - 当前已连接的官方 Bot。
+   * @param message - 绑定群或频道身份的真实消息。
+   * @param input - 不含域名的官方接口路径和有限查询参数。
+   * @returns QQ 官方 API 的资料响应。
+   * @throws 路径跨会话、参数异常或不在只读目录内时拒绝请求。
+   */
+  private async readConversationApi(
+    account: OfficialAccountRuntime,
+    message: BotNormalizedMessage,
+    input: { path: string; query?: Record<string, string> },
+  ): Promise<unknown> {
+    const allowed = new Set(['/users/@me']);
+    if (message.guildId && /^\d+$/u.test(message.guildId)) {
+      for (const suffix of ['', '/channels', '/members', '/api_permission'])
+        allowed.add(`/guilds/${message.guildId}${suffix}`);
+    }
+    if (message.channelId && /^\d+$/u.test(message.channelId)) {
+      for (const suffix of ['', '/online_nums', '/threads', '/schedules'])
+        allowed.add(`/channels/${message.channelId}${suffix}`);
+    }
+    if (!allowed.has(input.path))
+      throw new Error(
+        '该只读QQ接口不属于当前会话可用范围；群成员身份请查同群消息历史',
+      );
+    const query = input.query || {};
+    if (
+      Object.entries(query).some(
+        ([key, value]) =>
+          !['before', 'after', 'limit', 'start_index'].includes(key) ||
+          typeof value !== 'string' ||
+          !/^\d{1,20}$/u.test(value),
+      )
+    )
+      throw new Error('QQ接口分页参数无效');
+    if (query.limit && Number(query.limit) > 400)
+      throw new Error('QQ接口单页最多400项');
+    return account.bot.api.get(input.path, query);
+  }
+
+  /**
+   * 到期任务重新读取账号和适配器绑定，避免复用入站消息当时的授权快照。
+   * @param selfId - 官方 Bot 的稳定连接标识。
+   * @returns 账号启用且未删除时的授权插件，否则返回空集合。
+   */
+  async listBoundPluginKeys(selfId: string): Promise<string[]> {
+    const account = await this.accountService.findBySelfId(selfId);
+    if (!account || !account.enabled || account.isDeleted) return [];
+    return this.pluginBindingService.listBoundPluginKeys(account.id);
   }
 
   /**

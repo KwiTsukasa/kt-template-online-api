@@ -21,6 +21,9 @@ const message = {
 describe('Bot conversation tool authorization', () => {
   const permissions = { isBlocked: jest.fn(), isAllowed: jest.fn() };
   const commands = { listForTools: jest.fn(), executeForTools: jest.fn() };
+  const history = { read: jest.fn(), requireMember: jest.fn() };
+  const reminders = { manage: jest.fn() };
+  const send = { sendText: jest.fn() };
   let service: BotToolSessionService;
   beforeEach(() => {
     jest.resetAllMocks();
@@ -31,11 +34,16 @@ describe('Bot conversation tool authorization', () => {
     service = new BotToolSessionService(
       permissions as never,
       commands as never,
+      history as never,
+      reminders as never,
+      send as never,
     );
   });
 
   it('refreshes bindings and retains the original sender, ignoring forged identity fields', async () => {
-    const refreshPluginKeys = jest.fn().mockResolvedValue(['status']);
+    const refreshPluginKeys = jest
+      .fn()
+      .mockResolvedValue(['hermes-agent', 'status']);
     const id = service.open(message, {
       pluginKeys: ['old'],
       refreshPluginKeys,
@@ -49,7 +57,7 @@ describe('Bot conversation tool authorization', () => {
     });
     expect(commands.executeForTools).toHaveBeenCalledWith(
       message,
-      expect.objectContaining({ pluginKeys: ['status'] }),
+      expect.objectContaining({ pluginKeys: ['hermes-agent', 'status'] }),
       '1',
       '/status',
     );
@@ -93,7 +101,11 @@ describe('Bot conversation tool authorization', () => {
     await app.listen(0, '127.0.0.1');
     try {
       const url = `${await app.getUrl()}/bot/tools/call`;
-      const id = service.open(message);
+      const readPlatformApi = jest.fn().mockResolvedValue({ id: 'bot-1' });
+      const id = service.open(message, {
+        pluginKeys: ['hermes-agent'],
+        readPlatformApi,
+      });
       const bad = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,6 +122,60 @@ describe('Bot conversation tool authorization', () => {
       });
       expect(good.status).toBe(200);
       expect(await good.json()).toEqual({ result: [{ commandId: '1' }] });
+      history.read.mockResolvedValue({
+        messages: [{ sender: 'other', text: '群内前文' }],
+      });
+      history.requireMember.mockResolvedValue('confirmed-member');
+      send.sendText.mockResolvedValue({ id: 'sent-mention' });
+      reminders.manage.mockResolvedValue({
+        id: 'persistent-job',
+        status: 'scheduled',
+      });
+      for (const action of [
+        { action: 'history', query: '前文' },
+        { action: 'platform_api', method: 'GET', path: '/users/@me' },
+        { action: 'mention', platformId: 'confirmed-member', text: '一起讨论' },
+        {
+          action: 'reminder',
+          operation: 'create',
+          dailyAt: '18:00',
+          text: '吃饭',
+        },
+      ]) {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer test-service-key',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contextId: id,
+            ...action,
+            targetId: 'forged-group',
+            userId: 'forged-owner',
+          }),
+        });
+        expect(response.status).toBe(200);
+      }
+      expect(history.read).toHaveBeenCalledWith(
+        message,
+        expect.objectContaining({ query: '前文' }),
+      );
+      expect(send.sendText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetId: 'group',
+          message: '<@confirmed-member> 一起讨论',
+        }),
+      );
+      expect(reminders.manage).toHaveBeenCalledWith(
+        message,
+        expect.any(Object),
+        'hermes-agent',
+      );
+      expect(readPlatformApi).toHaveBeenCalledWith({
+        path: '/users/@me',
+        query: undefined,
+      });
       service.close(id);
       const closed = await fetch(url, {
         method: 'POST',
@@ -123,6 +189,25 @@ describe('Bot conversation tool authorization', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('rejects revoked plugin binding and closes an in-flight mention before sending', async () => {
+    const id = service.open(message, {
+      pluginKeys: ['hermes-agent'],
+      refreshPluginKeys: async () => [],
+    });
+    await expect(service.call(id, { action: 'history' })).rejects.toThrow(
+      '授权已撤销',
+    );
+    const active = service.open(message);
+    history.requireMember.mockImplementation(async () => {
+      service.close(active);
+      return 'member';
+    });
+    await expect(
+      service.call(active, { action: 'mention', platformId: 'member' }),
+    ).rejects.toThrow('已结束');
+    expect(send.sendText).not.toHaveBeenCalled();
   });
 });
 
@@ -192,6 +277,18 @@ describe('Bot command tool execution', () => {
     await expect(
       engine.executeForTools(message, undefined, '7', '/status'),
     ).rejects.toThrow('冷却');
+    expect(plugins.executeOperation).not.toHaveBeenCalled();
+  });
+
+  it('excludes user-only operations from the tool catalog and blocks direct model calls', async () => {
+    plugins.getOperationByCommand.mockResolvedValue({
+      key: 'status.read',
+      inputSchema: { 'x-agent-invocable': false },
+    });
+    await expect(engine.listForTools(message)).resolves.toEqual([]);
+    await expect(
+      engine.executeForTools(message, undefined, '7', '/status'),
+    ).rejects.toThrow('用户直接发送命令');
     expect(plugins.executeOperation).not.toHaveBeenCalled();
   });
 });

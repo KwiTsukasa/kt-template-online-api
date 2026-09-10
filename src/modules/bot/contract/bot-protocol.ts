@@ -34,6 +34,7 @@ export type BotDeliveryResult = {
 
 export interface BotAdapterProtocol {
   readonly key: string;
+  listBoundPluginKeys?(connectionKey: string): Promise<string[]>;
   deliver(request: BotDeliveryRequest): Promise<BotDeliveryResult>;
   normalize(payload: unknown): Promise<BotInboundEnvelope[]>;
 }

@@ -1,7 +1,7 @@
 {
   "pluginKey": "ff14-market",
   "name": "FF14 市场价格",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minApiSdkVersion": "1.0.0",
   "description": "对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。",
   "author": "KT",
@@ -42,7 +42,17 @@
       "key": "ff14.market.price",
       "name": "市场查价",
       "handlerName": "getPrice",
-      "description": "查询指定服务器的 FF14 市场最低价、均价与近期挂单。",
+      "description": "查询 FF14 市场价格。完整命令示例：/查价 小鸣鼠角笛。不指定区服时使用已配置默认范围（当前中国区），查全中国区无需追加‘全中国区’。指定服务器示例：/查价 小鸣鼠角笛 world=红玉海。不要把 JSON 对象作为聊天参数。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": {
+            "type": "string",
+            "description": "命令后面的原始参数；只查物品时填写物品名称或ID，例如小鸣鼠角笛。"
+          }
+        },
+        "required": ["raw"]
+      },
       "aliases": ["查价", "price", "ff14price"],
       "permissions": ["runtime.http", "plugin.config.read"],
       "timeoutMs": 15000

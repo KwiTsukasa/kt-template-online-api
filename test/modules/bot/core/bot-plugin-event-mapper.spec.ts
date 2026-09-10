@@ -16,6 +16,33 @@ const imageMessage = (rawEvent: Record<string, unknown>) =>
   }) as BotNormalizedMessage;
 
 describe('Bot plugin event mapper', () => {
+  it('keeps actual member identifiers and quote context without treating everyone as a person', () => {
+    const mapped = toBotPluginMessageEvent({
+      ...imageMessage({
+        mentions: [
+          { member_openid: 'member-A', nickname: '小龙' },
+          { member_openid: 'bot', is_you: true },
+        ],
+        ref_msg_idx: 'quote-1',
+        msg_elements: [{ msg_idx: 'quote-1', content: '我是谁' }],
+      }),
+      connectionMode: 'official-websocket',
+      senderNickname: '甲',
+    });
+    expect(mapped.metadata.sender).toMatchObject({
+      platformId: 'test-user-openid',
+      name: '甲',
+    });
+    expect(mapped.metadata.mentions).toEqual([
+      expect.objectContaining({ platformId: 'member-A', name: '小龙' }),
+    ]);
+    expect(mapped.metadata.mentioned).toBe(true);
+    expect(mapped.metadata.replyTo).toBe('quote-1');
+    expect(mapped.metadata.quote).toEqual({
+      messageIndex: 'quote-1',
+      text: '我是谁',
+    });
+  });
   it('preserves official mention evidence even when the SDK has removed the mention from text', () => {
     for (const connectionMode of [
       'official-websocket',

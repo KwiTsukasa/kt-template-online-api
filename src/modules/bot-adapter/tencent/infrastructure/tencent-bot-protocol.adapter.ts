@@ -27,6 +27,15 @@ export class TencentBotProtocolAdapter
   }
 
   /**
+   * 将到期任务的授权检查交还给 Tencent，核心调度器不读取适配器的绑定表。
+   * @param connectionKey - 需要重新验证的官方 Bot 连接标识。
+   * @returns 当前账号实际启用并绑定的插件键。
+   */
+  async listBoundPluginKeys(connectionKey: string) {
+    return this.tencentService.listBoundPluginKeys(connectionKey);
+  }
+
+  /**
    * 将 Tencent SDK 的统一消息形态转换为无状态 Bot 信封，调用方仍负责官方签名与事件分发。
    * @param payload - Tencent SDK 统一消息。
    * @returns 可由 Bot 协议层路由的单条信封；关键字段缺失时返回空数组。

@@ -51,13 +51,17 @@ export class BotCommandEngineService {
     for (const command of commands) {
       const operation =
         await this.pluginExecution.getOperationByCommand(command);
-      if (!operation) continue;
+      if (!operation || operation.inputSchema?.['x-agent-invocable'] === false)
+        continue;
       result.push({
         commandId: command.id,
         name: command.name,
         aliases: await this.commandParser.getAliases(command),
         prefixes: this.commandParser.getPrefixes(command),
         description: operation.description || command.remark,
+        argumentFormat:
+          '使用返回的前缀与别名组成完整命令，后接空格及原始参数。inputSchema描述业务字段，不表示聊天命令接受JSON。',
+        defaults: command.defaultParams,
         inputSchema: operation.inputSchema,
       });
     }
@@ -84,11 +88,11 @@ export class BotCommandEngineService {
       adapterContext,
     );
     const command = commands.find((item) => item.id === commandId);
-    if (
-      !command ||
-      !(await this.pluginExecution.getOperationByCommand(command))
-    )
-      throw new Error('命令未启用或当前账号未获授权');
+    if (!command) throw new Error('命令未启用或当前账号未获授权');
+    const operation = await this.pluginExecution.getOperationByCommand(command);
+    if (!operation) throw new Error('命令未启用或当前账号未获授权');
+    if (operation.inputSchema?.['x-agent-invocable'] === false)
+      throw new Error('该操作仅接受用户直接发送命令，不能由模型代为执行');
     const toolMessage = { ...message, messageText: text, rawMessage: text };
     const matched = await this.commandParser.match(command, toolMessage);
     if (!matched) throw new Error('完整命令文本与所选命令不匹配');

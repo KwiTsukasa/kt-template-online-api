@@ -8,10 +8,12 @@ RUN cd /opt/hermes \
  && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py \
  && rm /tmp/kt-soul-hot-reload.patch
 ENV KT_SOUL_HOT_RELOAD=1
-LABEL top.kwitsukasa.hermes.kt-tools="1"
+LABEL top.kwitsukasa.hermes.kt-tools="2"
 COPY src/modules/plugins/hermes-agent/assets/hermes-tool-context.patch /tmp/kt-tool-context.patch
 COPY src/modules/plugins/hermes-agent/assets/kt-tools.mjs /opt/kt-tools/server.mjs
+COPY src/modules/plugins/hermes-agent/assets/persona-identity.md /opt/kt-tools/persona-identity.md
 COPY src/modules/plugins/hermes-agent/assets/kt-research /opt/kt-tools/kt-research
+COPY src/modules/plugins/hermes-agent/assets/qqbot-skills /opt/kt-tools/qqbot-skills
 RUN cd /opt/hermes \
  && git apply --check /tmp/kt-tool-context.patch \
  && git apply /tmp/kt-tool-context.patch \

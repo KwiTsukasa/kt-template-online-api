@@ -30,11 +30,105 @@ export function toBotPluginMessageEvent(
       message.rawMessage,
       message.rawEvent,
     ]),
-    metadata: { mentioned: isBotMentioned(message) },
+    metadata: {
+      mentioned: isBotMentioned(message),
+      sender: {
+        key: hashOpaqueKey([message.selfId, message.userId]),
+        platformId: message.userId,
+        name: message.senderNickname || '',
+      },
+      timestamp: message.eventTime.toISOString(),
+      mentions: collectMentions(message),
+      replyTo: collectReplyId(message),
+      quote: collectQuote(message),
+    },
     rawText: message.rawMessage,
     scope: toPluginScope(message.messageType),
     senderKey: hashOpaqueKey([message.selfId, message.userId]),
     text: message.messageText,
+  };
+}
+
+/**
+ * 保留协议中可验证的被提及者，不把昵称、正文中的数字或 QQ 号猜成平台身份。
+ * @param message - 带原始消息段和官方事件的消息。
+ * @returns 同一账号命名空间中的成员标识与昵称。
+ */
+function collectMentions(message: BotNormalizedMessage) {
+  const ids = new Map<string, string>();
+  const botIds = new Set([
+    message.selfId,
+    message.selfId.replace('qq-official:', ''),
+    'all',
+  ]);
+  const raw = message.rawEvent || {};
+  if (Array.isArray(raw.mentions)) {
+    for (const item of raw.mentions) {
+      const id = String(
+        item?.member_openid || item?.id || item?.user_openid || '',
+      );
+      if (item?.is_you === true) {
+        botIds.add(id);
+        continue;
+      }
+      if (id)
+        ids.set(id, String(item.nickname || item.username || item.name || ''));
+    }
+  }
+  if (Array.isArray(raw.message)) {
+    for (const item of raw.message) {
+      if (item?.type === 'at' && item.data?.qq)
+        ids.set(String(item.data.qq), '');
+    }
+  }
+  for (const match of String(raw.content || '').matchAll(
+    /<@!?([a-zA-Z0-9_-]+)>/gu,
+  )) {
+    ids.set(match[1], ids.get(match[1]) || '');
+  }
+  return [...ids]
+    .filter(([id]) => !botIds.has(id))
+    .map(([id, name]) => ({
+      key: hashOpaqueKey([message.selfId, id]),
+      platformId: id,
+      name,
+    }));
+}
+
+/**
+ * 读取真正的引用消息标识，避免把当前消息的被动回复凭据误作引用对象。
+ * @param message - 含官方引用字段或 OneBot 回复段的消息。
+ * @returns 被引用的平台消息标识；平台未提供时为空字符串。
+ */
+function collectReplyId(message: BotNormalizedMessage): string {
+  const raw = message.rawEvent || {};
+  const reference =
+    raw.message_reference?.message_id ||
+    raw.message_reference?.messageId ||
+    raw.ref_msg_idx;
+  if (reference) return String(reference);
+  if (Array.isArray(raw.message)) {
+    const segment = raw.message.find((item) => item?.type === 'reply');
+    if (segment?.data?.id) return String(segment.data.id);
+  }
+  return '';
+}
+
+/**
+ * 保留官方协议携带的被引用正文，不伪造平台未给出的作者。
+ * @param message - 含引用索引和消息元素的入站消息。
+ * @returns 引用原文与索引；未提供引用时为空值。
+ */
+function collectQuote(message: BotNormalizedMessage) {
+  const raw = message.rawEvent || {};
+  if (!raw.ref_msg_idx || !Array.isArray(raw.msg_elements)) return null;
+  const element =
+    raw.msg_elements.find((item) => item?.msg_idx === raw.ref_msg_idx) ||
+    raw.msg_elements[0];
+  if (typeof element?.content !== 'string') return null;
+  return {
+    messageIndex: String(raw.ref_msg_idx),
+    text: element.content.slice(0, 4000),
   };
 }
 
@@ -47,6 +141,11 @@ function isBotMentioned(message: BotNormalizedMessage): boolean {
   if (
     ['official-websocket', 'official-webhook'].includes(message.connectionMode)
   ) {
+    if (
+      Array.isArray(message.rawEvent?.mentions) &&
+      message.rawEvent.mentions.some((item) => item?.is_you === true)
+    )
+      return true;
     return ['GROUP_AT_MESSAGE_CREATE', 'AT_MESSAGE_CREATE'].includes(
       String(message.rawEvent?.official_event_type || ''),
     );

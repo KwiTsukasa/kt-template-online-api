@@ -16,6 +16,40 @@ const imageMessage = (rawEvent: Record<string, unknown>) =>
   }) as BotNormalizedMessage;
 
 describe('Bot plugin event mapper', () => {
+  it('projects official reply windows from event time without extending delayed messages or restricting OneBot', () => {
+    const original = {
+      ...imageMessage({}),
+      eventTime: new Date('2026-09-10T13:40:24Z'),
+    };
+    for (const connectionMode of [
+      'official-websocket',
+      'official-webhook',
+    ] as const) {
+      expect(
+        toBotPluginMessageEvent({ ...original, connectionMode }).metadata
+          .replyDeadlineAt,
+      ).toBe(original.eventTime.getTime() + 300_000);
+      expect(
+        toBotPluginMessageEvent({
+          ...original,
+          connectionMode,
+          messageType: 'private',
+        }).metadata.replyDeadlineAt,
+      ).toBe(original.eventTime.getTime() + 3_600_000);
+      expect(
+        toBotPluginMessageEvent({
+          ...original,
+          connectionMode,
+          messageType: 'private',
+          guildId: 'guild',
+        }).metadata.replyDeadlineAt,
+      ).toBe(original.eventTime.getTime() + 300_000);
+    }
+    expect(
+      toBotPluginMessageEvent({ ...original, connectionMode: 'reverse-ws' })
+        .metadata.replyDeadlineAt,
+    ).toBeUndefined();
+  });
   it('keeps actual member identifiers and quote context without treating everyone as a person', () => {
     const mapped = toBotPluginMessageEvent({
       ...imageMessage({

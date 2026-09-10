@@ -97,9 +97,7 @@ export class PluginHttpClientService {
    * @returns 成功响应的原始字节、状态码与响应头；不自动跟随重定向。
    * @throws 响应大小上限不是有效正整数或超过 32 MiB 时拒绝请求。
    */
-  requestResponse(
-    input: PluginHttpClientRequest,
-  ): Promise<{
+  requestResponse(input: PluginHttpClientRequest): Promise<{
     body: Buffer;
     statusCode: number;
     headers: http.IncomingHttpHeaders;
@@ -208,8 +206,8 @@ export class PluginHttpClientService {
 
   /**
    * 按 URL 协议、方法、请求头与超时发起插件 HTTP 请求，并将成功响应解码为文本。
-   * @param input - 用于文本的结构化输入，包含 `url`、`method`、`timeoutMs`、`context` 字段。
-   * @returns 完成初始化并携带当前边界配置的文本。
+   * @param input - 文本请求的地址、方法和整次读取期限，持续到达的数据不会延长期限。
+   * @returns 成功响应的完整文本。
    */
   requestText(input: PluginHttpClientRequest): Promise<string> {
     const url = (() => {
@@ -241,6 +239,8 @@ export class PluginHttpClientService {
           timeout: timeoutMs,
         },
         (response) => {
+          response.on('error', reject);
+          response.on('aborted', () => reject(new Error(`${context}响应中断`)));
           let responseBody = '';
           response.setEncoding('utf8');
           response.on('data', (chunk) => {
@@ -262,6 +262,12 @@ export class PluginHttpClientService {
           });
         },
       );
+      const deadline = setTimeout(() => {
+        request.destroy(
+          new Error(input.timeoutMessage || `${context}请求超时`),
+        );
+      }, timeoutMs);
+      request.once('close', () => clearTimeout(deadline));
       request.on('timeout', () => {
         request.destroy(
           new Error(input.timeoutMessage || `${context}请求超时`),

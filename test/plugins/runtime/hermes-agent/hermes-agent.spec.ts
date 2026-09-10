@@ -37,6 +37,131 @@ const makePlugin = (
   });
 
 describe('Hermes Agent message integration', () => {
+  it('delivers a 233 second research answer and gives the next sender its own inference budget', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      const response = {
+        choices: [{ finish_reason: 'stop', message: { content: '完整攻略' } }],
+      };
+      const request = jest
+        .fn()
+        .mockImplementation(
+          () =>
+            new Promise((resolve) =>
+              setTimeout(() => resolve(response), 233_000),
+            ),
+        );
+      const plugin = makePlugin(request);
+      const first = plugin.handleEvent('message', {
+        ...event,
+        scope: 'group',
+        metadata: { mentioned: true },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      const second = plugin.handleEvent('message', {
+        ...event,
+        eventId: 'next-person',
+        senderKey: 'bob',
+        scope: 'group',
+        metadata: { mentioned: true },
+      });
+      jest.advanceTimersByTime(233_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect((await first).replies[0].content).toBe('完整攻略');
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[1][0].timeoutMs).toBe(600_000);
+      expect(request.mock.calls[0][0].headers['X-Hermes-Session-Id']).toBe(
+        request.mock.calls[1][0].headers['X-Hermes-Session-Id'],
+      );
+      jest.advanceTimersByTime(233_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect((await second).replies[0].content).toBe('完整攻略');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('reserves delivery time inside the platform window, including time already spent queued', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      const response = {
+        choices: [{ finish_reason: 'stop', message: { content: '完成' } }],
+      };
+      const request = jest
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) =>
+              setTimeout(() => resolve(response), 233_000),
+            ),
+        )
+        .mockResolvedValue(response);
+      const plugin = makePlugin(request);
+      const start = Date.now();
+      const first = plugin.handleEvent('message', {
+        ...event,
+        metadata: { replyDeadlineAt: start + 300_000 },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      jest.advanceTimersByTime(52_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      const second = plugin.handleEvent('message', {
+        ...event,
+        eventId: 'second',
+        metadata: { replyDeadlineAt: Date.now() + 300_000 },
+      });
+      jest.advanceTimersByTime(181_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      await Promise.all([first, second]);
+      expect(request.mock.calls[0][0].timeoutMs).toBe(280_000);
+      expect(request.mock.calls[1][0].timeoutMs).toBe(99_000);
+      const expired = await plugin.handleEvent('message', {
+        ...event,
+        metadata: { replyDeadlineAt: Date.now() + 10_000 },
+      });
+      expect(expired.replies[0].content).toContain('回复窗口即将到期');
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('classifies failures without logging credentials or replaying tool-bearing requests', async () => {
+    for (const [detail, category, replyText] of [
+      ['Hermes 回复超时', 'timeout', '查询耗时'],
+      ['connect ECONNREFUSED private-host', 'connection', '连接中断'],
+      ['Hermes Agent请求失败：401', 'http_401', '无法处理'],
+      ['Hermes 返回格式错误', 'invalid_response', '不完整'],
+      ['private upstream test-key', 'request_failed', '处理失败'],
+    ]) {
+      const request = jest.fn().mockRejectedValue(new Error(detail));
+      const warn = jest.fn();
+      const plugin = createPlugin({
+        host: { requestJson: request, warn },
+        manifest,
+        runtime: {
+          installationId: 'test',
+          configSnapshot: {
+            HERMES_AGENT_BASE_URL: 'http://127.0.0.1/v1',
+            HERMES_AGENT_API_KEY: 'test-key',
+          },
+        },
+      });
+      const result = await plugin.handleEvent('message', event);
+      expect(result.replies[0].content).toContain(replyText);
+      expect(JSON.parse(warn.mock.calls[0][0])).toMatchObject({
+        category,
+        eventId: event.eventId,
+        queueWaitMs: expect.any(Number),
+        inferenceMs: expect.any(Number),
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(
+        /test-key|private-host|private upstream/u,
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('shares one ordered group transcript across senders and adds only unseen group context', async () => {
     let finish: (value: unknown) => void = () => undefined;
     const response = {
@@ -519,7 +644,7 @@ describe('Hermes Agent message integration', () => {
         ...event,
         eventId: 'expired',
       });
-      jest.advanceTimersByTime(200000);
+      jest.advanceTimersByTime(240000);
       await new Promise((resolve) => setImmediate(resolve));
       expect((await expired).replies[0].content).toContain('请稍后再发这条');
       const third = plugin.handleEvent('message', {

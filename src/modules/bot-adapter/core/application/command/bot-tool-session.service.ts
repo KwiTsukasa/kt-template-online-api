@@ -45,7 +45,8 @@ export class BotToolSessionService {
     this.turns.set(id, {
       message,
       adapterContext,
-      expiresAt: Date.now() + 240_000,
+      // 覆盖事件执行 920 秒及宿主队列 120 秒；完成时仍立即撤销，每次工具调用重查权限。
+      expiresAt: Date.now() + 1_050_000,
       calls: new Map(),
       closed: false,
     });

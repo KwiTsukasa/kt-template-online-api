@@ -24,6 +24,12 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
         response.once('close', () => clearInterval(timer));
         return;
       }
+      if (request.url === '/aborted') {
+        response.writeHead(200, { 'Content-Length': 1000 });
+        response.write('partial');
+        setTimeout(() => response.destroy(), 20);
+        return;
+      }
       if (request.url === '/short') {
         response.writeHead(302, { Location: '/video/BV1xx411c7mD' });
         response.end();
@@ -129,5 +135,24 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
       }),
     ).rejects.toThrow('请求超时');
     expect(Date.now() - started).toBeLessThan(1200);
+  });
+
+  it('bounds text and JSON requests by total elapsed time and rejects disconnected response bodies', async () => {
+    const client = new PluginHttpClientService();
+    const started = Date.now();
+    await expect(
+      client.requestJson({
+        url: baseUrl + '/slow',
+        timeoutMs: 100,
+        timeoutMessage: 'Hermes 回复超时',
+      }),
+    ).rejects.toThrow('Hermes 回复超时');
+    expect(Date.now() - started).toBeLessThan(1200);
+    await expect(
+      client.requestText({ url: baseUrl + '/aborted', timeoutMs: 1000 }),
+    ).rejects.toThrow('响应中断');
+    await expect(
+      client.requestText({ url: baseUrl, timeoutMs: 1000 }),
+    ).resolves.toBe('ok');
   });
 });

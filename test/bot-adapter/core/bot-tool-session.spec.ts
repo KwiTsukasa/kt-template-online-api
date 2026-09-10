@@ -81,12 +81,28 @@ describe('Bot conversation tool authorization', () => {
       '失效',
     );
     const expiring = service.open(message);
-    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 241000);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 1_050_001);
     await expect(service.call(expiring, { action: 'list' })).rejects.toThrow(
       '失效',
     );
     now.mockRestore();
     expect(commands.listForTools).not.toHaveBeenCalled();
+  });
+
+  it('retains live tool authorization after a long queued research turn and revokes it on completion', async () => {
+    const id = service.open(message);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 500_000);
+    try {
+      await expect(service.call(id, { action: 'list' })).resolves.toEqual([
+        { commandId: '1' },
+      ]);
+      service.close(id);
+      await expect(service.call(id, { action: 'list' })).rejects.toThrow(
+        '失效',
+      );
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('serves a real local HTTP request with credential and context checks', async () => {

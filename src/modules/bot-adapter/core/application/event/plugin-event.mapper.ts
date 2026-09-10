@@ -38,6 +38,7 @@ export function toBotPluginMessageEvent(
         name: message.senderNickname || '',
       },
       timestamp: message.eventTime.toISOString(),
+      replyDeadlineAt: getReplyDeadline(message),
       mentions: collectMentions(message),
       replyTo: collectReplyId(message),
       quote: collectQuote(message),
@@ -47,6 +48,25 @@ export function toBotPluginMessageEvent(
     senderKey: hashOpaqueKey([message.selfId, message.userId]),
     text: message.messageText,
   };
+}
+
+/**
+ * 将官方被动回复时效换算为绝对截止时间，插件无需理解 QQ 的协议和凭据。
+ * @param message - 适配器确认的消息模式与平台原始发送时间。
+ * @returns 官方私聊为六十分钟、群与频道为五分钟；其他接入不附加平台期限。
+ */
+function getReplyDeadline(message: BotNormalizedMessage): number | undefined {
+  if (
+    !['official-websocket', 'official-webhook'].includes(
+      message.connectionMode || '',
+    )
+  ) {
+    return undefined;
+  }
+  let windowMs = 300_000;
+  if (message.messageType === 'private' && !message.guildId)
+    windowMs = 3_600_000;
+  return message.eventTime.getTime() + windowMs;
 }
 
 /**

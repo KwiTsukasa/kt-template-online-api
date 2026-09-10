@@ -24,6 +24,10 @@ type HermesResponse = {
   choices?: Array<{ finish_reason?: string; message?: { content?: unknown } }>;
 };
 
+const QUEUE_WAIT_MS = 240_000;
+const INFERENCE_MS = 600_000;
+const REPLY_RESERVE_MS = 20_000;
+
 /**
  * 将普通消息事件路由到文字与图片会话处理，只返回回复意图并保留宿主发送边界。
  * @param options - 插件定义、受控网络能力以及当前安装实例的配置快照。
@@ -104,6 +108,13 @@ class HermesMessageApplication {
       .update(JSON.stringify(identity))
       .digest('hex');
     const startedAt = Date.now();
+    let inferenceStartedAt = 0;
+    let queueWaitMs = 0;
+    const replyDeadline = event.metadata?.replyDeadlineAt;
+    let processingDeadline = Number.POSITIVE_INFINITY;
+    if (typeof replyDeadline === 'number' && Number.isFinite(replyDeadline)) {
+      processingDeadline = replyDeadline - REPLY_RESERVE_MS;
+    }
     const previous = this.sessionTails.get(sessionKey) ?? Promise.resolve();
     let release: () => void = () => undefined;
     const completion = new Promise<void>((resolve) => {
@@ -118,13 +129,21 @@ class HermesMessageApplication {
     });
     let queueTimeout: ReturnType<typeof setTimeout> | undefined;
     try {
+      const queueBudget = Math.min(
+        QUEUE_WAIT_MS,
+        processingDeadline - Date.now() - 30_000,
+      );
+      if (queueBudget <= 0) {
+        return reply('这条消息的回复窗口即将到期，请重新 @ 我发送这条问题。');
+      }
       const ready = await Promise.race([
         previous.then(() => true),
         new Promise<boolean>((resolve) => {
-          queueTimeout = setTimeout(() => resolve(false), 200000);
+          queueTimeout = setTimeout(() => resolve(false), queueBudget);
         }),
       ]);
       clearTimeout(queueTimeout);
+      queueWaitMs = Date.now() - startedAt;
       if (!ready) {
         return reply('前面的消息还在处理，请稍后再发这条。');
       }
@@ -180,7 +199,7 @@ class HermesMessageApplication {
             return reply('图片总大小超过 6 MiB，请分开发送。');
           const remainingMs = Math.min(
             55000 - (Date.now() - imageStartedAt),
-            210000 - (Date.now() - startedAt),
+            processingDeadline - Date.now(),
           );
           if (remainingMs < 1000) return reply('图片读取超时，请重新发一下。');
           let bytes: Buffer;
@@ -211,8 +230,16 @@ class HermesMessageApplication {
         addressingContext = '当前消息是用户直接发给你的私聊。';
       } else if (event.metadata?.mentioned === true) {
         addressingContext =
-          '本条消息已由平台确认：用户明确 @ 了你；正文中的 @ 标记已由接入层移除。';
+          '本条消息已由平台确认：用户明确 @ 了你；当前 Bot 的触发标记已由接入层移除，其他成员的提及保留。';
       }
+      const inferenceBudget = Math.min(
+        INFERENCE_MS,
+        processingDeadline - Date.now(),
+      );
+      if (inferenceBudget < 1000) {
+        return reply('这条消息的回复窗口即将到期，请重新 @ 我发送这条问题。');
+      }
+      inferenceStartedAt = Date.now();
       const response = (await requestJson({
         url: url.toString(),
         method: 'POST',
@@ -243,7 +270,7 @@ class HermesMessageApplication {
           ],
           stream: false,
         }),
-        timeoutMs: Math.max(1000, 210000 - (Date.now() - startedAt)),
+        timeoutMs: inferenceBudget,
         context: 'Hermes Agent',
         invalidJsonMessage: 'Hermes 返回格式错误',
         timeoutMessage: 'Hermes 回复超时',
@@ -277,21 +304,78 @@ class HermesMessageApplication {
         return reply('这次没能生成回复，请稍后再试。');
       }
       return splitReply(content.trim(), event.scope);
-    } catch {
+    } catch (error) {
+      const failure = classifyFailure(error);
       const warn = this.options.host.warn;
       if (typeof warn === 'function') {
         try {
-          await warn('Hermes 对话调用失败，请检查私网服务健康与上游授权。');
+          let inferenceMs = 0;
+          if (inferenceStartedAt) inferenceMs = Date.now() - inferenceStartedAt;
+          await warn(
+            JSON.stringify({
+              event: 'hermes_request_failed',
+              category: failure.category,
+              eventId: event.eventId,
+              sessionKey,
+              queueWaitMs,
+              inferenceMs,
+              elapsedMs: Date.now() - startedAt,
+            }),
+          );
         } catch {
           // 告警通道失败不改变面向用户的回复结果。
         }
       }
-      return reply('暂时没连上对话服务，请稍后再试。');
+      return reply(failure.message);
     } finally {
       clearTimeout(queueTimeout);
       release();
     }
   }
+}
+
+/**
+ * 将宿主错误归类成可追踪的固定原因，不把上游正文、地址或凭据写入告警和回复。
+ * @param error - 宿主 HTTP 桥接返回的错误。
+ * @returns 安全的原因类别与面向用户的失败说明。
+ */
+function classifyFailure(error: unknown) {
+  let detail = '';
+  if (error instanceof Error) detail = error.message;
+  if (/Hermes 回复超时|ETIMEDOUT|timed?\s*out/iu.test(detail)) {
+    return {
+      category: 'timeout',
+      message:
+        '这次查询耗时超过了本轮回复窗口，未能及时送达结果。请 @ 我继续这个问题。',
+    };
+  }
+  if (
+    /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ECONNRESET|socket hang up/iu.test(
+      detail,
+    )
+  ) {
+    return {
+      category: 'connection',
+      message: '对话服务连接中断，请稍后再试。',
+    };
+  }
+  if (/Hermes Agent请求失败：[45]\d\d/u.test(detail)) {
+    const status = detail.match(/请求失败：([45]\d\d)/u)?.[1] || 'unknown';
+    return {
+      category: `http_${status}`,
+      message: '对话服务暂时无法处理这条请求，请稍后再试。',
+    };
+  }
+  if (detail === 'Hermes 返回格式错误') {
+    return {
+      category: 'invalid_response',
+      message: '对话服务返回的结果不完整，请稍后再试。',
+    };
+  }
+  return {
+    category: 'request_failed',
+    message: '这次对话处理失败，请稍后再试。',
+  };
 }
 
 /**

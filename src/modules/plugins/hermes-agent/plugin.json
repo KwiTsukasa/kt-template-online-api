@@ -1,7 +1,7 @@
 {
   "pluginKey": "hermes-agent",
   "name": "Hermes Agent",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "minApiSdkVersion": "1.0.0",
   "description": "将已授权会话的文字与图片交给独立 Hermes Agent，并由当前 Bot 回复队列发送结果。",
   "author": "KT",
@@ -14,7 +14,7 @@
   ],
   "runtime": {
     "workerType": "thread",
-    "timeoutMs": 230000,
+    "timeoutMs": 920000,
     "memoryMb": 128,
     "maxConcurrency": 3,
     "configKeys": ["HERMES_AGENT_BASE_URL", "HERMES_AGENT_API_KEY"]

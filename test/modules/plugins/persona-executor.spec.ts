@@ -144,7 +144,9 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
       const job = JSON.parse(
         await readFile(join(root, 'jobs', id + '.json'), 'utf8'),
       );
-      if (job.status === status) return job;
+      if (job.status === status && !(await request('/health')).data.busy) {
+        return job;
+      }
       await new Promise((done) => setTimeout(done, 20));
     }
     throw new Error('Job did not reach expected state');

@@ -314,7 +314,7 @@ export class PersonaExecutor {
   }
 
   /**
-   * 执行持久操作并在提交前标记不可盲目重试阶段，登录态和业务状态分别保存。
+   * 持久记录提交阶段，以昵称和头像读回确认实际结果；平台错误码不能证明未生效，提交后只核对而不重提。
    * @param job - 已通过 API 条件写入登记的目标记录。
    * @throws 头像预上传或上传失败时在本方法内捕获并登记失败；记录无法持久化时向启动边界传播。
    */
@@ -384,26 +384,23 @@ export class PersonaExecutor {
         desc: '',
         preview_items: [],
       });
+      let platformErrorCode: number | undefined;
       if (
         submitted.status === 200 &&
         typeof submitted.data.retcode === 'number' &&
         submitted.data.retcode !== 0
+      )
+        platformErrorCode = submitted.data.retcode;
+      if (
+        submitted.status !== 200 ||
+        (submitted.data.retcode !== 0 && platformErrorCode === undefined)
       ) {
-        job.status = 'failed';
-        job.stage = 'done';
-        job.detail =
-          '新版平台拒绝资料修改（错误码 ' +
-          submitted.data.retcode +
-          '），请查看后台原因。';
-        return;
-      }
-      if (submitted.status !== 200 || submitted.data.retcode !== 0) {
         job.status = 'uncertain';
         job.detail = '资料提交响应不确定，已停止重复提交。';
         return;
       }
       job.stage = 'verify';
-      job.detail = '资料已提交，等待名称与头像读回。';
+      job.detail = '正在读回 Bot 昵称和头像，核对实际生效结果。';
       await this.persist(job);
       for (let attempt = 0; attempt < 8; attempt++) {
         if (await this.matches(browser, job, avatar)) {
@@ -415,6 +412,13 @@ export class PersonaExecutor {
         await pause(1500);
       }
       job.status = 'uncertain';
+      if (platformErrorCode !== undefined) {
+        job.detail =
+          '平台返回错误码 ' +
+          platformErrorCode +
+          '，资料暂未读回一致；已停止重复提交，后续只核对结果。';
+        return;
+      }
       job.detail = '资料已提交，暂未全部读回；需核对生效或审核状态。';
     } catch {
       if (['submit', 'verify'].includes(job.stage)) {

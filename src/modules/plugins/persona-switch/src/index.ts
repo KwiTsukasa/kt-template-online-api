@@ -114,6 +114,7 @@ class PersonaApplication {
     const url = new URL(imageUrl);
     if (
       url.hostname !== 'multimedia.nt.qq.com' &&
+      url.hostname !== 'multimedia.nt.qq.com.cn' &&
       !url.hostname.endsWith('.qpic.cn')
     )
       throw new Error('头像必须来自本条 QQ 图片附件。');

@@ -84,7 +84,11 @@ const createStore = () => {
     {} as any,
     Object.assign(new PluginHttpClientService(), {
       requestResponse: async (input: any) => {
-        if (String(input.url).startsWith('https://gchat.qpic.cn/'))
+        if (
+          String(input.url).startsWith('https://gchat.qpic.cn/') ||
+          String(input.url).startsWith('https://multimedia.nt.qq.com/') ||
+          String(input.url).startsWith('https://multimedia.nt.qq.com.cn/')
+        )
           return {
             body: Buffer.from('test-avatar'),
             statusCode: 200,
@@ -220,6 +224,60 @@ describe('persona state and native Hermes synchronization', () => {
   afterEach(async () => {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it.each(['multimedia.nt.qq.com', 'multimedia.nt.qq.com.cn'])(
+    'saves the first signed attachment from %s without switching persona',
+    async (hostname) => {
+      const calls = jest.spyOn(store.bridge, 'handleHostCall');
+      const imageUrl = `https://${hostname}/download?appid=1407&fileid=first&rkey=signed-test-key`;
+      const content = '我是柊司。\n【我的日常】\n我喜欢做点心。';
+      const result = await makePlugin().operations[0].execute({
+        raw: 's\n柊司\n' + content,
+        imageUrls: [imageUrl, 'https://gchat.qpic.cn/second.png'],
+      });
+      expect(result.replyText).toContain('已保存 柊司');
+      const state = store.rows.get('persona-switch').configValue.value;
+      expect(state.profiles).toContainEqual({
+        name: '柊司',
+        content,
+        version: 1,
+        avatar: { hash: 'a'.repeat(64) },
+      });
+      expect(state.current.name).toBe('默认');
+      expect(state.pending).toBeNull();
+      expect(state.botProfile).toBeUndefined();
+      const downloaded = calls.mock.calls
+        .map(([, call]) => call)
+        .filter((call) => call.method === 'requestResponse');
+      expect(downloaded).toHaveLength(2);
+      expect(downloaded[0].args).toEqual({
+        options: {
+          url: imageUrl,
+          method: 'GET',
+          timeoutMs: 8000,
+          maxResponseBytes: 2 * 1024 * 1024,
+          context: '人格头像读取',
+        },
+      });
+      expect(requests).toBe(1);
+      expect(puts).toBe(0);
+      expect(soul).toBe('');
+    },
+  );
+
+  it('rejects a lookalike QQ attachment domain before downloading or writing', async () => {
+    const calls = jest.spyOn(store.bridge, 'handleHostCall');
+    const result = await makePlugin().operations[0].execute({
+      raw: 's\n柊司\n正文',
+      imageUrls: ['https://multimedia.nt.qq.com.cn.example.com/download'],
+    });
+    expect(result.replyText).toContain('保存未成功');
+    expect(store.rows.size).toBe(0);
+    expect(requests).toBe(0);
+    expect(
+      calls.mock.calls.some(([, call]) => call.method === 'requestResponse'),
+    ).toBe(false);
   });
 
   it('uses both command aliases through the real API HTTP controller and keeps drafts separate from SOUL', async () => {

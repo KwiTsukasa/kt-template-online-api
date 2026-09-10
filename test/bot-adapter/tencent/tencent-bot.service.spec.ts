@@ -374,6 +374,28 @@ describe('TencentBotService', () => {
       '被动回复',
     );
 
+    const mentionInput = {
+      message: '<qqbot-at-user id="member-2" /> 一起讨论',
+      replyMessageId: 'mention-event-2',
+      selfId: 'qq-official:1020000000',
+      targetId: 'group_openid_2',
+      targetType: 'group' as const,
+    };
+    await service.sendText(mentionInput);
+    expect(bot.send).toHaveBeenCalledWith({
+      target: {
+        scope: 'group',
+        targetId: 'group_openid_2',
+        msgId: 'mention-event-2',
+      },
+      msgType: 2,
+      markdown: { content: mentionInput.message },
+    });
+    const plainCalls = bot.sendText.mock.calls.length;
+    bot.send.mockRejectedValueOnce(new Error('Markdown permission denied'));
+    await expect(service.sendText(mentionInput)).rejects.toThrow();
+    expect(bot.sendText).toHaveBeenCalledTimes(plainCalls);
+
     await service.sendText({
       channelId: 'channel_openid_2',
       guildId: 'guild_openid_2',
@@ -682,6 +704,9 @@ const createBotClient = (
       upload: { file_info: 'file-info' },
     }),
     sendTyping: jest.fn().mockResolvedValue({}),
+    send: jest
+      .fn()
+      .mockResolvedValue({ id: 'official-mention-message', timestamp: 1 }),
     sendText: jest.fn().mockResolvedValue({
       id: 'official-text-message',
       timestamp: 1,

@@ -98,6 +98,11 @@ type OfficialBotClient = {
     message?: OfficialMessageResponse;
     upload: unknown;
   }>;
+  send(input: {
+    target: OfficialReplyTarget;
+    msgType: 2;
+    markdown: { content: string };
+  }): Promise<OfficialMessageResponse>;
   sendText(
     target: OfficialReplyTarget,
     content: string,
@@ -928,7 +933,7 @@ export class TencentBotService
   }
 
   /**
-   * 向 C2C 或群目标发送文本，并把现有插件生成的 CQ 图片段转换为官方媒体上传。
+   * 群成员提及单独使用 Markdown 渲染，普通文本保留原通道，CQ 图片段转换为官方媒体上传。
    * @param bot - 当前账号的官方发送客户端。
    * @param input - 目标范围、OpenID、正文和可选被动回复消息 ID。
    * @returns 最后一次文本或图片消息的官方响应。
@@ -947,6 +952,16 @@ export class TencentBotService
     const parsed = this.parseCqImages(input.message);
     const replyTarget = this.resolveOutboundReplyTarget(input);
     if (parsed.images.length === 0) {
+      if (
+        input.scope === 'group' &&
+        parsed.text.startsWith('<qqbot-at-user id="')
+      ) {
+        return bot.send({
+          target: replyTarget,
+          msgType: 2,
+          markdown: { content: parsed.text },
+        });
+      }
       return bot.sendText(replyTarget, parsed.text);
     }
 

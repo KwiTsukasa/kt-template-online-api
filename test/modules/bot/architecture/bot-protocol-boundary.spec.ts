@@ -98,14 +98,21 @@ describe('Bot protocol architecture boundary', () => {
   });
 
   it('allows the qqbot name only at official SDK and exact outgoing interaction syntax boundaries', () => {
-    const interactionFile = join(
-      repoRoot,
-      'src/modules/bot-adapter/core/application/command/bot-tool-session.service.ts',
-    );
-    // 官方外部协议不可随内部模块重命名；只豁免这两条完整字面量，不放开目录中的其他旧名称。
+    const interactionFiles = new Set([
+      join(
+        repoRoot,
+        'src/modules/bot-adapter/core/application/command/bot-tool-session.service.ts',
+      ),
+      join(
+        repoRoot,
+        'src/modules/bot-adapter/tencent/infrastructure/tencent-bot.service.ts',
+      ),
+    ]);
+    // 官方外部协议不可随内部模块重命名；只豁免实际生成、校验和分流的完整字面量。
     const interactionLines = new Set([
       String.raw`if (text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))`,
       'let tag = `<qqbot-at-user id="${member}" />`;',
+      `parsed.text.startsWith('<qqbot-at-user id="')`,
     ]);
     const files = [
       ...collectTypeScriptFiles('src/modules/bot'),
@@ -123,7 +130,7 @@ describe('Bot protocol architecture boundary', () => {
         }))
         .filter(
           ({ line }) =>
-            file !== interactionFile || !interactionLines.has(line.trim()),
+            !interactionFiles.has(file) || !interactionLines.has(line.trim()),
         )
         .filter(({ line }) => /qqbot/iu.test(line))
         .filter(

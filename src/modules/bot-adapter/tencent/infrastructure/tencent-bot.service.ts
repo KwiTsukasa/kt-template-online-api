@@ -1456,7 +1456,7 @@ export class TencentBotService
       groupId,
       guildId: message.guildId,
       messageId: message.messageId,
-      messageText: this.stripOfficialMention(message.content, message.kind),
+      messageText: this.stripOfficialMention(message, account.appId),
       messageType,
       adapterReplyContext: this.resolveInboundReplyTarget(message),
       rawEvent,
@@ -1506,17 +1506,33 @@ export class TencentBotService
   }
 
   /**
-   * 仅对群和频道正文移除官方 mention 标记，C2C 与频道私信保留原文后裁剪空白。
-   * @param content - 官方消息正文。
-   * @param kind - SDK 归一化会话类型。
-   * @returns 可供现有命令解析器直接匹配的正文。
+   * 只移除已确认属于当前 Bot 的群或频道触发标记，保留其他成员提及的位置与身份。
+   * @param message - 保留原始提及证据的官方消息。
+   * @param appId - 当前客户端的应用标识，用于兼容旧版触发标记。
+   * @returns 去除当前 Bot 触发标记并裁剪首尾空白的正文，未知身份的标记保持原样。
    */
-  private stripOfficialMention(
-    content: string,
-    kind: OfficialInboundMessage['kind'],
-  ) {
-    if (kind !== 'group' && kind !== 'guild') return content.trim();
-    return content.replace(/<@!?[^>]+>/g, '').trim();
+  private stripOfficialMention(message: OfficialInboundMessage, appId: string) {
+    if (message.kind !== 'group' && message.kind !== 'guild')
+      return message.content.trim();
+    const botIds = new Set([appId]);
+    if (Array.isArray(message.raw.mentions)) {
+      for (const mention of message.raw.mentions) {
+        if (mention?.is_you !== true) continue;
+        for (const id of [
+          mention.id,
+          mention.member_openid,
+          mention.user_openid,
+        ]) {
+          if (typeof id === 'string' && id) botIds.add(id);
+        }
+      }
+    }
+    return message.content
+      .replace(/<@!?([a-zA-Z0-9_-]+)>/gu, (marker, id: string) => {
+        if (botIds.has(id)) return '';
+        return marker;
+      })
+      .trim();
   }
 
   /**

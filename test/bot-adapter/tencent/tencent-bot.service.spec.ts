@@ -1,4 +1,5 @@
 import { ToolsService } from '@/common';
+import { toBotPluginMessageEvent } from '@/modules/bot-adapter/core/application/event/plugin-event.mapper';
 import {
   type TencentBotSdkLoader,
   TencentBotService,
@@ -8,6 +9,77 @@ const flushPromises = () =>
   new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('TencentBotService', () => {
+  it('preserves two other members and their text positions through normalization into the plugin envelope', () => {
+    const service = createService(
+      jest.fn(),
+      createAccountService({}),
+      createEventService(),
+    );
+    const content = '<@bot-openid> 塔神是 <@member-A>，不是 <@!member-B>';
+    const raw = {
+      content,
+      mentions: [
+        { id: 'bot-openid', is_you: true, username: '塔塔露' },
+        { member_openid: 'member-A', is_you: false, username: '塔露拉' },
+        { id: 'member-B', is_you: false, username: '小龙' },
+      ],
+    };
+    const normalized = (service as any).normalizeMessage(
+      {
+        appId: '1020000000',
+        selfId: 'qq-official:1020000000',
+        connectionMode: 'official-websocket',
+      },
+      {
+        content,
+        raw,
+        kind: 'group',
+        groupOpenid: 'group-A',
+        senderId: 'sender-A',
+        messageId: 'incoming-mentions',
+        rawEventType: 'GROUP_MESSAGE_CREATE',
+        timestamp: '2026-09-10T13:00:00Z',
+      },
+    );
+    const event = toBotPluginMessageEvent(normalized);
+    expect(event.text).toBe('塔神是 <@member-A>，不是 <@!member-B>');
+    expect(event.metadata.mentioned).toBe(true);
+    expect(event.metadata.mentions).toEqual([
+      expect.objectContaining({ platformId: 'member-A', name: '塔露拉' }),
+      expect.objectContaining({ platformId: 'member-B', name: '小龙' }),
+    ]);
+    expect(normalized.rawEvent.content).toBe(content);
+    expect(raw.content).toBe(content);
+  });
+
+  it('keeps unknown or other-member mentions when an AT event already omits the bot marker', () => {
+    const service = createService(
+      jest.fn(),
+      createAccountService({}),
+      createEventService(),
+    );
+    const input = {
+      content: '<@member-A> 是塔神',
+      raw: {},
+      kind: 'group',
+      rawEventType: 'GROUP_AT_MESSAGE_CREATE',
+    };
+    expect((service as any).stripOfficialMention(input, '1020000000')).toBe(
+      input.content,
+    );
+    expect(
+      (service as any).stripOfficialMention(
+        { ...input, content: '<@!1020000000> /ping <@member-A>' },
+        '1020000000',
+      ),
+    ).toBe('/ping <@member-A>');
+    expect(
+      (service as any).stripOfficialMention(
+        { ...input, kind: 'c2c', content: ' <@1020000000> 原文 ' },
+        '1020000000',
+      ),
+    ).toBe('<@1020000000> 原文');
+  });
   it('refreshes native private typing and stops the timer on completion, skipping groups', async () => {
     jest.useFakeTimers();
     try {
@@ -79,7 +151,7 @@ describe('TencentBotService', () => {
     await eventHandlers.get('message')?.(
       {},
       {
-        content: '<@!bot> /ping',
+        content: '<@!1020000000> /ping',
         groupOpenid: 'group_openid_1',
         kind: 'group',
         messageId: 'message-1',
@@ -116,7 +188,7 @@ describe('TencentBotService', () => {
       {},
       {
         channelId: 'channel_openid_1',
-        content: '<@bot> /channel',
+        content: '<@1020000000> /channel',
         guildId: 'guild_openid_1',
         kind: 'guild',
         messageId: 'message-channel',

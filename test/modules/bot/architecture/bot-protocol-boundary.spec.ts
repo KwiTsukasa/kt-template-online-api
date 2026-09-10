@@ -97,7 +97,16 @@ describe('Bot protocol architecture boundary', () => {
     expect(source).toContain('PluginPlatform:Task:List');
   });
 
-  it('allows the qqbot name only at the official Tencent SDK package and export boundary', () => {
+  it('allows the qqbot name only at official SDK and exact outgoing interaction syntax boundaries', () => {
+    const interactionFile = join(
+      repoRoot,
+      'src/modules/bot-adapter/core/application/command/bot-tool-session.service.ts',
+    );
+    // 官方外部协议不可随内部模块重命名；只豁免这两条完整字面量，不放开目录中的其他旧名称。
+    const interactionLines = new Set([
+      String.raw`if (text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))`,
+      'let tag = `<qqbot-at-user id="${member}" />`;',
+    ]);
     const files = [
       ...collectTypeScriptFiles('src/modules/bot'),
       ...collectTypeScriptFiles('src/modules/bot-adapter'),
@@ -112,6 +121,10 @@ describe('Bot protocol architecture boundary', () => {
           line,
           lineNumber: index + 1,
         }))
+        .filter(
+          ({ line }) =>
+            file !== interactionFile || !interactionLines.has(line.trim()),
+        )
         .filter(({ line }) => /qqbot/iu.test(line))
         .filter(
           ({ line }) =>

@@ -424,6 +424,21 @@ describe('TencentBotService', () => {
       { url: 'https://img.example.com/cover.jpg' },
       { content: '封面' },
     );
+    const imageContext = {
+      scope: 'group',
+      targetId: 'group_openid_2',
+      msgId: 'image-trigger',
+      eventId: 'opaque-event',
+    };
+    await service.sendText({
+      message: '[CQ:image,file=base64://cG5n]',
+      selfId: 'qq-official:1020000000',
+      targetId: 'group_openid_2',
+      targetType: 'group',
+      replyMessageId: 'image-trigger',
+      adapterReplyContext: imageContext,
+    });
+    expect(bot.sendImage.mock.calls.at(-1)?.[0]).toBe(imageContext);
 
     await service.sendText({
       message: '被动回复',

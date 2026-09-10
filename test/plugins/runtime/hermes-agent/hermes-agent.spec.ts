@@ -1,5 +1,12 @@
 import { createPlugin } from '@/modules/plugins/hermes-agent/src';
 import { toBotPluginMessageEvent } from '@/modules/bot-adapter/core/application/event/plugin-event.mapper';
+import { renderLongReply } from '@/modules/plugins/hermes-agent/src/long-reply.renderer';
+
+jest.mock('@/modules/plugins/hermes-agent/src/long-reply.renderer', () => ({
+  renderLongReply: jest
+    .fn()
+    .mockRejectedValue(new Error('renderer unavailable')),
+}));
 
 const event = {
   conversationKey: 'conversation',
@@ -37,6 +44,36 @@ const makePlugin = (
   });
 
 describe('Hermes Agent message integration', () => {
+  it('renders the complete long answer once and preserves per-page text without invoking inference again', async () => {
+    const answer = '完整中文回答😀'.repeat(600);
+    const render = jest.mocked(renderLongReply);
+    render.mockResolvedValueOnce([
+      { base64: 'png-bytes', text: answer, height: 4000 },
+    ]);
+    const request = jest
+      .fn()
+      .mockResolvedValue({
+        choices: [{ finish_reason: 'stop', message: { content: answer } }],
+      });
+    const before = Date.now();
+    const result = await makePlugin(request).handleEvent('message', event);
+    expect(result.replies).toEqual([
+      { kind: 'image', content: 'png-bytes', fallbackText: answer },
+    ]);
+    expect(render.mock.calls.at(-1)?.[0]).toBe(answer);
+    expect(render.mock.calls.at(-1)?.[1]).toBeGreaterThanOrEqual(
+      before + 14000,
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+    const calls = render.mock.calls.length;
+    request.mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: '短回复' } }],
+    });
+    expect(
+      (await makePlugin(request).handleEvent('message', event)).replies,
+    ).toEqual([{ kind: 'text', content: '短回复' }]);
+    expect(render).toHaveBeenCalledTimes(calls);
+  });
   it('delivers a 233 second research answer and gives the next sender its own inference budget', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
     try {

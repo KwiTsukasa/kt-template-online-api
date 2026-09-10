@@ -135,17 +135,53 @@ export class BotRuleEngineService {
         eventKey: 'message',
         pluginKeys,
       });
-      for (const reply of result.replies) {
-        await this.sendService.sendText({
+      const send = (content: string) =>
+        this.sendService.sendText({
           channelId: message.channelId,
           guildId: message.guildId,
-          message: reply.content,
+          message: content,
           adapterReplyContext: message.adapterReplyContext,
           replyMessageId: message.replyMessageId,
           selfId: message.selfId,
           targetId: message.targetId,
           targetType: message.messageType,
         });
+      for (const [index, reply] of result.replies.entries()) {
+        if (reply.kind === 'text') {
+          await send(reply.content);
+          continue;
+        }
+        try {
+          await send(`[CQ:image,file=base64://${reply.content}]`);
+        } catch {
+          // 图片超时也可能已送达，不重传图片；在剩余被动回复额度内回退文字。
+          this.logger.warn('Bot 插件图片发送未确认，使用剩余额度回退文字');
+          const rest = result.replies
+            .slice(index)
+            .map((part) => {
+              if (part.kind === 'image') return part.fallbackText;
+              return part.content;
+            })
+            .join('\n\n');
+          const chars = Array.from(`长图发送未确认，以下为文字内容：\n${rest}`);
+          let maximum = 5;
+          if (message.messageType === 'private') maximum = 4;
+          const remaining = Math.max(0, maximum - index - 1);
+          for (
+            let part = 0;
+            part < remaining && part * 1800 < chars.length;
+            part++
+          ) {
+            let text = chars.slice(part * 1800, (part + 1) * 1800).join('');
+            if (part === remaining - 1 && chars.length > remaining * 1800) {
+              text =
+                chars.slice(part * 1800, part * 1800 + 1700).join('') +
+                '\n（剩余内容超出本次回复额度，可让我继续。）';
+            }
+            await send(text);
+          }
+          break;
+        }
       }
     } catch (error) {
       const errorMessage = this.toolsService.getErrorMessage(

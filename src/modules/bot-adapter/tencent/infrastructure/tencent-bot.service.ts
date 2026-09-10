@@ -967,16 +967,9 @@ export class TencentBotService
 
     let response: OfficialMessageResponse | undefined;
     for (const [index, source] of parsed.images.entries()) {
-      const target: OfficialReplyTarget = {
-        scope: input.scope,
-        targetId: input.targetId,
-      };
-      if (index === 0 && input.replyMessageId) {
-        target.msgId = input.replyMessageId;
-      }
       const options: { content?: string } = {};
       if (index === 0 && parsed.text) options.content = parsed.text;
-      const sent = await bot.sendImage(target, source, options);
+      const sent = await bot.sendImage(replyTarget, source, options);
       if (!sent.message) {
         throw new Error('QQ 官方图片上传后未返回消息结果');
       }

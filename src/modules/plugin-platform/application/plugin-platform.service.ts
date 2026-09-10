@@ -614,8 +614,43 @@ export class PluginPlatformService
       record.replies.forEach((candidate) => {
         if (!candidate || typeof candidate !== 'object') return;
         const reply = candidate as Record<string, unknown>;
-        if (reply.kind !== 'text' || typeof reply.content !== 'string') return;
-        replies.push({ content: reply.content, kind: 'text' });
+        if (typeof reply.content !== 'string') return;
+        if (reply.kind === 'text') {
+          replies.push({ content: reply.content, kind: 'text' });
+          return;
+        }
+        if (
+          reply.kind !== 'image' ||
+          reply.content.length > 11184812 ||
+          !/^[A-Za-z0-9+/]+={0,2}$/u.test(reply.content)
+        )
+          return;
+        if (
+          typeof reply.fallbackText !== 'string' ||
+          !reply.fallbackText.trim() ||
+          reply.fallbackText.length > 100000
+        )
+          return;
+        const bytes = Buffer.from(reply.content, 'base64');
+        if (
+          bytes.length < 24 ||
+          bytes.length > 8 * 1024 * 1024 ||
+          bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' ||
+          bytes.subarray(12, 16).toString('ascii') !== 'IHDR'
+        )
+          return;
+        if (
+          bytes.readUInt32BE(16) < 1 ||
+          bytes.readUInt32BE(16) > 4096 ||
+          bytes.readUInt32BE(20) < 1 ||
+          bytes.readUInt32BE(20) > 16000
+        )
+          return;
+        replies.push({
+          content: reply.content,
+          kind: 'image',
+          fallbackText: reply.fallbackText,
+        });
       });
     }
     return {

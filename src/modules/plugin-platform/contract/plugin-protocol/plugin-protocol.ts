@@ -43,10 +43,15 @@ export type BotPluginMessageEvent = {
   text: string;
 };
 
-export type BotPluginReplyIntent = {
-  content: string;
-  kind: 'text';
-};
+export type BotPluginReplyIntent =
+  | { content: string; kind: 'text' }
+  | {
+      // PNG 字节的纯 base64；宿主负责转换为对应平台的图片消息。
+      content: string;
+      kind: 'image';
+      // 图片发送未确认时可使用的本页文字，不包含媒体协议。
+      fallbackText: string;
+    };
 
 export type BotPluginEventResult = {
   handled: boolean;

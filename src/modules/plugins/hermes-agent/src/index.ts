@@ -62,7 +62,7 @@ class HermesMessageApplication {
   /**
    * 同群共用持久会话并串行接话，私聊继续独立，拒绝把不完整推理当作成功回复。
    * @param event - 宿主完成权限验证后投递的平台无关消息。
-   * @returns 普通对话的文本回复意图，或不参与当前消息的空结果。
+   * @returns 普通对话的文字或长图回复意图，或不参与当前消息的空结果。
    */
   async handleMessage(
     event: BotPluginMessageEvent,
@@ -304,7 +304,44 @@ class HermesMessageApplication {
       ) {
         return reply('这次没能生成回复，请稍后再试。');
       }
-      return splitReply(content.trim(), event.scope);
+      const answer = content.trim();
+      if (Array.from(answer).length > 1800) {
+        try {
+          // 延迟加载原生渲染器；字体或渲染依赖失败不影响普通文字对话。
+          const { renderLongReply } = await import('./long-reply.renderer');
+          let renderDeadline = Date.now() + 15000;
+          if (
+            typeof replyDeadline === 'number' &&
+            Number.isFinite(replyDeadline)
+          ) {
+            renderDeadline = Math.min(renderDeadline, replyDeadline - 35000);
+          }
+          const pages = await renderLongReply(answer, renderDeadline);
+          return {
+            handled: true,
+            replies: pages.map((page) => ({
+              kind: 'image',
+              content: page.base64,
+              fallbackText: page.text,
+            })),
+          };
+        } catch {
+          const warn = this.options.host.warn;
+          if (typeof warn === 'function') {
+            try {
+              await warn(
+                JSON.stringify({
+                  event: 'hermes_long_image_fallback',
+                  eventId: event.eventId,
+                }),
+              );
+            } catch {
+              // 日志失败不阻断已经完成的回答。
+            }
+          }
+        }
+      }
+      return splitReply(answer, event.scope);
     } catch (error) {
       const failure = classifyFailure(error);
       const warn = this.options.host.warn;

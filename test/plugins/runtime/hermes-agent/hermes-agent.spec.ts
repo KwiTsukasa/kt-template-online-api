@@ -113,8 +113,8 @@ describe('Hermes Agent message integration', () => {
       jest.advanceTimersByTime(181_000);
       await new Promise((resolve) => setImmediate(resolve));
       await Promise.all([first, second]);
-      expect(request.mock.calls[0][0].timeoutMs).toBe(280_000);
-      expect(request.mock.calls[1][0].timeoutMs).toBe(99_000);
+      expect(request.mock.calls[0][0].timeoutMs).toBe(250_000);
+      expect(request.mock.calls[1][0].timeoutMs).toBe(69_000);
       const expired = await plugin.handleEvent('message', {
         ...event,
         metadata: { replyDeadlineAt: Date.now() + 10_000 },

@@ -26,7 +26,8 @@ type HermesResponse = {
 
 const QUEUE_WAIT_MS = 240_000;
 const INFERENCE_MS = 600_000;
-const REPLY_RESERVE_MS = 20_000;
+// 官方多段发送会受账号节流；实测四段约 25 秒，为最多五段保留 50 秒。
+const REPLY_RESERVE_MS = 50_000;
 
 /**
  * 将普通消息事件路由到文字与图片会话处理，只返回回复意图并保留宿主发送边界。

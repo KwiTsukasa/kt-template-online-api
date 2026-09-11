@@ -108,7 +108,7 @@ export class BotCommandEngineService {
     await this.commandService.markHit(command);
     try {
       const output = await this.pluginExecution.executeOperation({
-        context: { arguments: matched.input },
+        context: { arguments: matched.input, bot: { selfId: message.selfId } },
         input,
         operationKey: command.operationKey,
         pluginKey: command.pluginKey,
@@ -176,6 +176,7 @@ export class BotCommandEngineService {
         const output = await this.pluginExecution.executeOperation({
           context: {
             arguments: matched.input,
+            bot: { selfId: message.selfId },
           },
           input,
           operationKey: command.operationKey,
@@ -247,6 +248,7 @@ export class BotCommandEngineService {
       const output = await this.pluginExecution.executeOperation({
         context: {
           arguments: matched.input,
+          bot: { selfId: message.selfId },
         },
         input,
         operationKey: command.operationKey,

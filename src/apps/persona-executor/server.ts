@@ -8,6 +8,7 @@ import { mkdir, readFile, readdir, rename, open } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { isPersonaName } from '../../modules/plugins/persona-switch/src/command';
 import type { ProfileJobStatus } from '../../modules/plugins/persona-switch/src/profile-client';
+import { isOfficialBotSelfId } from '../../modules/plugins/persona-switch/src/profile-client';
 import { BrowserSession } from './webdriver';
 import { AndroidScanner } from './android';
 import { avatarsMatch, imageHash, normalizeAvatar } from './media';
@@ -15,10 +16,20 @@ import { OfficialProfileReader } from './official-profile';
 
 type Job = {
   id: string;
+  botSelfId?: string;
   name: string;
   avatarHash: string;
   status: ProfileJobStatus;
-  stage: 'queued' | 'login' | 'upload' | 'submit' | 'verify' | 'done';
+  stage:
+    | 'queued'
+    | 'browser'
+    | 'identity'
+    | 'login'
+    | 'readback'
+    | 'upload'
+    | 'submit'
+    | 'verify'
+    | 'done';
   detail: string;
   uploadId?: string;
   submittedFields?: Array<'name' | 'avatar'>;
@@ -28,8 +39,7 @@ type Job = {
 type Options = {
   root: string;
   token: string;
-  appId: string;
-  appSecret: string;
+  apiBaseUrl: string;
   adminQq: string;
   androidSerial: string;
 };
@@ -38,13 +48,25 @@ const pause = (ms: number) =>
 const JOB_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u;
 const HASH = /^[a-f0-9]{64}$/u;
 
+class ProfileQueryError extends Error {
+  constructor(
+    readonly httpStatus: number,
+    readonly platformCode?: number,
+  ) {
+    super('新版平台资料读取未成功。');
+  }
+}
+
 export class PersonaExecutor {
   private active: string | null = null;
   private unresolved: string | null = null;
   private storageFault = false;
   private readonly official: OfficialProfileReader;
   constructor(private readonly options: Options) {
-    this.official = new OfficialProfileReader(options.appId, options.appSecret);
+    this.official = new OfficialProfileReader(
+      options.apiBaseUrl,
+      options.token,
+    );
   }
 
   /**
@@ -107,6 +129,8 @@ export class PersonaExecutor {
       throw error;
     }
     const job = JSON.parse(bytes) as Job;
+    if (job.botSelfId !== undefined && !isOfficialBotSelfId(job.botSelfId))
+      throw new Error('执行记录的官方账号身份损坏。');
     if (
       job.id !== id ||
       !isPersonaName(job.name) ||
@@ -119,11 +143,17 @@ export class PersonaExecutor {
         'needs_login',
         'uncertain',
       ].includes(job.status) ||
-      !['queued', 'login', 'upload', 'submit', 'verify', 'done'].includes(
-        job.stage,
-      ) ||
-      (job.status === 'uncertain' &&
-        !['submit', 'verify'].includes(job.stage)) ||
+      ![
+        'queued',
+        'browser',
+        'identity',
+        'login',
+        'readback',
+        'upload',
+        'submit',
+        'verify',
+        'done',
+      ].includes(job.stage) ||
       (job.submittedFields !== undefined &&
         (!Array.isArray(job.submittedFields) ||
           job.submittedFields.some(
@@ -143,8 +173,7 @@ export class PersonaExecutor {
   async initialize() {
     if (
       this.options.token.length < 32 ||
-      !/^\d{5,12}$/u.test(this.options.appId) ||
-      !this.options.appSecret ||
+      !this.options.apiBaseUrl ||
       !/^\d{5,12}$/u.test(this.options.adminQq)
     )
       throw new Error('NAS 人格执行器配置无效。');
@@ -193,14 +222,16 @@ export class PersonaExecutor {
   /**
    * 核验新版平台返回的 Bot 与管理员身份，仅保留资料所需字段。
    * @param browser - 当前 NAS 浏览器会话。
+   * @param appId - 从原任务官方账号身份解析的目标应用。
    * @returns 已绑定目标身份的名称和头像；会话过期时为空。
    * @throws 非登录错误或身份不符时拒绝修改。
    */
   private async query(
     browser: BrowserSession,
+    appId: string,
   ): Promise<{ name: string; avatar: string; uin: string } | null> {
     const result = await browser.profileApi('/cgi-bin/v2/info/query', {
-      bot_appid: Number(this.options.appId),
+      bot_appid: Number(appId),
       filter: {
         base_info: 1,
         developer_info: 1,
@@ -213,12 +244,15 @@ export class PersonaExecutor {
       [-10001, -10002, 10004].includes(result.data.retcode)
     )
       return null;
-    if (result.status !== 200 || result.data.retcode !== 0)
-      throw new Error('新版平台资料读取未成功。');
+    if (result.status !== 200 || result.data.retcode !== 0) {
+      let code: number | undefined;
+      if (Number.isSafeInteger(result.data.retcode)) code = result.data.retcode;
+      throw new ProfileQueryError(result.status, code);
+    }
     const base = result.data.data?.base_info,
       developer = result.data.data?.developer_info;
     if (
-      String(base?.bot_appid) !== this.options.appId ||
+      String(base?.bot_appid) !== appId ||
       String(developer?.admin_uin) !== this.options.adminQq ||
       typeof base.bot_name !== 'string' ||
       typeof base.bot_avatar !== 'string' ||
@@ -236,15 +270,19 @@ export class PersonaExecutor {
    * 在浏览器和手机 QQ 的同一授权周期内扫码，额外身份验证返回待处理状态。
    * @param browser - NAS 独立登录会话。
    * @param scanner - NAS 已适配的 Android 扫码设备。
+   * @param appId - 与本次任务绑定的官方应用。
    * @returns 是否完成并读回目标 Bot 身份。
    */
   private async login(
     browser: BrowserSession,
     scanner: AndroidScanner,
+    appId: string,
   ): Promise<boolean> {
     try {
       await scanner.prepare();
-      await browser.navigate('https://q.qq.com/#/apps');
+      await browser.navigate(
+        'https://q.qq.com/qqbot/dashboard/manage/' + appId,
+      );
       const deadline = Date.now() + 30000;
       let frame = await browser.find('iframe[src*="ptlogin"]');
       while (!frame && Date.now() < deadline) {
@@ -254,7 +292,10 @@ export class PersonaExecutor {
       if (!frame) return false;
       await browser.frame(frame);
       let qr = await browser.find('img[src*="ptqrshow"]');
-      while ((!qr || !(await browser.imageReady(qr))) && Date.now() < deadline) {
+      while (
+        (!qr || !(await browser.imageReady(qr))) &&
+        Date.now() < deadline
+      ) {
         await pause(400);
         qr = await browser.find('img[src*="ptqrshow"]');
       }
@@ -268,7 +309,7 @@ export class PersonaExecutor {
         await browser.clickText('登录');
         await browser.clickText('确认');
         await pause(700);
-        const profile = await this.query(browser).catch(() => null);
+        const profile = await this.query(browser, appId).catch(() => null);
         if (profile) return true;
       }
       return false;
@@ -333,9 +374,14 @@ export class PersonaExecutor {
    * @throws 官方账号与后台机器人 QQ 号不一致时拒绝确认。
    */
   private async matches(browser: BrowserSession, job: Job, avatar: Buffer) {
-    const profile = await this.query(browser);
+    if (!isOfficialBotSelfId(job.botSelfId))
+      throw new Error('任务缺少官方 Bot 身份。');
+    const profile = await this.query(
+      browser,
+      job.botSelfId.slice('qq-official:'.length),
+    );
     if (!profile) throw new Error('后台登录已失效。');
-    const live = await this.official.read();
+    const live = await this.official.read(job.botSelfId);
     if (live.uin !== profile.uin) throw new Error('QQ 资料与后台账号不符。');
     return {
       name: live.name === job.name,
@@ -354,17 +400,32 @@ export class PersonaExecutor {
   private async execute(job: Job) {
     const browser = new BrowserSession(),
       scanner = new AndroidScanner(this.options.androidSerial);
-    const possiblySubmitted = ['submit', 'verify'].includes(job.stage);
+    const possiblySubmitted =
+      !!job.submittedFields?.length ||
+      ['submit', 'verify'].includes(job.stage) ||
+      job.status === 'uncertain';
     try {
+      if (!isOfficialBotSelfId(job.botSelfId)) {
+        job.status = 'failed';
+        if (possiblySubmitted) job.status = 'uncertain';
+        job.detail = '旧任务缺少 Bot 身份，已停止执行，需从原命令核对目标。';
+        return;
+      }
+      const appId = job.botSelfId.slice('qq-official:'.length);
       job.status = 'running';
+      job.stage = 'browser';
       job.detail = 'NAS 正在核对浏览器登录态。';
       await this.persist(job);
       await browser.start();
       await browser.navigate(
-        'https://q.qq.com/qqbot/dashboard/manage/' + this.options.appId,
+        'https://q.qq.com/qqbot/dashboard/manage/' + appId,
       );
-      if (!(await this.query(browser))) {
-        if (!(await this.login(browser, scanner))) {
+      job.stage = 'identity';
+      await this.persist(job);
+      if (!(await this.query(browser, appId))) {
+        job.stage = 'login';
+        await this.persist(job);
+        if (!(await this.login(browser, scanner, appId))) {
           job.status = 'needs_login';
           job.detail =
             'NAS 手机 QQ 或开发者归属需要确认；完成后可重新执行切换。';
@@ -376,6 +437,8 @@ export class PersonaExecutor {
           return;
         }
       }
+      job.stage = 'readback';
+      await this.persist(job);
       const avatar = await this.avatar(job.avatarHash);
       let matched = await this.matches(browser, job, avatar);
       if (matched.name && matched.avatar) {
@@ -400,7 +463,7 @@ export class PersonaExecutor {
           return;
         }
         const body = {
-          bot_appid: Number(this.options.appId),
+          bot_appid: Number(appId),
           filter: { name: 0, avatar: 0, desc: 0, feature_preview: 0 },
           name: '',
           avatar_id: '',
@@ -415,7 +478,7 @@ export class PersonaExecutor {
           await this.persist(job);
           const upload = await browser.profileApi(
             '/cgi-bin/v2/resource/pre_upload',
-            { type: 2, bot_appid: Number(this.options.appId) },
+            { type: 2, bot_appid: Number(appId) },
           );
           if (
             upload.status !== 200 ||
@@ -469,14 +532,47 @@ export class PersonaExecutor {
         job.stage = 'verify';
         job.detail = 'QQ 实际资料发生变化，需继续只读核对。';
       }
-    } catch {
-      if (['submit', 'verify'].includes(job.stage)) {
+    } catch (error) {
+      if (
+        possiblySubmitted ||
+        job.submittedFields?.length ||
+        ['submit', 'verify'].includes(job.stage)
+      ) {
         job.status = 'uncertain';
         job.detail = '提交后核验中断，已保留原操作，禁止盲目重提。';
       } else {
         job.status = 'failed';
         job.detail = 'NAS 浏览器、Android 或图片读取失败，请检查执行器状态。';
       }
+      job.detail += '阶段：' + job.stage + '。';
+      const safeMessages = new Set([
+        '当前 Bot 或管理员身份不符。',
+        '新版平台资料读取未成功。',
+        'QQ 官方资料读取失败。',
+        'QQ 官方资料的 Bot 身份不符。',
+        'QQ 资料与后台账号不符。',
+        '浏览器驱动操作失败。',
+        '头像预上传失败。',
+        '头像上传失败。',
+      ]);
+      if (error instanceof Error && safeMessages.has(error.message))
+        job.detail += error.message;
+      if (error instanceof ProfileQueryError) {
+        job.detail += 'HTTP ' + error.httpStatus + '。';
+        if (error.platformCode !== undefined) {
+          job.platformErrorCode = error.platformCode;
+          job.detail += '平台错误码：' + error.platformCode + '。';
+        }
+      }
+      process.stderr.write(
+        JSON.stringify({
+          id: job.id,
+          botSelfId: job.botSelfId,
+          status: job.status,
+          stage: job.stage,
+          detail: job.detail,
+        }) + '\n',
+      );
     } finally {
       try {
         await this.persist(job);
@@ -569,19 +665,29 @@ export class PersonaExecutor {
           this.respond(response, 404, { error: 'not_found' });
           return;
         }
-        if (job.status === 'applied' && !job.verifiedBy && !this.active) {
+        if (
+          job.botSelfId &&
+          job.status === 'applied' &&
+          !job.verifiedBy &&
+          !this.active
+        ) {
           this.active = job.id;
           job.status = 'uncertain';
           job.stage = 'verify';
           job.detail = '旧结果仅验证网页，正在重新核对 QQ 实际资料。';
           await this.persist(job);
           this.launch(job);
-        } else if (job.status === 'uncertain' && !this.active) {
+        } else if (
+          job.botSelfId &&
+          job.status === 'uncertain' &&
+          !this.active
+        ) {
           this.active = job.id;
           this.launch(job);
         }
         this.respond(response, 200, {
           id: job.id,
+          botSelfId: job.botSelfId,
           status: job.status,
           detail: job.detail,
           verifiedBy: job.verifiedBy,
@@ -611,6 +717,8 @@ export class PersonaExecutor {
         return;
       }
       if (request.url === '/v1/jobs') {
+        if (!isOfficialBotSelfId(body.botSelfId))
+          throw new Error('任务缺少官方账号身份。');
         if (
           typeof body.id !== 'string' ||
           !JOB_ID.test(body.id) ||
@@ -623,6 +731,7 @@ export class PersonaExecutor {
         if (existing) {
           if (
             existing.name !== body.name ||
+            existing.botSelfId !== body.botSelfId ||
             existing.avatarHash !== body.avatarHash
           ) {
             this.respond(response, 409, { error: 'identity_conflict' });
@@ -630,6 +739,7 @@ export class PersonaExecutor {
           }
           this.respond(response, 200, {
             id: existing.id,
+            botSelfId: existing.botSelfId,
             status: existing.status,
             detail: existing.detail,
             verifiedBy: existing.verifiedBy,
@@ -645,6 +755,7 @@ export class PersonaExecutor {
           await this.avatar(body.avatarHash);
           const job: Job = {
             id: body.id,
+            botSelfId: body.botSelfId,
             name: body.name,
             avatarHash: body.avatarHash,
             status: 'queued',
@@ -654,6 +765,7 @@ export class PersonaExecutor {
           await this.persist(job);
           this.respond(response, 202, {
             id: job.id,
+            botSelfId: job.botSelfId,
             status: job.status,
             detail: job.detail,
           });
@@ -678,8 +790,7 @@ async function main() {
   const executor = new PersonaExecutor({
     root: process.env.PERSONA_EXECUTOR_DATA || '/data',
     token: process.env.PERSONA_EXECUTOR_TOKEN || '',
-    appId: process.env.PERSONA_BOT_APP_ID || '',
-    appSecret: process.env.PERSONA_BOT_APP_SECRET || '',
+    apiBaseUrl: process.env.PERSONA_API_BASE_URL || '',
     adminQq: process.env.PERSONA_ADMIN_QQ || '',
     androidSerial: process.env.PERSONA_ANDROID_SERIAL || '',
   });

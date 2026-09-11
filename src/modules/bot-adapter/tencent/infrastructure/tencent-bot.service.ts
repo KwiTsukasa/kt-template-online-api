@@ -1340,6 +1340,48 @@ export class TencentBotService
   }
 
   /**
+   * 重查已启用账号并复用其官方 SDK 读取自身资料，阻止旧运行态或其他账号代替目标。
+   * @param selfId - 由内部服务任务保存的官方账号身份。
+   * @returns 已核验 AppID 与机器人 QQ 号的公开昵称和头像。
+   * @throws 账号停用、绑定不符或官方资料缺少身份证明时拒绝返回。
+   */
+  async readOwnProfile(selfId: string) {
+    const account =
+      await this.accountService.findEnabledOfficialBySelfIdWithSecret(selfId);
+    if (
+      !account ||
+      !account.officialAppId ||
+      account.selfId !== selfId ||
+      selfId !== 'qq-official:' + account.officialAppId
+    )
+      throw new Error('官方账号不可用。');
+    const runtime = await this.ensureAccountRuntime(account);
+    const value =
+      await runtime.bot.api.get<Record<string, unknown>>('/users/@me');
+    if (
+      typeof value.username !== 'string' ||
+      typeof value.avatar !== 'string' ||
+      typeof value.share_url !== 'string'
+    )
+      throw new Error('官方资料格式无效。');
+    const share = new URL(value.share_url);
+    const uin = share.searchParams.get('robot_uin') || '';
+    if (
+      share.origin !== 'https://qun.qq.com' ||
+      share.searchParams.get('robot_appid') !== account.officialAppId ||
+      !/^\d{5,12}$/u.test(uin)
+    )
+      throw new Error('官方资料身份不符。');
+    return {
+      selfId,
+      appId: account.officialAppId,
+      name: value.username,
+      avatar: value.avatar,
+      uin,
+    };
+  }
+
+  /**
    * 对已获准交给 Hermes 的官方私聊续发输入状态，群聊与频道保持原发送协议。
    * @param account - 当前事件所属的官方账号运行态。
    * @param message - 带有真实被动回复锚点的入站消息。

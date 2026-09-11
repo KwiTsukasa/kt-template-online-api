@@ -1,7 +1,7 @@
 {
   "pluginKey": "persona-switch",
   "name": "共享人格切换",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minApiSdkVersion": "1.0.0",
   "description": "图文保存共享人格，通过 NAS 浏览器与 Android 同步 Bot 名称和头像，保留原对话与共享记忆。",
   "author": "KT",

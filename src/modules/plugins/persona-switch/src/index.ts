@@ -5,7 +5,11 @@ import type {
 } from '@/modules/plugin-platform/contract/plugin-state';
 import { synchronizeSoul, type RequestResponse } from './hermes-soul';
 import { parsePersonaCommand, PERSONA_HELP } from './command';
-import { callProfileExecutor, readProfileResult } from './profile-client';
+import {
+  callProfileExecutor,
+  readProfileResult,
+  isOfficialBotSelfId,
+} from './profile-client';
 import {
   readState,
   savePersona,
@@ -45,7 +49,10 @@ export function createPlugin(options: Options) {
         throw new Error('人格操作未实现');
       return {
         ...operation,
-        execute: (input: Record<string, unknown>) => application.manage(input),
+        execute: (
+          input: Record<string, unknown>,
+          context?: Record<string, unknown>,
+        ) => application.manage(input, context),
       };
     }),
   };
@@ -142,12 +149,14 @@ class PersonaApplication {
    * @param revision - 准备竞争的 API 版本。
    * @param state - 当前目录及最后确认状态。
    * @param target - 本轮唯一允许同步的人格版本。
+   * @param botSelfId - 原命令绑定的官方账号，恢复时只能沿用已持久化的身份。
    * @returns 已确认人格和后台资料任务的最新状态。
    */
   private async synchronize(
     revision: number,
     state: PersonaState,
     target: Persona,
+    botSelfId?: string,
   ) {
     const jobId = state.pending?.jobId ?? randomUUID();
     const pending = {
@@ -156,6 +165,7 @@ class PersonaApplication {
         target: structuredClone(target),
         retryAfter: Date.now() + 60_000,
         jobId,
+        botSelfId,
       },
     };
     const acquired = await this.write(revision, pending);
@@ -176,6 +186,7 @@ class PersonaApplication {
     if (target.avatar)
       next.botProfile = {
         id: jobId,
+        botSelfId,
         target: structuredClone(target),
         status: 'queued',
         detail: '等待 NAS 同步 Bot 昵称和头像。',
@@ -196,6 +207,23 @@ class PersonaApplication {
   ): Promise<PersonaState> {
     const job = state.botProfile;
     if (
+      job &&
+      !job.botSelfId &&
+      ['queued', 'running', 'uncertain'].includes(job.status)
+    ) {
+      const next: PersonaState = {
+        ...state,
+        botProfile: {
+          ...job,
+          status: 'failed',
+          detail:
+            '旧资料任务缺少 Bot 身份，请从目标官方 Bot 重新发送切换命令。',
+        },
+      };
+      await this.write(revision, next);
+      return next;
+    }
+    if (
       !job ||
       (!['queued', 'running', 'uncertain'].includes(job.status) &&
         !(job.status === 'applied' && !job.verifiedBy))
@@ -210,6 +238,7 @@ class PersonaApplication {
           '/v1/jobs',
           {
             id: job.id,
+            botSelfId: job.botSelfId,
             name: job.target.name,
             avatarHash: job.target.avatar?.hash,
           },
@@ -220,7 +249,7 @@ class PersonaApplication {
           this.request(),
           '/v1/jobs/' + job.id,
         );
-      const result = readProfileResult(response, job.id);
+      const result = readProfileResult(response, job.id, job.botSelfId);
       const next = { ...state, botProfile: { ...job, ...result } };
       await this.write(revision, next);
       return next;
@@ -241,7 +270,12 @@ class PersonaApplication {
       if (state.pending) {
         if (state.pending.retryAfter > Date.now())
           return { synchronized: false };
-        await this.synchronize(revision, state, state.pending.target);
+        await this.synchronize(
+          revision,
+          state,
+          state.pending.target,
+          state.pending.botSelfId,
+        );
       } else {
         if (startup)
           await synchronizeSoul(
@@ -260,9 +294,13 @@ class PersonaApplication {
   /**
    * 按严格图文格式保存、切换或删除人格，返回说明及真实的独立同步状态。
    * @param input - 宿主剥离命令名后保留换行的原文与图片附件。
+   * @param context - 与聊天参数分离的宿主执行上下文。
    * @returns 经现有 Bot 回复队列发送的中文文本，不回显头像地址或人格正文。
    */
-  async manage(input: Record<string, unknown>) {
+  async manage(
+    input: Record<string, unknown>,
+    context?: Record<string, unknown>,
+  ) {
     const command = parsePersonaCommand(input);
     if (!command) return { replyText: PERSONA_HELP };
     try {
@@ -344,7 +382,13 @@ class PersonaApplication {
             ' 请确认完成后再切换。',
         };
       }
-      const next = await this.synchronize(revision, state, target);
+      const bot = context?.bot as { selfId?: unknown } | undefined;
+      if (!isOfficialBotSelfId(bot?.selfId))
+        return {
+          replyText:
+            '缺少目标官方 Bot 身份，请直接向目标官方 Bot 发送切换命令。',
+        };
+      const next = await this.synchronize(revision, state, target, bot.selfId);
       return {
         replyText:
           '共享人格已选择：' +

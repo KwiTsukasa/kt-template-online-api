@@ -24,6 +24,7 @@ export type PluginWorkerPluginInstance = {
   executeOperation?: (
     operationKey: string,
     input: unknown,
+    context?: Record<string, unknown>,
   ) => Promise<unknown> | unknown;
   executeTask?: (
     taskKey: string,
@@ -242,12 +243,12 @@ async function executeOperation(message: PluginWorkerRequest) {
   );
 
   if (loadedPlugin.executeOperation) {
-    return loadedPlugin.executeOperation(operationKey, message.input);
+    return loadedPlugin.executeOperation(operationKey, message.input, message.context);
   }
 
   const operation = findRuntimeCallable(loadedPlugin.operations, operationKey);
   if (operation) {
-    return operation.execute(message.input || {});
+    return operation.execute(message.input || {}, message.context);
   }
 
   throw new Error(`Bot 插件能力不存在：${operationKey}`);

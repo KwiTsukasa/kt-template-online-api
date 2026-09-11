@@ -10,6 +10,7 @@ jest.mock('@/apps/persona-executor/media');
 describe('persona QQ profile submission', () => {
   const target = {
     id: 'e2430c81-d392-4003-8e02-abcf9afa70dd',
+    botSelfId: 'qq-official:1020000001',
     name: '塔塔露',
     avatarHash: 'a'.repeat(64),
     status: 'queued',
@@ -46,12 +47,12 @@ describe('persona QQ profile submission', () => {
             retcode: 0,
             data: {
               base_info: {
-                bot_appid: '1905461123',
+                bot_appid: '1020000001',
                 bot_uin: '4013209631',
                 bot_name: '塔塔露',
                 bot_avatar: 'https://example.myqcloud.com/new.png',
               },
-              developer_info: { admin_uin: '3229486494' },
+              developer_info: { admin_uin: '123456789' },
             },
           },
         };
@@ -81,9 +82,8 @@ describe('persona QQ profile submission', () => {
     executor = new PersonaExecutor({
       root: 'unused',
       token: 't'.repeat(32),
-      appId: '1905461123',
-      appSecret: 'test-secret',
-      adminQq: '3229486494',
+      apiBaseUrl: 'http://127.0.0.1:48085',
+      adminQq: '123456789',
       androidSerial: 'unused',
     });
     jest.spyOn(executor as any, 'persist').mockResolvedValue(undefined);
@@ -95,6 +95,36 @@ describe('persona QQ profile submission', () => {
       .mockResolvedValue(Buffer.from('live'));
   });
   afterEach(() => jest.restoreAllMocks());
+
+  it('uses the new job identity for every website call and official readback', async () => {
+    const job = { ...target, botSelfId: 'qq-official:1020000002' };
+    const original = api.getMockImplementation()!;
+    api.mockImplementation(async (path, body) => {
+      const result = await original(path, body);
+      if (path.endsWith('/query'))
+        result.data.data.base_info.bot_appid = '1020000002';
+      return result;
+    });
+    await (executor as any).execute(job);
+    expect(job.status).toBe('applied');
+    expect(
+      api.mock.calls.every(([, body]) => body.bot_appid === 1020000002),
+    ).toBe(true);
+    expect(
+      jest
+        .mocked(OfficialProfileReader.prototype.read)
+        .mock.calls.every(([selfId]) => selfId === job.botSelfId),
+    ).toBe(true);
+  });
+
+  it('refuses legacy jobs without identity before starting any browser', async () => {
+    const job = { ...target, botSelfId: undefined };
+    jest.mocked(BrowserSession).mockClear();
+    await (executor as any).execute(job);
+    expect(job.status).toBe('failed');
+    expect(job.detail).toContain('缺少 Bot 身份');
+    expect(api).not.toHaveBeenCalled();
+  });
 
   it('ignores matching website metadata and changes each actual QQ field separately', async () => {
     const job = { ...target };
@@ -167,13 +197,11 @@ describe('persona QQ profile submission', () => {
   });
 
   it('rejects a different QQ identity despite matching website name and avatar', async () => {
-    jest
-      .mocked(OfficialProfileReader.prototype.read)
-      .mockResolvedValue({
-        name: target.name,
-        avatar: 'https://thirdqq.qlogo.cn/a',
-        uin: '11111111',
-      });
+    jest.mocked(OfficialProfileReader.prototype.read).mockResolvedValue({
+      name: target.name,
+      avatar: 'https://thirdqq.qlogo.cn/a',
+      uin: '11111111',
+    });
     liveAvatar = true;
     const job = { ...target };
     await (executor as any).execute(job);

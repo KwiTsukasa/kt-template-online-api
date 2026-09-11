@@ -10,6 +10,7 @@ import { TencentBotMenuService } from './application/tencent-bot-menu.service';
 import { TencentBotPluginBindingService } from './application/tencent-bot-plugin-binding.service';
 import { TencentBotController } from './contract/tencent-bot.controller';
 import { TencentBotWebhookController } from './contract/tencent-bot-webhook.controller';
+import { TencentBotProfileController } from './contract/tencent-bot-profile.controller';
 import {
   loadTencentBotSdk,
   TENCENT_BOT_SDK_LOADER,
@@ -19,7 +20,11 @@ import { TencentBotPluginBinding } from './infrastructure/persistence/tencent-bo
 import { TencentBotProtocolAdapter } from './infrastructure/tencent-bot-protocol.adapter';
 
 @Module({
-  controllers: [TencentBotController, TencentBotWebhookController],
+  controllers: [
+    TencentBotController,
+    TencentBotWebhookController,
+    TencentBotProfileController,
+  ],
   exports: [TencentBotService, TencentBotPluginBindingService],
   imports: [
     ConfigModule,

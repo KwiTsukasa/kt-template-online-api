@@ -9,6 +9,51 @@ const flushPromises = () =>
   new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('TencentBotService', () => {
+  it('resolves current credentials for each profile account and rejects another app in official proof', async () => {
+    const accounts = createAccountService({});
+    const service = createService(jest.fn(), accounts, createEventService());
+    const read = jest.fn();
+    const runtime = jest
+      .spyOn(service as any, 'ensureAccountRuntime')
+      .mockResolvedValue({ bot: { api: { get: read } } });
+    for (const appId of ['1020000001', '1020000002']) {
+      const selfId = 'qq-official:' + appId;
+      const account = { selfId, officialAppId: appId };
+      accounts.findEnabledOfficialBySelfIdWithSecret.mockResolvedValue(account);
+      read.mockResolvedValue({
+        username: '测试',
+        avatar: 'https://thirdqq.qlogo.cn/test',
+        share_url: `https://qun.qq.com/qunpro/robot/qunshare?robot_uin=123456789&robot_appid=${appId}`,
+      });
+      expect(await service.readOwnProfile(selfId)).toMatchObject({
+        selfId,
+        appId,
+        uin: '123456789',
+      });
+      expect(runtime).toHaveBeenLastCalledWith(account);
+      expect(
+        accounts.findEnabledOfficialBySelfIdWithSecret,
+      ).toHaveBeenLastCalledWith(selfId);
+    }
+    read.mockResolvedValue({
+      username: '测试',
+      avatar: 'https://thirdqq.qlogo.cn/test',
+      share_url:
+        'https://qun.qq.com/?robot_uin=123456789&robot_appid=1020000001',
+    });
+    await expect(
+      service.readOwnProfile('qq-official:1020000002'),
+    ).rejects.toThrow('身份不符');
+    accounts.findEnabledOfficialBySelfIdWithSecret.mockResolvedValue(
+      null as any,
+    );
+    const before = read.mock.calls.length;
+    await expect(
+      service.readOwnProfile('qq-official:1020000002'),
+    ).rejects.toThrow('账号不可用');
+    expect(read).toHaveBeenCalledTimes(before);
+    jest.restoreAllMocks();
+  });
   it('preserves two other members and their text positions through normalization into the plugin envelope', () => {
     const service = createService(
       jest.fn(),

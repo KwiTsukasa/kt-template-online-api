@@ -1,6 +1,7 @@
 import { isPersonaName } from './command';
 import {
   readProfileResult,
+  isOfficialBotSelfId,
   type Avatar,
   type ProfileResult,
 } from './profile-client';
@@ -15,7 +16,12 @@ export type PersonaState = {
   profiles: Persona[];
   current: Persona;
   previous: Persona | null;
-  pending: { target: Persona; retryAfter: number; jobId?: string } | null;
+  pending: {
+    target: Persona;
+    retryAfter: number;
+    jobId?: string;
+    botSelfId?: string;
+  } | null;
   botProfile?: ProfileResult & { target: Persona };
 };
 
@@ -64,6 +70,11 @@ export function readState(value: unknown): PersonaState {
     throw new Error('已确认的人格版本异常，未修改当前人格。');
   }
   if (state.pending !== null) {
+    if (
+      state.pending?.botSelfId !== undefined &&
+      !isOfficialBotSelfId(state.pending.botSelfId)
+    )
+      throw new Error('待同步的官方账号身份异常。');
     if (
       !state.pending ||
       !isPersona(state.pending.target) ||

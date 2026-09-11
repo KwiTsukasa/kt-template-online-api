@@ -145,6 +145,7 @@ export class PluginWorkerRuntime {
       'executeOperation',
       {
         input: request.input,
+        context: request.context,
         operationId: request.operationId,
         operationKey: request.operationKey,
         safeInputSummary: summarizeInput(request.input),

@@ -37,6 +37,7 @@ import {
 const manifest = JSON.parse(
   readFileSync('src/modules/plugins/persona-switch/plugin.json', 'utf8'),
 );
+const botContext = { bot: { selfId: 'qq-official:1020000001' } };
 const command = {
   aliases: '["persona","人格"]',
   code: 'persona_switch',
@@ -170,6 +171,7 @@ describe('persona state and native Hermes synchronization', () => {
         response.end(
           JSON.stringify({
             id: job.id,
+            botSelfId: job.botSelfId,
             status: 'applied',
             verifiedBy: 'qq-openapi-v1',
             detail: 'Bot 昵称和头像已读回一致。',
@@ -281,6 +283,32 @@ describe('persona state and native Hermes synchronization', () => {
     ).toBe(false);
   });
 
+  it('binds selection to trusted context and ignores an app identity embedded in command arguments', async () => {
+    const plugin = makePlugin();
+    await plugin.operations[0].execute({
+      raw: 's A\n正文',
+      imageUrls: ['https://gchat.qpic.cn/first.png'],
+    });
+    const input = {
+      raw: 'c A',
+      botSelfId: 'qq-official:1020000002',
+      appId: '1020000002',
+    };
+    expect((await plugin.operations[0].execute(input)).replyText).toContain(
+      '缺少目标官方 Bot 身份',
+    );
+    expect(puts).toBe(0);
+    await plugin.operations[0].execute(input, botContext);
+    expect(
+      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
+    ).toBe(botContext.bot.selfId);
+    const secondContext = { bot: { selfId: 'qq-official:1020000002' } };
+    await plugin.operations[0].execute({ raw: 'c A' }, secondContext);
+    expect(
+      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
+    ).toBe(secondContext.bot.selfId);
+  });
+
   it('uses both command aliases through the real API HTTP controller and keeps drafts separate from SOUL', async () => {
     const plugin = makePlugin();
     const commands = {
@@ -297,7 +325,8 @@ describe('persona state and native Hermes synchronization', () => {
       new BotCommandParserService(),
       commands as any,
       {
-        executeOperation: ({ input }) => plugin.operations[0].execute(input),
+        executeOperation: ({ input, context }) =>
+          plugin.operations[0].execute(input, context),
       } as any,
       new BotReplyTemplateService(),
       send as any,
@@ -321,7 +350,11 @@ describe('persona state and native Hermes synchronization', () => {
         const response = await fetch(`${await app.getUrl()}/bot/command/test`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text, commandId: command.id }),
+          body: JSON.stringify({
+            text,
+            commandId: command.id,
+            selfId: botContext.bot.selfId,
+          }),
           signal: AbortSignal.timeout(6000),
         });
         expect(response.status).toBe(200);
@@ -357,10 +390,13 @@ describe('persona state and native Hermes synchronization', () => {
   it('keeps an unconfirmed target after a successful PUT with failed verification, then recovers that target after restart', async () => {
     const plugin = makePlugin();
     const execute = (raw) =>
-      plugin.operations[0].execute({
-        raw,
-        imageUrls: ['https://gchat.qpic.cn/first.png'],
-      });
+      plugin.operations[0].execute(
+        {
+          raw,
+          imageUrls: ['https://gchat.qpic.cn/first.png'],
+        },
+        botContext,
+      );
     await execute('保存 A\n待确认正文');
     await execute('保存 B\n第二个人格');
     failAfterPut = true;
@@ -376,6 +412,9 @@ describe('persona state and native Hermes synchronization', () => {
     await restarted.activate();
     expect(puts).toBe(1);
     store.rows.get('persona-switch').configValue.value.pending.retryAfter = 0;
+    expect(
+      store.rows.get('persona-switch').configValue.value.pending.botSelfId,
+    ).toBe(botContext.bot.selfId);
     readsFail = false;
     failAfterPut = false;
     await restarted.tasks[0].execute();
@@ -384,6 +423,9 @@ describe('persona state and native Hermes synchronization', () => {
     ).toContain('当前人格：A');
     expect(puts).toBe(1);
     const count = requests;
+    expect(
+      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
+    ).toBe(botContext.bot.selfId);
     await restarted.tasks[0].execute();
     expect(requests).toBe(count);
   });
@@ -400,8 +442,8 @@ describe('persona state and native Hermes synchronization', () => {
     });
     const second = makePlugin();
     const results = await Promise.all([
-      first.operations[0].execute({ raw: '切换 A' }),
-      second.operations[0].execute({ raw: '切换 B' }),
+      first.operations[0].execute({ raw: '切换 A' }, botContext),
+      second.operations[0].execute({ raw: '切换 B' }, botContext),
     ]);
     expect(
       results.filter((result) => result.replyText.startsWith('共享人格已选择'))
@@ -419,7 +461,7 @@ describe('persona state and native Hermes synchronization', () => {
       raw: '保存 A\n稳定正文',
       imageUrls: ['https://gchat.qpic.cn/first.png'],
     });
-    await plugin.operations[0].execute({ raw: '切换 A' });
+    await plugin.operations[0].execute({ raw: '切换 A' }, botContext);
     soul = '外部修改';
     await makePlugin().activate();
     expect(soul).toBe('稳定正文');
@@ -488,6 +530,7 @@ describe('persona state and native Hermes synchronization', () => {
         pluginKey: 'persona-switch',
         timeoutMs: 15000,
         type: 'executeOperation',
+        context: botContext,
         operationKey: 'persona.manage',
         ...input,
       });

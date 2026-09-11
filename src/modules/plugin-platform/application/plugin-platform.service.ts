@@ -532,6 +532,7 @@ export class PluginPlatformService
     try {
       const output = await workerContext.worker.executeOperation({
         input: normalizedInput,
+        context: input.context,
         operationId: operation.key,
         operationKey: operation.key,
         timeoutMs: operation.timeoutMs,

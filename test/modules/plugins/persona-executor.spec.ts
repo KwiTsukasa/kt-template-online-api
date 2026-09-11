@@ -60,12 +60,12 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
             retcode: 0,
             data: {
               base_info: {
-                bot_appid: '1905461123',
+                bot_appid: '1020000001',
                 bot_uin: '4013209631',
                 bot_name: currentName,
                 bot_avatar: 'https://gchat.qpic.cn/current.png',
               },
-              developer_info: { admin_uin: '3229486494' },
+              developer_info: { admin_uin: '123456789' },
             },
           },
         };
@@ -98,9 +98,8 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     const executor = new PersonaExecutor({
       root,
       token,
-      appId: '1905461123',
-      appSecret: 'test-secret',
-      adminQq: '3229486494',
+      apiBaseUrl: 'http://127.0.0.1:48085',
+      adminQq: '123456789',
       androidSerial: 'nas-android:5555',
     });
     jest
@@ -170,6 +169,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     ).toEqual(avatar);
     const input = {
       id: randomUUID(),
+      botSelfId: 'qq-official:1020000001',
       name: '目标人格',
       avatarHash: stored.data.hash,
     };
@@ -189,6 +189,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     });
     const input = {
       id: randomUUID(),
+      botSelfId: 'qq-official:1020000001',
       name: '目标人格',
       avatarHash: stored.data.hash,
     };
@@ -209,7 +210,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
         retcode: 0,
         data: {
           base_info: {
-            bot_appid: '1905461123',
+            bot_appid: '1020000001',
             bot_name: '原名',
             bot_avatar: 'https://gchat.qpic.cn/current.png',
           },
@@ -222,6 +223,7 @@ describeLinux('NAS persona executor HTTP contract (Linux fsync/rename)', () => {
     });
     const input = {
       id: randomUUID(),
+      botSelfId: 'qq-official:1020000001',
       name: '目标人格',
       avatarHash: stored.data.hash,
     };

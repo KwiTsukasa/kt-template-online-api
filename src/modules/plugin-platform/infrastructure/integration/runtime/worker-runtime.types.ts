@@ -25,6 +25,7 @@ export type PluginSafeInputSummary = {
 };
 
 export type PluginWorkerRequest = {
+  context?: Record<string, unknown>;
   configSnapshot?: PluginRuntimeConfigSnapshot;
   correlationId: string;
   descriptor?: PluginPackageDescriptor;
@@ -78,6 +79,7 @@ export type PluginRuntimeErrorCode =
   | 'PLUGIN_WORKER_TIMEOUT';
 
 export type PluginOperationRequest = {
+  context?: Record<string, unknown>;
   input: Record<string, unknown>;
   operationId: string;
   operationKey: string;

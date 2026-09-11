@@ -71,6 +71,40 @@ export class BlogArticleService {
   }
 
   /**
+   * 对已发布且未删除的文章原子累加阅读量，保留正文更新时间并返回最新总数。
+   * @param slug - 公开文章路径中的唯一别名。
+   * @returns 本次计数后数据库中的阅读总数。
+   * @throws 别名无效、文章不存在或未发布时拒绝计数。
+   */
+  async recordPublicView(slug: string) {
+    if (typeof slug !== 'string' || !slug.trim()) {
+      throwVbenError('文章别名不能为空', HttpStatus.BAD_REQUEST);
+    }
+    const criteria = {
+      slug: this.normalizeSlug(slug),
+      status: 'publish' as const,
+      isDeleted: false,
+    };
+    const result = await this.articleRepository
+      .createQueryBuilder()
+      .update(BlogArticle)
+      .set({ views: () => 'views + 1', updateTime: () => 'update_time' })
+      .where(criteria)
+      .execute();
+    if (!result.affected) {
+      throwVbenError('文章不存在或未发布', HttpStatus.NOT_FOUND);
+    }
+    const article = await this.articleRepository.findOne({
+      where: criteria,
+      select: ['views'],
+    });
+    if (!article) {
+      throwVbenError('文章不存在或未发布', HttpStatus.NOT_FOUND);
+    }
+    return { views: article.views };
+  }
+
+  /**
    * 根据`query`处理针对博客内容；从 `articleRepository.findOne` 读取针对博客内容。
    * @param query - 限定针对博客内容筛选、排序与分页范围的查询条件，包含 `id`、`slug` 字段。
    * @returns 针对博客内容。

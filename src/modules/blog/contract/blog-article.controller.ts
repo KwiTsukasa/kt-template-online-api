@@ -67,6 +67,22 @@ export class BlogArticleController {
   }
 
   /**
+   * 仅在前台打开文章时记录一次阅读，不让列表查询和详情预取产生计数。
+   * @param res - 发送标准业务响应并禁止缓存计数结果的 HTTP 响应。
+   * @param slug - 需要记录阅读的公开文章别名。
+   * @returns 包含最新阅读总数的业务响应。
+   */
+  @Post('public/view')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '记录公开文章阅读并返回最新阅读量' })
+  async publicView(@Res() res, @Body('slug') slug: string) {
+    const result = await this.blogArticleService.recordPublicView(slug);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(vbenSuccess(result));
+  }
+
+  /**
    * 根据参数 `query`，获取博客文章分页列表。
    * @param res - 包含 `send` 字段的上游服务响应。
    * @param query - 限定根据参数 `query`，获取博客文章分页列表筛选、排序与分页范围的查询条件。

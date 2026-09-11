@@ -239,6 +239,33 @@ describe('Persistent reminders', () => {
     });
   });
 
+  it('keeps plain group and private reminders when strict tools fill the unused member field with an empty string', async () => {
+    for (const messageType of ['group', 'private'] as const) {
+      await service.manage(
+        { ...message, messageType },
+        {
+          operation: 'create',
+          text: '普通提醒',
+          dailyAt: '17:30',
+          runAt: '',
+          id: '',
+          platformId: '',
+        },
+        'hermes-agent',
+      );
+      const data = mockQueue.upsertJobScheduler.mock.calls.at(-1)[2].data;
+      expect(data.platformId).toBeUndefined();
+      await service.deliver({ data } as never);
+      expect(send.sendText).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          message: '普通提醒',
+          targetType: messageType,
+        }),
+      );
+    }
+    expect(history.requireMember).not.toHaveBeenCalled();
+  });
+
   it('rejects unconfirmed targets, private mentions and injected tags without enqueueing', async () => {
     history.requireMember.mockRejectedValueOnce(new Error('未在当前会话出现'));
     await expect(

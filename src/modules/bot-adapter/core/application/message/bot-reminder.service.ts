@@ -189,7 +189,7 @@ export class BotReminderService
     if (!text || text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))
       throw new Error('提醒正文应为1至1200字普通文本；真实提及请传platformId');
     let platformId: string | undefined;
-    if (input.platformId !== undefined) {
+    if (input.platformId !== undefined && input.platformId !== '') {
       if (message.messageType === 'private')
         throw new Error('私聊提醒不支持成员提及');
       if (typeof input.platformId !== 'string')

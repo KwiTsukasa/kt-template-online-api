@@ -45,7 +45,12 @@ export const tools = [
         operation: { type: 'string', enum: ['create', 'list', 'delete'] },
         text: { type: 'string', maxLength: 1200 },
         dailyAt: { type: 'string' },
-        platformId: { type: 'string', minLength: 1, maxLength: 64 },
+        platformId: {
+          type: 'string',
+          maxLength: 64,
+          description:
+            '需要真实@时填已核实的同群成员平台ID，不需要@时省略或传空字符串。',
+        },
         runAt: { type: 'string' },
         id: { type: 'string' },
       },

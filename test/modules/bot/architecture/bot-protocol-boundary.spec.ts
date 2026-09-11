@@ -101,6 +101,10 @@ describe('Bot protocol architecture boundary', () => {
     const interactionFiles = new Set([
       join(
         repoRoot,
+        'src/modules/bot-adapter/core/application/message/bot-reminder.service.ts',
+      ),
+      join(
+        repoRoot,
         'src/modules/bot-adapter/core/application/command/bot-tool-session.service.ts',
       ),
       join(
@@ -112,6 +116,8 @@ describe('Bot protocol architecture boundary', () => {
     const interactionLines = new Set([
       String.raw`if (text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))`,
       'let tag = `<qqbot-at-user id="${member}" />`;',
+      'let tag = `<qqbot-at-user id="${platformId}" />`;',
+      String.raw`if (!text || text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))`,
       `parsed.text.startsWith('<qqbot-at-user id="')`,
     ]);
     const files = [

@@ -55,6 +55,10 @@ test('MCP exposes bounded command, history, mention, reminder and official API t
   const tools = (await handle({ id: 1, method: 'tools/list' }, index)).result
     .tools;
   assert.equal(tools.length, 8);
+  const reminder = tools.find((item) => item.name === 'kt_reminder');
+  assert.equal(reminder.inputSchema.properties.platformId.type, 'string');
+  assert.equal(reminder.inputSchema.required.includes('platformId'), false);
+  assert.match(reminder.description, /到点真实@/u);
   assert.deepEqual(
     tools.find((item) => item.name === 'qqbot_platform_api').inputSchema
       .properties.method.enum,

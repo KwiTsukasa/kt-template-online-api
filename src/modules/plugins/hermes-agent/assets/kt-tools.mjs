@@ -39,12 +39,13 @@ export const tools = [
   {
     name: 'kt_reminder',
     description:
-      '管理当前发起人在当前聊天的持久提醒：create创建、list查询真实任务及发送失败、delete取消。只根据当前用户明确要求操作；dailyAt是北京时间HH:MM，runAt必须含时区，二选一。入队成功不等于已经送达。',
+      '管理当前发起人在当前聊天的持久提醒：create创建、list查询真实任务及发送失败、delete取消。可用platformId指定到点真实@的同群成员，必须来自当前消息或kt_chat_history，不能猜QQ号或昵称。dailyAt是北京时间HH:MM，runAt必须含时区，二选一。只根据当前用户明确要求操作，入队成功不等于已经送达。',
     inputSchema: schema(
       {
         operation: { type: 'string', enum: ['create', 'list', 'delete'] },
         text: { type: 'string', maxLength: 1200 },
         dailyAt: { type: 'string' },
+        platformId: { type: 'string', minLength: 1, maxLength: 64 },
         runAt: { type: 'string' },
         id: { type: 'string' },
       },

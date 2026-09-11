@@ -13,12 +13,14 @@ import type { BotNormalizedMessage } from '../../contract/bot.types';
 import { BotAccountService } from '../account/bot-account.service';
 import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from '../send/bot-send.service';
+import { BotChatHistoryService } from './bot-chat-history.service';
 
 type ReminderData = {
   owner: string;
   sourcePluginKey: string;
   message: BotNormalizedMessage;
   text: string;
+  platformId?: string;
   dueAt: string;
   repeat?: string;
 };
@@ -36,6 +38,7 @@ export class BotReminderService
     private readonly accounts: BotAccountService,
     private readonly send: BotSendService,
     private readonly adapters: BotAdapterRegistry,
+    private readonly history: BotChatHistoryService,
   ) {
     if (!this.connectionValue('HOST')) {
       this.logger.error('提醒队列缺少 Redis 连接，提醒功能暂不可用');
@@ -124,7 +127,7 @@ export class BotReminderService
   /**
    * 在持久队列创建、列出或取消当前用户提醒，只有入队成功后才返回已安排状态。
    * @param message - 已授权的真实发起人及发送目标。
-   * @param input - 提醒动作、正文、带时区时间或每日时刻。
+   * @param input - 提醒动作、正文、时间与可选的当前群成员平台标识。
    * @param sourcePluginKey - 宿主绑定的调用插件，不能由模型指定。
    * @returns 已创建任务、取消结果或当前用户的任务状态。
    * @throws 参数不合法、超过限额或任务不属于当前用户时拒绝操作。
@@ -153,11 +156,14 @@ export class BotReminderService
           nextRunAt: new Date(item.next).toISOString(),
           pattern: item.pattern,
           timezone: item.tz,
+          text: item.template?.data?.text,
+          platformId: item.template?.data?.platformId,
         })),
         jobs: await Promise.all(
           jobs.map(async (job) => ({
             id: job.id,
             text: job.data.text,
+            platformId: job.data.platformId,
             dueAt: job.data.dueAt,
             status: await job.getState(),
             error: job.failedReason || '',
@@ -180,8 +186,16 @@ export class BotReminderService
     const text = String(input.text || '').trim();
     const dailyAt = String(input.dailyAt || '');
     const runAt = String(input.runAt || '');
-    if (!text || text.length > 1200 || /\[CQ:|<@/u.test(text))
-      throw new Error('提醒正文应为1至1200字普通文本；成员提及请使用单独工具');
+    if (!text || text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))
+      throw new Error('提醒正文应为1至1200字普通文本；真实提及请传platformId');
+    let platformId: string | undefined;
+    if (input.platformId !== undefined) {
+      if (message.messageType === 'private')
+        throw new Error('私聊提醒不支持成员提及');
+      if (typeof input.platformId !== 'string')
+        throw new Error('成员平台ID无效');
+      platformId = await this.history.requireMember(message, input.platformId);
+    }
     if (Boolean(dailyAt) === Boolean(runAt))
       throw new Error('一次性时间与每日时刻必须且只能提供一个');
     if (
@@ -215,6 +229,7 @@ export class BotReminderService
       owner,
       sourcePluginKey,
       text,
+      platformId,
       dueAt: dueAt.toISOString(),
       repeat,
       message: {
@@ -252,6 +267,7 @@ export class BotReminderService
     return {
       id,
       status: 'scheduled',
+      platformId,
       nextRunAt: dueAt.toISOString(),
       timezone: 'Asia/Shanghai',
       delivery:
@@ -263,7 +279,7 @@ export class BotReminderService
    * 到期重新检查发起人和 Bot 绑定，再通过统一发送服务投递，平台拒绝时保留失败任务。
    * @param job - Redis 持久队列中的提醒任务。
    * @returns 统一发送服务返回的投递结果。
-   * @throws 发起人权限或插件绑定已撤销时拒绝发送。
+   * @throws 发起人权限或插件绑定已撤销、持久化成员标识无效时拒绝发送。
    */
   async deliver(job: Job<ReminderData>): Promise<unknown> {
     const message = job.data.message;
@@ -289,13 +305,28 @@ export class BotReminderService
       !pluginKeys.includes(job.data.sourcePluginKey)
     )
       throw new Error('提醒来源插件绑定已撤销');
+    let text = job.data.text;
+    const platformId = job.data.platformId;
+    if (platformId !== undefined) {
+      if (
+        message.messageType === 'private' ||
+        !/^[a-zA-Z0-9_-]{1,64}$/u.test(platformId)
+      )
+        throw new Error('提醒成员平台ID无效');
+      // 成员已在创建时按当前 Bot 和群核验；这里只读取持久目标，不依赖过期工具上下文。
+      let tag = `<qqbot-at-user id="${platformId}" />`;
+      if (message.connectionMode === 'reverse-ws')
+        tag = `[CQ:at,qq=${platformId}]`;
+      else if (message.messageType === 'channel') tag = `<@${platformId}>`;
+      text = `${tag} ${text}`;
+    }
     return this.send.sendText({
       selfId: message.selfId,
       targetType: message.messageType,
       targetId: message.targetId,
       channelId: message.channelId,
       guildId: message.guildId,
-      message: job.data.text,
+      message: text,
     });
   }
 }

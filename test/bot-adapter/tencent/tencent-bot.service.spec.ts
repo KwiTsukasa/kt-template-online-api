@@ -523,6 +523,12 @@ describe('TencentBotService', () => {
       msgType: 2,
       markdown: { content: mentionInput.message },
     });
+    await service.sendText({ ...mentionInput, replyMessageId: undefined });
+    expect(bot.send).toHaveBeenLastCalledWith({
+      target: { scope: 'group', targetId: 'group_openid_2', msgId: undefined },
+      msgType: 2,
+      markdown: { content: mentionInput.message },
+    });
     const plainCalls = bot.sendText.mock.calls.length;
     bot.send.mockRejectedValueOnce(new Error('Markdown permission denied'));
     await expect(service.sendText(mentionInput)).rejects.toThrow();

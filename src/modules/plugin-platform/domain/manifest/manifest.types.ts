@@ -42,6 +42,7 @@ export type PluginOperationManifest = {
 };
 
 export type PluginEventManifest = {
+  conversationMode?: 'persistent';
   description?: string;
   eventName: string;
   handlerName: string;

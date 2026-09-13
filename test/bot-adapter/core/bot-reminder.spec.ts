@@ -115,6 +115,51 @@ describe('Persistent reminders', () => {
     expect(template.data.message.rawEvent).toEqual({});
     expect(template.data.sourcePluginKey).toBe('hermes-agent');
   });
+  it('persists rotating text and keeps both retry content and verified mention target stable', async () => {
+    await service.manage(
+      message,
+      {
+        operation: 'create',
+        dailyAt: '18:00',
+        text: '浇水',
+        variants: ['第一天浇水', '第二天浇水'],
+        platformId: 'member-a',
+      },
+      'hermes-agent',
+    );
+    const data = mockQueue.upsertJobScheduler.mock.calls[0][2].data;
+    expect(data.variants).toEqual(['第一天浇水', '第二天浇水']);
+    const timestamp = Date.parse(data.dueAt);
+    await service.deliver({ data, opts: { prevMillis: timestamp } } as never);
+    await service.deliver({
+      data,
+      opts: { prevMillis: timestamp + 86400000 },
+    } as never);
+    await service.deliver({
+      data,
+      opts: { prevMillis: timestamp + 86400000 },
+    } as never);
+    expect(send.sendText.mock.calls.map(([input]) => input.message)).toEqual([
+      '<qqbot-at-user id="member-a" /> 第一天浇水',
+      '<qqbot-at-user id="member-a" /> 第二天浇水',
+      '<qqbot-at-user id="member-a" /> 第二天浇水',
+    ]);
+  });
+  it('rejects interactive markup in any rotating variant before scheduling', async () => {
+    await expect(
+      service.manage(
+        message,
+        {
+          operation: 'create',
+          dailyAt: '18:00',
+          text: '浇水',
+          variants: ['正常', '<qqbot-at-user id="other" />'],
+        },
+        'hermes-agent',
+      ),
+    ).rejects.toThrow('普通文本');
+    expect(mockQueue.upsertJobScheduler).not.toHaveBeenCalled();
+  });
   it('does not claim scheduling when Redis rejects the write and rejects another owner cancellation', async () => {
     mockQueue.add.mockRejectedValueOnce(new Error('Redis unavailable'));
     await expect(
@@ -364,7 +409,7 @@ describe('Persistent reminders', () => {
     const app = module.createNestApplication();
     await app.listen(0, '127.0.0.1');
     try {
-      const contextId = sessions.open(message, {
+      const contextId = sessions.open(message, 'hermes-agent', {
         pluginKeys: ['hermes-agent'],
       });
       const body = {

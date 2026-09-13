@@ -1297,7 +1297,7 @@ export class TencentBotService
    */
   private async readConversationApi(
     account: OfficialAccountRuntime,
-    message: BotNormalizedMessage,
+    message: Pick<BotNormalizedMessage, 'guildId' | 'channelId'>,
     input: { path: string; query?: Record<string, string> },
   ): Promise<unknown> {
     const allowed = new Set(['/users/@me']);
@@ -1326,6 +1326,27 @@ export class TencentBotService
     if (query.limit && Number(query.limit) > 400)
       throw new Error('QQ接口单页最多400项');
     return account.bot.api.get(input.path, query);
+  }
+
+  /**
+   * 恢复后台任务的只读接口能力，账号停用或连接不存在时拒绝使用历史授权。
+   * @param input - 宿主固定的连接、会话与查询参数。
+   * @returns 经过原有会话白名单检查的官方接口资料。
+   * @throws 当前官方连接不可用时拒绝读取。
+   */
+  async readDeferredConversationApi(input: {
+    connectionKey: string;
+    targetKey: string;
+    channelId?: string;
+    guildId?: string;
+    path: string;
+    query?: Record<string, string>;
+  }): Promise<unknown> {
+    const account = this.accounts.get(input.connectionKey);
+    const enabled = await this.accountService.findBySelfId(input.connectionKey);
+    if (!account || !enabled?.enabled || enabled.isDeleted)
+      throw new Error('当前官方连接未授权');
+    return this.readConversationApi(account, input, input);
   }
 
   /**

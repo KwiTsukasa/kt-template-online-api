@@ -5,6 +5,10 @@ import {
   resolveFf14MarketTarget,
 } from '../../domain/ff14-worlds';
 import { resolveFf14MarketConfig } from '../../config/ff14-market-config';
+import {
+  marketTimeRange,
+  summarizeMarketSales,
+} from '../../application/market-statistics';
 import type {
   Ff14HttpMethod,
   Ff14PriceResult,
@@ -81,6 +85,189 @@ export class Ff14MarketClient {
       itemId: Number(item.row_id || item.id),
       itemLevel: this.normalizeItemLevel(item.fields?.LevelItem),
       name: item.fields?.Name || item.name || keyword,
+    };
+  }
+
+  /**
+   * 返回真实物品候选、正式名称和版本；支持名称关键词及游戏原生市场分类筛选。
+   * @param params - 名称关键词、原生市场分类和语言。
+   * @returns 最多一百个候选及目录完整性，不把模糊命中自动认成用户指定物品。
+   * @throws 查询为空时拒绝请求整个物品数据库。
+   */
+  async findItems(params: {
+    item?: string;
+    category?: string;
+    searchCategory?: string;
+    language?: string;
+  }) {
+    const language = this.normalizeXivapiLanguage(params.language);
+    const keyword = String(params.item || params.category || '')
+      .trim()
+      .normalize('NFKC')
+      .replace(/:/gu, '：');
+    if (!keyword && !params.searchCategory)
+      throw new Error('提供物品关键词或市场分类名');
+    const clauses: string[] = [];
+    if (keyword) clauses.push(`+Name~"${this.escapeXivapiValue(keyword)}"`);
+    if (params.searchCategory)
+      clauses.push(
+        `+ItemSearchCategory.Name="${this.escapeXivapiValue(params.searchCategory)}"`,
+      );
+    const url = this.buildXivapiUrl('/search', language);
+    url.search = new URLSearchParams({
+      sheets: 'Item',
+      fields: 'Name,IsUntradable,ItemSearchCategory.Name',
+      language,
+      limit: '100',
+      query: clauses.join(' '),
+    }).toString();
+    const data = await this.requestJson<any>(url, 'GET', 'XIVAPI物品目录');
+    const items = (data.results || []).map((row: any) => ({
+      itemId: Number(row.row_id),
+      name: row.fields?.Name,
+      isUntradable: row.fields?.IsUntradable,
+      searchCategory: row.fields?.ItemSearchCategory?.fields?.Name,
+    }));
+    return {
+      keyword,
+      items,
+      complete: items.length < 100 && !data.next,
+      version: data.version,
+      source: url.toString(),
+      replyText: `${items.length}个物品候选：\n${items.map((item: any) => `${item.itemId} ${item.name}`).join('\n')}`,
+    };
+  }
+
+  /**
+   * 按统一时间范围分批读取多个物品的真实成交，并由代码完成统计和排名。
+   * @param params - 显式物品ID集合或目录关键词、地区、时间范围和品质筛选。
+   * @returns 带每项来源覆盖、缺失项及确定性排名的成交统计。
+   * @throws 缺少物品范围、数量或排序参数无效时拒绝计算。
+   */
+  async getStatistics(params: Record<string, any>) {
+    const metric = String(params.metric || 'turnover');
+    if (
+      !['turnover', 'quantity', 'transactions', 'weightedAverage'].includes(
+        metric,
+      )
+    )
+      throw new Error(
+        'metric支持turnover、quantity、transactions、weightedAverage',
+      );
+    const range = marketTimeRange(params);
+    const target = await this.resolveMarketTarget(params);
+    let items: Array<{ itemId: number; name: string }>;
+    let catalogComplete = true;
+    let catalogSource = '';
+    if (params.items) {
+      const ids = String(params.items).split(/[,，]/u).map(Number);
+      if (
+        !ids.length ||
+        ids.length > 100 ||
+        ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+      )
+        throw new Error('items必须为最多100个真实物品ID，以逗号分隔');
+      items = [...new Set(ids)].map((itemId) => ({
+        itemId,
+        name: `物品${itemId}`,
+      }));
+    } else if (params.category || params.searchCategory) {
+      const catalog = await this.findItems(params);
+      items = catalog.items.filter((item: any) => item.isUntradable !== true);
+      catalogComplete = catalog.complete;
+      catalogSource = catalog.source;
+    } else if (params.item || params.itemId) {
+      const item = await this.resolveItem(params);
+      items = [item];
+    } else
+      throw new Error(
+        '统计需要items=物品ID列表、category=名称关键词或searchCategory=市场分类',
+      );
+    if (!items.length)
+      return {
+        status: 'no_items',
+        items: [],
+        catalogSource,
+        replyText: '该目录未找到可交易物品，未生成虚构的零成交排名。',
+      };
+    const batches: Array<typeof items> = [];
+    for (let index = 0; index < items.length; index += 10)
+      batches.push(items.slice(index, index + 10));
+    const rows: Array<ReturnType<typeof summarizeMarketSales>> = [];
+    const sources: string[] = [];
+    const failures: Array<{ itemIds: number[]; error: string }> = [];
+    // 同时最多三个网络请求，结果范围保持固定，不因分页时间流逝改变统计窗口。
+    for (let offset = 0; offset < batches.length; offset += 3) {
+      await Promise.all(
+        batches.slice(offset, offset + 3).map(async (batch) => {
+          const url = new URL(
+            `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}/${batch.map((item) => item.itemId).join(',')}`,
+          );
+          url.search = new URLSearchParams({
+            entriesToReturn: '1000',
+            entriesWithin: String(range.end - range.start),
+            entriesUntil: String(range.end),
+          }).toString();
+          sources.push(url.toString());
+          try {
+            const data = await this.requestJson<any>(
+              url,
+              'GET',
+              'Universalis成交统计',
+            );
+            for (const item of batch) {
+              let history = data.items?.[String(item.itemId)];
+              if (data.itemID === item.itemId) history = data;
+              rows.push(
+                summarizeMarketSales(item, history, {
+                  ...range,
+                  hq: params.hq,
+                }),
+              );
+            }
+          } catch (error) {
+            let message = '成交接口读取失败';
+            if (error instanceof Error) message = error.message;
+            failures.push({
+              itemIds: batch.map((item) => item.itemId),
+              error: message,
+            });
+            for (const item of batch)
+              rows.push(summarizeMarketSales(item, undefined, range));
+          }
+        }),
+      );
+    }
+    const ranked = rows
+      .filter((row) => row.status === 'available')
+      .sort(
+        (a, b) =>
+          Number(b[metric] || 0) - Number(a[metric] || 0) ||
+          a.itemId - b.itemId,
+      );
+    const complete = catalogComplete && rows.every((row) => row.complete);
+    return {
+      range: { ...range, timezone: 'Asia/Shanghai' },
+      world: target.label,
+      metric,
+      catalogComplete,
+      complete,
+      catalogSource,
+      sources,
+      failures,
+      unavailable: rows.filter((row) => row.status === 'unavailable'),
+      rankings: ranked,
+      coverage:
+        'Universalis玩家上传的成交记录；不代表游戏服务器全部成交。单物品最多1000条，complete仅表示本次接口窗口未发现截断或缺失。',
+      replyText: `${target.label}成交统计（${items.length}件物品，排序${metric}）\n${ranked
+        .slice(0, 20)
+        .map(
+          (row, index) =>
+            `${index + 1}. ${row.name}：销量${row.quantity}，成交额${row.turnover}，成交笔数${row.transactions}`,
+        )
+        .join(
+          '\n',
+        )}\n数据为玩家上传成交；完整性=${complete}，缺失${rows.length - ranked.length}项。`,
     };
   }
 
@@ -362,13 +549,12 @@ export class Ff14MarketClient {
    * @returns 完成初始化并携带当前边界配置的针对FF14 市场插件。
    */
   private buildXivapiUrl(path: string, language: string) {
-    const baseUrl =
-      (() => {
-        if (language === 'chs') {
-          return this.xivapiChsBaseUrl;
-        }
-        return this.xivapiBaseUrl;
-      })();
+    const baseUrl = (() => {
+      if (language === 'chs') {
+        return this.xivapiChsBaseUrl;
+      }
+      return this.xivapiBaseUrl;
+    })();
     return new URL(`${baseUrl.replace(/\/+$/, '')}${path}`);
   }
 
@@ -377,8 +563,10 @@ export class Ff14MarketClient {
    * @param keyword - 决定针对FF14 市场插件内容、边界或目标的 `keyword` 值。
    * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值。
    * @returns 针对FF14 市场插件。
+   * @throws 精确名称不存在但有同类候选时返回候选查询入口，不将同类物品认作目标。
    */
   private async searchItem(keyword: string, language: string) {
+    keyword = keyword.normalize('NFKC').replace(/:/gu, '：');
     const item = this.pickFirstSearchItem(
       await this.searchItemsByLanguage(keyword, language, '='),
     );
@@ -396,7 +584,17 @@ export class Ff14MarketClient {
     if (fuzzyItem || language === 'en') return fuzzyItem;
 
     const enFuzzyItems = await this.searchItemsByLanguage(keyword, 'en', '~');
-    return this.pickSingleFuzzySearchItem(enFuzzyItems);
+    const fallback = this.pickSingleFuzzySearchItem(enFuzzyItems);
+    if (fallback) return fallback;
+    const category = keyword.split('：')[0];
+    if (category !== keyword && category.length >= 2) {
+      const candidates = await this.findItems({ category, language });
+      if (candidates.items.length)
+        throw new Error(
+          `未找到名称“${keyword}”；同类正式名称和ID可用 /物品 search=${category} 查询（目录版本${candidates.version}）。不能直接把同类物品当作目标。`,
+        );
+    }
+    return undefined;
   }
 
   /**

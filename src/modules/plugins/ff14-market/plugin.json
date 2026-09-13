@@ -1,7 +1,7 @@
 {
   "pluginKey": "ff14-market",
   "name": "FF14 市场价格",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minApiSdkVersion": "1.0.0",
   "description": "对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。",
   "author": "KT",
@@ -10,7 +10,7 @@
   "permissions": ["runtime.http", "plugin.config.read"],
   "runtime": {
     "workerType": "thread",
-    "timeoutMs": 30000,
+    "timeoutMs": 60000,
     "memoryMb": 256,
     "maxConcurrency": 1,
     "configKeys": [
@@ -23,9 +23,15 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "xivapiBaseUrl": { "type": "string" },
-      "universalisBaseUrl": { "type": "string" },
-      "defaultWorld": { "type": "string" }
+      "xivapiBaseUrl": {
+        "type": "string"
+      },
+      "universalisBaseUrl": {
+        "type": "string"
+      },
+      "defaultWorld": {
+        "type": "string"
+      }
     }
   },
   "operations": [
@@ -33,16 +39,49 @@
       "key": "ff14.item.resolve",
       "name": "解析物品",
       "handlerName": "resolveItem",
-      "description": "按物品名称或 ID 解析 XIVAPI 物品信息。",
+      "description": "按名称或ID解析物品；候选查询：/物品 search=发型样式，返回正式名称、ID和数据版本，不自动替用户认定模糊候选。",
       "aliases": ["物品", "item", "ff14item"],
       "permissions": ["runtime.http", "plugin.config.read"],
-      "timeoutMs": 15000
+      "timeoutMs": 15000,
+      "inputSchema": {
+        "x-agent-read-only": true,
+        "properties": {
+          "item": {
+            "description": "物品名称或 ID",
+            "type": "string"
+          },
+          "itemId": {
+            "description": "物品 ID",
+            "type": "number"
+          },
+          "language": {
+            "default": "chs",
+            "type": "string"
+          },
+          "raw": {
+            "type": "string",
+            "description": "物品名称或ID；search=关键词返回候选列表"
+          }
+        },
+        "type": "object",
+        "anyOf": [
+          {
+            "required": ["item"]
+          },
+          {
+            "required": ["itemId"]
+          },
+          {
+            "required": ["raw"]
+          }
+        ]
+      }
     },
     {
       "key": "ff14.market.price",
       "name": "市场查价",
       "handlerName": "getPrice",
-      "description": "查询 FF14 市场价格。完整命令示例：/查价 小鸣鼠角笛。不指定区服时使用已配置默认范围（当前中国区），查全中国区无需追加‘全中国区’。指定服务器示例：/查价 小鸣鼠角笛 world=红玉海。不要把 JSON 对象作为聊天参数。",
+      "description": "查价：/查价 物品名或ID，默认使用已配置地区。实际成交统计：/查价 mode=stats items=ID1,ID2 days=1 world=红玉海；也可用category=名称关键词或searchCategory=原生市场分类，date=YYYY-MM-DD为北京时间自然日，metric=turnover/quantity/transactions/weightedAverage。结果由代码计算，带来源、缺失项和覆盖范围；不得把玩家上传样本当全市场成交。物品模糊先/物品 search=关键词查候选。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -51,11 +90,12 @@
             "description": "命令后面的原始参数；只查物品时填写物品名称或ID，例如小鸣鼠角笛。"
           }
         },
-        "required": ["raw"]
+        "required": ["raw"],
+        "x-agent-read-only": true
       },
       "aliases": ["查价", "price", "ff14price"],
       "permissions": ["runtime.http", "plugin.config.read"],
-      "timeoutMs": 15000
+      "timeoutMs": 55000
     }
   ],
   "events": [],

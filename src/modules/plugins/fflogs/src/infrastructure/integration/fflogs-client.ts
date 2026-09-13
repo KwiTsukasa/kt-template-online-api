@@ -20,13 +20,13 @@ import type { FflogsKnownWorldResolver } from '../../application/fflogs-input-pa
 import { resolveFflogsConfig } from '../../config/fflogs-config';
 import { FflogsOAuthTokenCache } from '../storage/oauth-token-cache';
 import {
-  buildFf14MarketCatalog,
-  buildFf14MarketCatalogFromTree,
-  isFf14LocationName,
-  PLUGIN_FF14_MARKET_DICT_CODES,
-  splitFf14WorldPath,
-  type Ff14DictItem,
-} from '../../../../ff14-market/src/domain/ff14-worlds';
+  parseReportInput,
+  readFflogsReport,
+} from '../../application/fflogs-report';
+import {
+  buildFflogsWorldNames,
+  type FflogsWorldEntry,
+} from '../../domain/fflogs-worlds';
 
 const FFLOGS_LOCALIZATION_DICT_CODES = {
   job: 'FFLOGS_JOB_LABEL',
@@ -48,8 +48,8 @@ export type FflogsPluginHost = {
   getDictByKey?: (
     dictCode: string,
   ) => Promise<Array<{ label?: string; value?: string }>>;
-  getDictItemsByKey?: (dictCode: string) => Promise<Ff14DictItem[]>;
-  relationTree?: (input: { dictCode: string }) => Promise<Ff14DictItem[]>;
+  getDictItemsByKey?: (dictCode: string) => Promise<FflogsWorldEntry[]>;
+  relationTree?: (input: { dictCode: string }) => Promise<FflogsWorldEntry[]>;
   requestJson: <T>(options: {
     body?: string;
     context: string;
@@ -67,6 +67,7 @@ export type FflogsPluginHost = {
 };
 
 export class FflogsClient {
+  private worldNames?: { expiresAt: number; value: Map<string, string> };
   private readonly clientId: string;
   private readonly clientSecret: string;
   private encounterCatalogCache?: {
@@ -94,6 +95,59 @@ export class FflogsClient {
   async checkHealth() {
     await this.getAccessToken();
     return true;
+  }
+
+  /**
+   * 在现有OAuth授权内读取指定报告，避免依赖有登录挑战的网页正文。
+   * @param input - 已启用FFLogs命令中的报告参数。
+   * @returns 报告目录或带游标的事件页。
+   * @throws 缺少合法报告参数时拒绝请求。
+   */
+  async getReport(input: Record<string, any>) {
+    const parsed = parseReportInput(input);
+    if (!parsed) throw new Error('请提供FFLogs报告代码或链接');
+    return readFflogsReport(
+      (query, variables) => this.requestGraphql(query, variables),
+      parsed,
+      this.webBaseUrl,
+      (ids) => this.readChineseActionNames(ids),
+    );
+  }
+
+  /**
+   * 按战斗中的真实动作ID查询国服名称，保留版本和来源，不向数据站转发FFLogs凭据。
+   * @param ids - 本页事件中出现的动作ID。
+   * @returns 国服动作名称映射及对应数据版本和来源地址。
+   */
+  private async readChineseActionNames(ids: number[]): Promise<{
+    names: Record<number, string>;
+    source: string;
+    version?: string;
+  }> {
+    const base =
+      this.host.getConfig<string>('FFLOGS_XIVAPI_CHS_BASE_URL') ||
+      'https://xivapi-v2.xivcdn.com/api';
+    const url = new URL(`${base.replace(/\/+$/u, '')}/sheet/Action`);
+    url.search = new URLSearchParams({
+      rows: ids.slice(0, 200).join(','),
+      fields: 'Name',
+      language: 'chs',
+    }).toString();
+    const data = await this.host.requestJson<any>({
+      url,
+      method: 'GET',
+      timeoutMs: 8000,
+      context: '国服动作名称',
+      failureMessage: (status) => `国服动作表读取失败：${status}`,
+      invalidJsonMessage: '国服动作表格式无效',
+      timeoutMessage: '国服动作表读取超时',
+    });
+    const names: Record<number, string> = {};
+    for (const row of data.rows || []) {
+      if (typeof row.fields?.Name === 'string' && row.fields.Name)
+        names[row.row_id] = row.fields.Name;
+    }
+    return { names, source: url.toString(), version: data.version };
   }
 
   /**
@@ -239,6 +293,7 @@ export class FflogsClient {
   async buildKnownWorldResolver(
     candidates: string[],
   ): Promise<FflogsKnownWorldResolver> {
+    if (!this.host.resolveKnownWorld) await this.loadWorldNames();
     const resolved = new Map<string, null | { serverSlug?: string }>();
     await Promise.all(
       candidates.map(async (candidate) => {
@@ -260,12 +315,11 @@ export class FflogsClient {
       return this.host.resolveKnownWorld(value);
     }
 
-    const catalog = await this.loadFf14MarketCatalog();
-    if (!isFf14LocationName(catalog, value)) return null;
-    const worldPath = splitFf14WorldPath(value);
-    return {
-      serverSlug: worldPath.world || value,
-    };
+    const names = await this.loadWorldNames();
+    const key = value.trim().replace(/\s*(->|=>|>|\/|\\|：|:)\s*/gu, '$1');
+    const serverSlug = names.get(key);
+    if (!serverSlug) return null;
+    return { serverSlug };
   }
 
   /**
@@ -391,9 +445,9 @@ export class FflogsClient {
         return [];
       }
       return this.pickRecentEncounterSuggestions(
-          character.recentReports?.data || [],
-          encounterNameById,
-        );
+        character.recentReports?.data || [],
+        encounterNameById,
+      );
     })();
     const rankingSuggestions = (() => {
       if (candidates.length) {
@@ -403,42 +457,42 @@ export class FflogsClient {
     })();
 
     const rankingLogs = await (async () => {
-        if (encounterLookup.encounterId !== undefined) {
-          return await this.getEncounterRankingLogs({
-            characterName: character.name || characterName,
-            encounterLookup,
-            limit,
-            partition: params.partition,
-            serverRegion,
-            serverSlug: character.server?.slug || serverSlug,
-            timeframe: params.timeframe,
-          });
-        }
-        return [];
-      })();
+      if (encounterLookup.encounterId !== undefined) {
+        return await this.getEncounterRankingLogs({
+          characterName: character.name || characterName,
+          encounterLookup,
+          limit,
+          partition: params.partition,
+          serverRegion,
+          serverSlug: character.server?.slug || serverSlug,
+          timeframe: params.timeframe,
+        });
+      }
+      return [];
+    })();
     const fallbackLogs = await (async () => {
       if (rankingLogs.length) {
         return [];
       }
       return (
-          await Promise.all(
-            metricCandidates.map((candidate) =>
-              this.getEncounterFightLog({
-                candidate,
-                characterId: character.id,
-                characterName: character.name || characterName,
-                encounterNameById,
-                encounterLookup,
-                localizationMaps,
-                serverName,
-                serverRegion,
-                serverSlug: character.server?.slug || serverSlug,
-              }),
-            ),
-          )
+        await Promise.all(
+          metricCandidates.map((candidate) =>
+            this.getEncounterFightLog({
+              candidate,
+              characterId: character.id,
+              characterName: character.name || characterName,
+              encounterNameById,
+              encounterLookup,
+              localizationMaps,
+              serverName,
+              serverRegion,
+              serverSlug: character.server?.slug || serverSlug,
+            }),
+          ),
         )
-          .filter(Boolean)
-          .slice(0, limit);
+      )
+        .filter(Boolean)
+        .slice(0, limit);
     })();
     const logs = (() => {
       if (rankingLogs.length) {
@@ -943,18 +997,15 @@ export class FflogsClient {
         ].join('\n');
       }
       return [
-          '暂无匹配的公开记录',
-          this.formatSuggestionLine(
-            '最近报告中可查',
-            params.encounterSuggestions,
-          ),
-          this.formatSuggestionLine(
-            '公开排名中可查',
-            params.rankingSuggestions,
-          ),
-        ]
-          .filter(Boolean)
-          .join('\n');
+        '暂无匹配的公开记录',
+        this.formatSuggestionLine(
+          '最近报告中可查',
+          params.encounterSuggestions,
+        ),
+        this.formatSuggestionLine('公开排名中可查', params.rankingSuggestions),
+      ]
+        .filter(Boolean)
+        .join('\n');
     })();
 
     return [
@@ -978,30 +1029,27 @@ export class FflogsClient {
    * @returns 占四行的战斗记录文本，包含时间、副本、指标和可访问链接。
    */
   private formatEncounterLogLine(item: FflogsEncounterLogItem, index: number) {
-    const status =
-      (() => {
-        if (item.kill === true) {
-          return '击杀';
-        }
-        if (item.kill === false) {
-          return '灭团';
-        }
-        return '未知';
-      })();
-    const damageScore =
-      (() => {
-        if (item.damageScore !== undefined) {
-          return `${this.formatNumber(item.damageScore)}`;
-        }
-        return '-';
-      })();
-    const healingScore =
-      (() => {
-        if (item.healingScore !== undefined) {
-          return `${this.formatNumber(item.healingScore)}`;
-        }
-        return '-';
-      })();
+    const status = (() => {
+      if (item.kill === true) {
+        return '击杀';
+      }
+      if (item.kill === false) {
+        return '灭团';
+      }
+      return '未知';
+    })();
+    const damageScore = (() => {
+      if (item.damageScore !== undefined) {
+        return `${this.formatNumber(item.damageScore)}`;
+      }
+      return '-';
+    })();
+    const healingScore = (() => {
+      if (item.healingScore !== undefined) {
+        return `${this.formatNumber(item.healingScore)}`;
+      }
+      return '-';
+    })();
     const metrics = [
       `D${this.formatMetricNumber(item.dps)}`,
       `aD${this.formatMetricNumber(item.adps)}`,
@@ -1451,14 +1499,12 @@ export class FflogsClient {
       localizationMaps,
     );
     const parts = [
-      `${index + 1}. ${encounter}：${
-        (() => {
-          if (percent !== undefined) {
-            return `${this.formatNumber(percent)}%`;
-          }
-          return '百分位暂无';
-        })()
-      }`,
+      `${index + 1}. ${encounter}：${(() => {
+        if (percent !== undefined) {
+          return `${this.formatNumber(percent)}%`;
+        }
+        return '百分位暂无';
+      })()}`,
       (() => {
         if (amount !== undefined) {
           return `${metric} ${this.formatNumber(amount)}`;
@@ -1905,29 +1951,19 @@ export class FflogsClient {
   }
 
   /**
-   * 按当前运行态读取FF14市场目录；当 `this.host.relationTree` 成立时返回 `treeCatalog`。
-   * @returns FF14市场目录。
+   * 读取独立服务器目录并短期缓存，同一条命令解析多个参数时不重复拉取字典。
+   * @returns 已知服务器名与完整路径的映射。
    */
-  private async loadFf14MarketCatalog() {
-    if (this.host.relationTree) {
-      const treeCatalog = buildFf14MarketCatalogFromTree(
-        await this.host.relationTree({
-          dictCode: PLUGIN_FF14_MARKET_DICT_CODES.region,
-        }),
-      );
-      if (treeCatalog.dataCenters.length > 0) return treeCatalog;
-    }
-
-    const [regions, dataCenters, worlds] = await Promise.all([
-      this.getDictItems(PLUGIN_FF14_MARKET_DICT_CODES.region),
-      this.getDictItems(PLUGIN_FF14_MARKET_DICT_CODES.dataCenter),
-      this.getDictItems(PLUGIN_FF14_MARKET_DICT_CODES.world),
+  private async loadWorldNames() {
+    if (this.worldNames && this.worldNames.expiresAt > Date.now())
+      return this.worldNames.value;
+    const [tree, worlds] = await Promise.all([
+      this.host.relationTree?.({ dictCode: 'FF14_MARKET_REGION' }) || [],
+      this.getDictItems('FF14_MARKET_WORLD'),
     ]);
-    return buildFf14MarketCatalog({
-      dataCenters,
-      regions,
-      worlds,
-    });
+    const value = buildFflogsWorldNames(tree, worlds);
+    this.worldNames = { value, expiresAt: Date.now() + 300000 };
+    return value;
   }
 
   /**
@@ -1935,7 +1971,7 @@ export class FflogsClient {
    * @param dictCode - 决定字典项目内容、边界或目标的 `dictCode` 值。
    * @returns 按输入顺序得到的字典项目列表；没有匹配项时为空数组。
    */
-  private async getDictItems(dictCode: string): Promise<Ff14DictItem[]> {
+  private async getDictItems(dictCode: string): Promise<FflogsWorldEntry[]> {
     if (this.host.getDictItemsByKey) {
       return this.host.getDictItemsByKey(dictCode);
     }

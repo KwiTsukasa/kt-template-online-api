@@ -356,6 +356,21 @@ const parseEvents = (
     }
 
     return {
+      conversationMode: (() => {
+        if (event.conversationMode === undefined) return undefined;
+        if (
+          event.conversationMode === 'persistent' &&
+          event.eventName === 'message'
+        )
+          return 'persistent' as const;
+        pushIssue(
+          issues,
+          'INVALID_CONVERSATION_MODE',
+          `${pathPrefix}.conversationMode`,
+          'Only message events support persistent conversations.',
+        );
+        return undefined;
+      })(),
       description: getString(event, 'description'),
       eventName: getString(event, 'eventName') || '',
       handlerName: getString(event, 'handlerName') || '',
@@ -534,7 +549,9 @@ export const parsePluginManifest = (
   }
 
   const pluginKey =
-    getString(manifestLike, 'key') || getString(manifestLike, 'pluginKey') || '';
+    getString(manifestLike, 'key') ||
+    getString(manifestLike, 'pluginKey') ||
+    '';
   const pluginKeyPath = (() => {
     if (getString(manifestLike, 'key')) {
       return 'key';

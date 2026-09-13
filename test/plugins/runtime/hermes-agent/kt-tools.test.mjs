@@ -54,11 +54,14 @@ test('model arguments cannot supply missing execution metadata', async () => {
 test('MCP exposes bounded command, history, mention, reminder and official API tools', async () => {
   const tools = (await handle({ id: 1, method: 'tools/list' }, index)).result
     .tools;
-  assert.equal(tools.length, 8);
+  assert.equal(tools.length, 12);
   const reminder = tools.find((item) => item.name === 'kt_reminder');
   assert.equal(reminder.inputSchema.properties.platformId.type, 'string');
   assert.equal(reminder.inputSchema.properties.platformId.minLength, undefined);
-  assert.match(reminder.inputSchema.properties.platformId.description, /空字符串/u);
+  assert.match(
+    reminder.inputSchema.properties.platformId.description,
+    /空字符串/u,
+  );
   assert.equal(reminder.inputSchema.required.includes('platformId'), false);
   assert.match(reminder.description, /到点真实@/u);
   assert.deepEqual(

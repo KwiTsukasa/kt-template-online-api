@@ -36,6 +36,19 @@ export class TencentBotProtocolAdapter
   }
 
   /**
+   * 将后台任务的会话资料读取交回当前官方连接，每次调用重新验证账号。
+   * @param input - 宿主绑定的会话和允许读取的接口参数。
+   * @returns 当前会话官方接口返回的资料。
+   */
+  async readConversationApi(
+    input: Parameters<
+      NonNullable<BotAdapterProtocol['readConversationApi']>
+    >[0],
+  ) {
+    return this.tencentService.readDeferredConversationApi(input);
+  }
+
+  /**
    * 将 Tencent SDK 的统一消息形态转换为无状态 Bot 信封，调用方仍负责官方签名与事件分发。
    * @param payload - Tencent SDK 统一消息。
    * @returns 可由 Bot 协议层路由的单条信封；关键字段缺失时返回空数组。

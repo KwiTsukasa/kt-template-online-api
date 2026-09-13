@@ -1,0 +1,53 @@
+diff --git a/tools/mcp_tool.py b/tools/mcp_tool.py
+index 7db8489..e591dfe 100644
+--- a/tools/mcp_tool.py
++++ b/tools/mcp_tool.py
+@@ -6280,10 +6280,29 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+             # Hermes' MEDIA tag + cache_image_from_bytes) was the cleaner of
+             # the two — plugs into existing infrastructure.
+             parts: List[str] = []
++            kt_images = []
++            kt_image_bytes = 0
+             for block in (result.content or []):
+                 if hasattr(block, "text") and block.text:
+                     parts.append(strip_unicode_tags(block.text))
+                     continue
++                if server_name == "kt" and getattr(block, "type", None) == "image":
++                    import base64 as _kt_base64
++                    mime = mcp_field(block, "mime_type", "mimeType")
++                    encoded = getattr(block, "data", "")
++                    if mime not in {"image/png", "image/jpeg", "image/webp", "image/gif"}:
++                        return tool_error("图片类型不支持")
++                    if not isinstance(encoded, str) or len(encoded) > 8 * 1024 * 1024:
++                        return tool_error("图片内容超过单次读取上限")
++                    try:
++                        decoded = _kt_base64.b64decode(encoded, validate=True)
++                    except (ValueError, TypeError):
++                        return tool_error("图片内容编码无效")
++                    kt_image_bytes += len(decoded)
++                    if not decoded or kt_image_bytes > 6 * 1024 * 1024 or len(kt_images) >= 8:
++                        return tool_error("图片数量或总大小超过单次读取上限")
++                    kt_images.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}})
++                    continue
+                 image_tag = _cache_mcp_image_block(block)
+                 if image_tag:
+                     parts.append(image_tag)
+@@ -6351,6 +6370,18 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+                 if _structured_json is not None and len(_structured_json) > _MCP_HARD_RESULT_CAP_CHARS:
+                     structured = _truncate_mcp_text_result(_structured_json)
+             meta = _strip_reserved_meta_keys(mcp_field(result, "meta", "meta"))
++            if kt_images:
++                details = {"result": text_result}
++                if structured is not None:
++                    details["structuredContent"] = structured
++                if meta is not None:
++                    details["_meta"] = meta
++                summary = _truncate_mcp_text_result(json.dumps(details, ensure_ascii=False, default=str))
++                return {
++                    "_multimodal": True,
++                    "content": [{"type": "text", "text": summary}, *kt_images],
++                    "text_summary": summary + "\n返回了图片；只有支持视觉的模型才能读取图中内容。",
++                }
+             if structured is not None or meta is not None:
+                 payload: Dict[str, Any] = {}
+                 if text_result:

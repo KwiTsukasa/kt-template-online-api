@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { HermesRunApplication } from './runs';
 import type {
   BotPluginEventResult,
   BotPluginMessageEvent,
@@ -36,6 +37,7 @@ const REPLY_RESERVE_MS = 50_000;
  */
 export function createPlugin(options: HermesOptions) {
   const application = new HermesMessageApplication(options);
+  const runs = new HermesRunApplication(options);
   return {
     getDefinition: () => ({
       key: options.manifest.pluginKey,
@@ -48,7 +50,9 @@ export function createPlugin(options: HermesOptions) {
       if (!['message', 'hermes-agent.message', 'handleMessage'].includes(key)) {
         return { handled: false, replies: [] };
       }
-      return application.handleMessage(event as BotPluginMessageEvent);
+      const message = event as BotPluginMessageEvent;
+      if (message?.metadata?.durableTask === true) return runs.handle(message);
+      return application.handleMessage(message);
     },
   };
 }
@@ -165,6 +169,8 @@ class HermesMessageApplication {
         mentions: event.metadata?.mentions || [],
         replyTo: event.metadata?.replyTo || '',
         quote: event.metadata?.quote || null,
+        images: event.metadata?.savedImages || [],
+        imageArchiveFailed: event.metadata?.imageArchiveFailed === true,
         recentMessages: unread,
       });
       // 身份随消息持久保存，历史中的用户文字不能伪造当前工具授权。
@@ -458,7 +464,7 @@ function reply(content: string): BotPluginEventResult {
  * @param scope - 宿主识别的当前聊天范围，用于选择回复条数上限。
  * @returns 预算内由宿主按原消息上下文发送的文本回复。
  */
-function splitReply(
+export function splitReply(
   content: string,
   scope: BotPluginMessageEvent['scope'],
 ): BotPluginEventResult {

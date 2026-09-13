@@ -1,0 +1,37 @@
+FROM nousresearch/hermes-agent@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+USER root
+COPY src/modules/plugins/hermes-agent/assets/runtime/hermes-soul-hot-reload.patch /tmp/kt-soul-hot-reload.patch
+RUN cd /opt/hermes \
+ && printf '%s  %s\n' 86a4f6c61183167850046b025a8f5c7b8601fb910f8a9ee464535afccc541c06 agent/turn_context.py | sha256sum -c - \
+ && git apply --check /tmp/kt-soul-hot-reload.patch \
+ && git apply /tmp/kt-soul-hot-reload.patch \
+ && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py \
+ && rm /tmp/kt-soul-hot-reload.patch
+ENV KT_SOUL_HOT_RELOAD=1
+LABEL top.kwitsukasa.hermes.kt-tools="3"
+RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp -o /usr/local/bin/yt-dlp \
+ && printf '%s  %s\n' 1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6 /usr/local/bin/yt-dlp | sha256sum -c - \
+ && chmod 755 /usr/local/bin/yt-dlp \
+ && yt-dlp --version \
+ && ffmpeg -version >/dev/null
+COPY src/modules/plugins/hermes-agent/assets/hermes-tool-context.patch /tmp/kt-tool-context.patch
+COPY src/modules/plugins/hermes-agent/assets/hermes-runs-context.patch /tmp/kt-runs-context.patch
+COPY src/modules/plugins/hermes-agent/assets/hermes-mcp-images.patch /tmp/kt-mcp-images.patch
+COPY src/modules/plugins/hermes-agent/assets/kt-tools.mjs /opt/kt-tools/server.mjs
+COPY src/modules/plugins/hermes-agent/assets/kt-video.mjs /opt/kt-tools/kt-video.mjs
+COPY src/modules/plugins/hermes-agent/assets/kt-plan-check.mjs /opt/kt-tools/kt-plan-check.mjs
+COPY src/modules/plugins/hermes-agent/assets/persona-identity.md /opt/kt-tools/persona-identity.md
+COPY src/modules/plugins/hermes-agent/assets/kt-research /opt/kt-tools/kt-research
+COPY src/modules/plugins/hermes-agent/assets/qqbot-skills /opt/kt-tools/qqbot-skills
+RUN cd /opt/hermes \
+ && git apply --check /tmp/kt-tool-context.patch \
+ && git apply /tmp/kt-tool-context.patch \
+ && git apply --check /tmp/kt-runs-context.patch \
+ && git apply /tmp/kt-runs-context.patch \
+ && git apply --check /tmp/kt-mcp-images.patch \
+ && git apply /tmp/kt-mcp-images.patch \
+ && /opt/hermes/.venv/bin/python -m py_compile gateway/platforms/api_server.py gateway/platforms/api_server_runs.py tools/mcp_tool.py \
+ && node --check /opt/kt-tools/server.mjs \
+ && node --check /opt/kt-tools/kt-video.mjs \
+ && node --check /opt/kt-tools/kt-plan-check.mjs \
+ && rm /tmp/kt-tool-context.patch /tmp/kt-runs-context.patch /tmp/kt-mcp-images.patch

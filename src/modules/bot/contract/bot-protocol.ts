@@ -35,6 +35,14 @@ export type BotDeliveryResult = {
 export interface BotAdapterProtocol {
   readonly key: string;
   listBoundPluginKeys?(connectionKey: string): Promise<string[]>;
+  readConversationApi?(input: {
+    connectionKey: string;
+    targetKey: string;
+    channelId?: string;
+    guildId?: string;
+    path: string;
+    query?: Record<string, string>;
+  }): Promise<unknown>;
   deliver(request: BotDeliveryRequest): Promise<BotDeliveryResult>;
   normalize(payload: unknown): Promise<BotInboundEnvelope[]>;
 }

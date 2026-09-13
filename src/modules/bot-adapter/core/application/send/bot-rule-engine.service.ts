@@ -17,8 +17,9 @@ import { toBotPluginMessageEvent } from '../event/plugin-event.mapper';
 import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from './bot-send.service';
 import { BotRuleService } from '../rule/bot-rule.service';
-import { BotToolSessionService } from '../command/bot-tool-session.service';
 import { BotChatHistoryService } from '../message/bot-chat-history.service';
+import { BotArtifactService } from '../message/bot-artifact.service';
+import { BotConversationTaskService } from '../message/bot-conversation-task.service';
 
 @Injectable()
 export class BotRuleEngineService {
@@ -36,15 +37,17 @@ export class BotRuleEngineService {
     @Optional()
     private readonly sessionBehaviorService?: NapcatSessionBehaviorService,
     @Optional()
-    private readonly toolSessions?: BotToolSessionService,
-    @Optional()
     private readonly chatHistory?: BotChatHistoryService,
+    @Optional()
+    private readonly artifacts?: BotArtifactService,
+    @Optional() private readonly tasks?: BotConversationTaskService,
   ) {}
 
   /**
    * 通过 `permissionService.isBlocked` 判断输入是否满足函数约束。
    * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `channelId`、`rawEvent`、`selfId`、`targetId` 字段。
    * @param adapterContext - 当前 transport 已授权的插件键；传入后约束命令和插件执行范围。
+   * @throws 持久对话调度未就绪时停止派发，避免把后台任务降级为同步回复。
    */
   async handleMessage(
     message: BotNormalizedMessage,
@@ -107,11 +110,37 @@ export class BotRuleEngineService {
       );
     }
     if (pluginKeys.length === 0) return;
+    const conversationKeys = new Set(
+      this.pluginExecution.listConversationPlugins?.() || [],
+    );
+    const activeConversationKeys = pluginKeys.filter((key) =>
+      conversationKeys.has(key),
+    );
     const event = toBotPluginMessageEvent(message);
-    if (pluginKeys.includes('hermes-agent') && event.scope !== 'direct') {
+    if (
+      activeConversationKeys.length > 0 &&
+      event.imageUrls?.length &&
+      this.artifacts
+    ) {
+      try {
+        const saved = await this.artifacts.capture(message);
+        event.metadata.savedImages = saved.map(
+          ({ index, sha256, mimeType }) => ({
+            messageId: event.eventId,
+            index,
+            sha256,
+            mimeType,
+          }),
+        );
+      } catch {
+        this.logger.warn(`Bot图片归档失败: ${message.messageId}`);
+        event.metadata.imageArchiveFailed = true;
+      }
+    }
+    if (activeConversationKeys.length > 0 && event.scope !== 'direct') {
       // 未被点名的消息仍由消息库保存供同群后续读取，不触发推理或 Loading。
       if (event.metadata.mentioned !== true) {
-        pluginKeys = pluginKeys.filter((key) => key !== 'hermes-agent');
+        pluginKeys = pluginKeys.filter((key) => !conversationKeys.has(key));
       } else if (this.chatHistory) {
         event.metadata.recentMessages = (
           await this.chatHistory.read(message)
@@ -119,17 +148,26 @@ export class BotRuleEngineService {
       }
     }
     if (pluginKeys.length === 0) return;
-    let toolContextId = '';
-    let stopThinking: (() => void) | undefined;
     if (
-      pluginKeys.includes('hermes-agent') &&
+      activeConversationKeys.length > 0 &&
       !/^[!！/]/u.test(event.text.trim())
     ) {
-      toolContextId = this.toolSessions?.open(message, adapterContext) || '';
-      if (toolContextId) event.metadata.toolContextId = toolContextId;
+      if (!this.tasks) throw new Error('持久对话调度未就绪');
+      await this.tasks.wakePending(message, event);
+      for (const key of pluginKeys.filter((item) =>
+        conversationKeys.has(item),
+      )) {
+        await this.tasks.enqueue(
+          message,
+          event,
+          key,
+          adapterContext?.startThinking,
+        );
+      }
+      pluginKeys = pluginKeys.filter((key) => !conversationKeys.has(key));
+      if (pluginKeys.length === 0) return;
     }
     try {
-      if (toolContextId) stopThinking = adapterContext?.startThinking?.();
       const result = await this.pluginExecution.dispatchEvent({
         event,
         eventKey: 'message',
@@ -189,9 +227,6 @@ export class BotRuleEngineService {
         'Bot 插件事件处理失败',
       );
       this.logger.warn(`Bot 插件事件处理失败: ${errorMessage}`);
-    } finally {
-      if (toolContextId) this.toolSessions?.close(toolContextId);
-      stopThinking?.();
     }
   }
 

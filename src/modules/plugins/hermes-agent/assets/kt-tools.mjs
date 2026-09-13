@@ -10,6 +10,109 @@ const schema = (properties, required = []) => ({
 });
 export const tools = [
   {
+    name: 'kt_plan_check',
+    description:
+      '对基于已持有内容或指定攻略的配置做结构化一致性核对：按游戏/地区/版本/单人多人/关卡比较已读来源，检查方案是否用了未观察到的持有项、未确认识别或错误数量。先读取原始消息/图片/网页，传真实来源引用；本工具不替代事实核验，不保证通关。返回每个冲突，支持修正后复核。',
+    inputSchema: schema(
+      {
+        scope: {
+          type: 'object',
+          properties: Object.fromEntries(
+            ['game', 'region', 'version', 'mode', 'stage'].map((key) => [
+              key,
+              { type: 'string' },
+            ]),
+          ),
+          required: ['game'],
+          additionalProperties: false,
+        },
+        inventory: {
+          type: 'array',
+          maxItems: 300,
+          items: schema(
+            {
+              name: { type: 'string' },
+              basis: { enum: ['message', 'image'] },
+              reference: { type: 'string' },
+              confirmed: { type: 'boolean' },
+            },
+            ['name', 'basis', 'reference', 'confirmed'],
+          ),
+        },
+        sources: {
+          type: 'array',
+          maxItems: 40,
+          items: schema(
+            {
+              id: { type: 'string' },
+              reference: { type: 'string' },
+              scope: { type: 'object' },
+            },
+            ['id', 'reference', 'scope'],
+          ),
+        },
+        plans: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 20,
+          items: schema(
+            {
+              name: { type: 'string' },
+              items: {
+                type: 'array',
+                maxItems: 100,
+                items: { type: 'string' },
+              },
+              sourceIds: { type: 'array', items: { type: 'string' } },
+            },
+            ['name', 'items', 'sourceIds'],
+          ),
+        },
+        requiredCount: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      ['scope', 'inventory', 'sources', 'plans'],
+    ),
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'kt_video_read',
+    description:
+      '从Bilibili或YouTube公开视频读取真实画面。传url及最多8个秒级timestamps；省略时间时抽取四个分散时间点。返回带视频来源和时间的图片，仅代表已抽取画面，不含音频和其他时段，不能把简介或少量抽帧当成看完整视频。需要连贯动作时在相关区间密集选点继续读取。',
+    inputSchema: schema(
+      {
+        url: { type: 'string', maxLength: 2048 },
+        timestamps: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          items: { type: 'number', minimum: 0 },
+        },
+      },
+      ['url'],
+    ),
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'kt_tasks_list',
+    description:
+      '读取当前聊天最近后台任务的真实进度、原始消息、推理完成时间和投递状态。运行中不等于失败，推理完成不等于已发送，uncertain不得当作未执行而重复操作。',
+    inputSchema: schema({}),
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'kt_chat_image',
+    description:
+      '读取当前聊天历史消息中的真实图片字节。先从kt_chat_history的images取得messageId和index，再调用本工具；图片来自NAS私有持久存储，临时QQ链接过期后仍可读取，不能跨群。返回图片而非占位文字。',
+    inputSchema: schema(
+      {
+        messageId: { type: 'string', minLength: 1, maxLength: 255 },
+        index: { type: 'integer', minimum: 0, maximum: 7 },
+      },
+      ['messageId'],
+    ),
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: 'qqbot_platform_api',
     description:
       '由当前QQ账号的官方SDK鉴权读取本会话资料。支持GET /users/@me；频道会话还可读取当前guild/channel的资料、成员、权限、日程与帖子。群聊不是频道，不能拿群OpenID调用/guilds。写操作使用已授权的消息、提醒和命令工具。',
@@ -45,6 +148,13 @@ export const tools = [
         operation: { type: 'string', enum: ['create', 'list', 'delete'] },
         text: { type: 'string', maxLength: 1200 },
         dailyAt: { type: 'string' },
+        variants: {
+          type: 'array',
+          maxItems: 24,
+          items: { type: 'string', minLength: 1, maxLength: 1200 },
+          description:
+            '用户要求每次换一句时提供2至24条符合当前人格的不同提醒正文，到期按天轮换；目标和时间不变，重试不换句。普通固定提醒省略或传空数组。',
+        },
         platformId: {
           type: 'string',
           maxLength: 64,
@@ -238,13 +348,15 @@ export async function callCommand(name, args, meta, env = process.env) {
   let action = 'list';
   if (name === 'kt_command_run') action = 'run';
   if (name === 'kt_chat_history') action = 'history';
+  if (name === 'kt_chat_image') action = 'image';
+  if (name === 'kt_tasks_list') action = 'tasks';
   if (name === 'kt_chat_mention') action = 'mention';
   if (name === 'kt_reminder') action = 'reminder';
   if (name === 'qqbot_platform_api') action = 'platform_api';
   const response = await fetch(env.KT_BOT_API_URL, {
     method: 'POST',
     redirect: 'error',
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(180000),
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
@@ -252,7 +364,9 @@ export async function callCommand(name, args, meta, env = process.env) {
     body: JSON.stringify({ ...args, action, contextId }),
   });
   const body = await response.text();
-  if (Buffer.byteLength(body) > 256 * 1024)
+  let maximum = 256 * 1024;
+  if (name === 'kt_chat_image') maximum = 6 * 1024 * 1024;
+  if (Buffer.byteLength(body) > maximum)
     throw new Error('命令结果过大，请缩小查询范围');
   const parsed = JSON.parse(body);
   if (!response.ok) throw new Error(parsed.error || '命令工具请求被拒绝');
@@ -285,6 +399,19 @@ export async function handle(request, index) {
   try {
     const { name, arguments: args = {}, _meta: meta } = request.params || {};
     let result;
+    if (name === 'kt_plan_check') {
+      const { checkPlan } = await import('./kt-plan-check.mjs');
+      return {
+        ...base,
+        result: {
+          content: [{ type: 'text', text: JSON.stringify(checkPlan(args)) }],
+        },
+      };
+    }
+    if (name === 'kt_video_read') {
+      const { readVideo } = await import('./kt-video.mjs');
+      return { ...base, result: { content: await readVideo(args) } };
+    }
     if (name === 'kt_knowledge_search') result = search(index, args.query);
     else if (name === 'kt_knowledge_read') result = readDocument(index, args);
     else if (
@@ -292,6 +419,8 @@ export async function handle(request, index) {
         'kt_commands_list',
         'kt_command_run',
         'kt_chat_history',
+        'kt_chat_image',
+        'kt_tasks_list',
         'kt_chat_mention',
         'kt_reminder',
         'qqbot_platform_api',
@@ -299,6 +428,18 @@ export async function handle(request, index) {
     )
       result = await callCommand(name, args, meta);
     else throw new Error('未知工具');
+    if (name === 'kt_chat_image') {
+      const { data, mimeType, ...source } = result;
+      return {
+        ...base,
+        result: {
+          content: [
+            { type: 'text', text: JSON.stringify(source) },
+            { type: 'image', mimeType, data },
+          ],
+        },
+      };
+    }
     return {
       ...base,
       result: { content: [{ type: 'text', text: JSON.stringify(result) }] },

@@ -20,7 +20,11 @@ const message = {
 
 describe('Bot conversation tool authorization', () => {
   const permissions = { isBlocked: jest.fn(), isAllowed: jest.fn() };
-  const commands = { listForTools: jest.fn(), executeForTools: jest.fn() };
+  const commands = {
+    listForTools: jest.fn(),
+    executeForTools: jest.fn(),
+    isReadOnlyForTools: jest.fn(),
+  };
   const history = { read: jest.fn(), requireMember: jest.fn() };
   const reminders = { manage: jest.fn() };
   const send = { sendText: jest.fn() };
@@ -44,7 +48,7 @@ describe('Bot conversation tool authorization', () => {
     const refreshPluginKeys = jest
       .fn()
       .mockResolvedValue(['hermes-agent', 'status']);
-    const id = service.open(message, {
+    const id = service.open(message, 'hermes-agent', {
       pluginKeys: ['old'],
       refreshPluginKeys,
     });
@@ -65,7 +69,7 @@ describe('Bot conversation tool authorization', () => {
   });
 
   it('coalesces concurrent identical executions and rechecks revoked permissions', async () => {
-    const id = service.open(message);
+    const id = service.open(message, 'hermes-agent');
     const input = { action: 'run', commandId: '1', text: '/status' };
     await Promise.all([service.call(id, input), service.call(id, input)]);
     expect(commands.executeForTools).toHaveBeenCalledTimes(1);
@@ -74,13 +78,13 @@ describe('Bot conversation tool authorization', () => {
   });
 
   it('rejects expired, closed and unknown contexts before dispatching', async () => {
-    const id = service.open(message);
+    const id = service.open(message, 'hermes-agent');
     service.close(id);
     await expect(service.call(id, { action: 'list' })).rejects.toThrow('失效');
     await expect(service.call('unknown', { action: 'list' })).rejects.toThrow(
       '失效',
     );
-    const expiring = service.open(message);
+    const expiring = service.open(message, 'hermes-agent');
     const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 1_050_001);
     await expect(service.call(expiring, { action: 'list' })).rejects.toThrow(
       '失效',
@@ -90,7 +94,7 @@ describe('Bot conversation tool authorization', () => {
   });
 
   it('retains live tool authorization after a long queued research turn and revokes it on completion', async () => {
-    const id = service.open(message);
+    const id = service.open(message, 'hermes-agent');
     const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 500_000);
     try {
       await expect(service.call(id, { action: 'list' })).resolves.toEqual([
@@ -118,7 +122,7 @@ describe('Bot conversation tool authorization', () => {
     try {
       const url = `${await app.getUrl()}/bot/tools/call`;
       const readPlatformApi = jest.fn().mockResolvedValue({ id: 'bot-1' });
-      const id = service.open(message, {
+      const id = service.open(message, 'hermes-agent', {
         pluginKeys: ['hermes-agent'],
         readPlatformApi,
       });
@@ -209,7 +213,7 @@ describe('Bot conversation tool authorization', () => {
 
   it('rejects injected interaction tags and retains the OneBot mention protocol', async () => {
     history.requireMember.mockResolvedValue('member');
-    const official = service.open(message);
+    const official = service.open(message, 'hermes-agent');
     for (const text of [
       '<@other>',
       '<qqbot-at-user id="other" />',
@@ -225,7 +229,10 @@ describe('Bot conversation tool authorization', () => {
       ).rejects.toThrow('正文无效');
     }
     expect(send.sendText).not.toHaveBeenCalled();
-    const onebot = service.open({ ...message, connectionMode: 'reverse-ws' });
+    const onebot = service.open(
+      { ...message, connectionMode: 'reverse-ws' },
+      'hermes-agent',
+    );
     await service.call(onebot, {
       action: 'mention',
       platformId: 'member',
@@ -237,14 +244,14 @@ describe('Bot conversation tool authorization', () => {
   });
 
   it('rejects revoked plugin binding and closes an in-flight mention before sending', async () => {
-    const id = service.open(message, {
+    const id = service.open(message, 'hermes-agent', {
       pluginKeys: ['hermes-agent'],
       refreshPluginKeys: async () => [],
     });
     await expect(service.call(id, { action: 'history' })).rejects.toThrow(
       '授权已撤销',
     );
-    const active = service.open(message);
+    const active = service.open(message, 'hermes-agent');
     history.requireMember.mockImplementation(async () => {
       service.close(active);
       return 'member';

@@ -1,4 +1,5 @@
 import type { FflogsApplication } from '../application/fflogs-application';
+import { parseReportInput } from '../application/fflogs-report';
 
 export const fflogsCharacterSummaryHandlerName = 'getCharacterSummary';
 
@@ -13,6 +14,7 @@ export function createFflogsCharacterSummaryOperation(
   return {
     cacheTtlMs: 60_000,
     execute: async (input: Record<string, any>) => {
+      if (parseReportInput(input)) return application.getReport(input);
       const raw = `${input.raw ?? input.text ?? ''}`.trim();
       const parsed = await (async () => {
         if (raw) {
@@ -20,12 +22,47 @@ export function createFflogsCharacterSummaryOperation(
         }
         return {};
       })();
-      return application.getCharacterSummary(
-        removeEmpty({ ...input, ...parsed }),
-      );
+      const values = removeEmpty({ ...input, ...parsed });
+      const missing = [];
+      if (!values.characterName && !values.character) missing.push('角色名');
+      if (!values.serverSlug && !values.server) missing.push('服务器名');
+      if (missing.length)
+        return {
+          status: 'requires_input',
+          missing,
+          replyText: `还缺少：${missing.join('、')}。完整格式：/fflogs 角色名@服务器；报告查询：/fflogs report=报告链接。`,
+        };
+      return application.getCharacterSummary(values);
     },
     inputSchema: {
+      'x-agent-read-only': true,
       properties: {
+        raw: {
+          description:
+            '完整命令参数：角色名@服务器，或 report=报告链接 fight=编号 source=角色ID type=Casts start=毫秒游标',
+          type: 'string',
+        },
+        report: { description: 'FFLogs报告代码或官方报告链接', type: 'string' },
+        fight: {
+          description: '报告中真实战斗ID，省略时列出战斗',
+          type: 'integer',
+        },
+        source: { description: '报告中真实角色ID', type: 'integer' },
+        type: {
+          enum: [
+            'Casts',
+            'Deaths',
+            'DamageDone',
+            'Healing',
+            'Buffs',
+            'Debuffs',
+            'All',
+          ],
+        },
+        start: {
+          description: '从上一页返回的nextStart继续，单位毫秒',
+          type: 'number',
+        },
         characterName: { description: '角色名', type: 'string' },
         encounter: {
           description:
@@ -53,7 +90,11 @@ export function createFflogsCharacterSummaryOperation(
           type: 'number',
         },
       },
-      required: ['characterName', 'serverSlug'],
+      anyOf: [
+        { required: ['raw'] },
+        { required: ['report'] },
+        { required: ['characterName', 'serverSlug'] },
+      ],
       type: 'object',
     },
     outputSchema: {

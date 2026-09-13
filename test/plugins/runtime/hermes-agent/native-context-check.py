@@ -57,7 +57,7 @@ async def verify_stdio():
         async with ClientSession(read, write) as session:
             await session.initialize()
             listing = await session.list_tools()
-            assert len(listing.tools) == 4
+            assert len(listing.tools) == 12
             result = await session.call_tool("kt_knowledge_search", arguments={"query": "Hermes 人格"})
             assert not result.is_error
             payload = json.loads(result.content[0].text)

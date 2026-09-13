@@ -32,6 +32,9 @@ import { BotMessage } from '@/modules/bot-adapter/core/infrastructure/persistenc
 import { BotMessageService } from '@/modules/bot-adapter/core/application/message/bot-message.service';
 import { BotChatHistoryService } from './application/message/bot-chat-history.service';
 import { BotReminderService } from './application/message/bot-reminder.service';
+import { BotArtifactService } from './application/message/bot-artifact.service';
+import { BotTaskStoreService } from './application/message/bot-task-store.service';
+import { BotConversationTaskService } from './application/message/bot-conversation-task.service';
 import { BotBusService } from '@/modules/bot-adapter/core/infrastructure/integration/bus/bot-bus.service';
 import { BotAllowlist } from '@/modules/bot-adapter/core/infrastructure/persistence/permission/bot-allowlist.entity';
 import { BotBlocklist } from '@/modules/bot-adapter/core/infrastructure/persistence/permission/bot-blocklist.entity';
@@ -78,6 +81,9 @@ export const BOT_CORE_CONTROLLERS = [
 ];
 
 export const BOT_CORE_PROVIDERS = [
+  BotTaskStoreService,
+  BotConversationTaskService,
+  BotArtifactService,
   BotChatHistoryService,
   BotReminderService,
   BotToolSessionService,

@@ -4,11 +4,11 @@ export const MEDIA_GOVERNANCE_PRIVATE_BUCKET_DEFAULT =
   'kt-media-governance-private';
 
 /**
- * 校验`bucketName`、`configuredMediaDescriptorBucket`是否满足通用资源存储桶约束，并拒绝不合法输入。
- * @param bucketName - 决定通用资源存储桶内容、边界或目标的 `bucketName` 值。
- * @param configuredMediaDescriptorBucket - 决定通用资源存储桶内容、边界或目标的 `configuredMediaDescriptorBucket` 值；为空时采用 `MEDIA_GOVERNANCE_PRIVATE_BUCKET_DEFAULT` 作为兜底。
- * @returns 通用资源存储桶。
- * @throws 当 `bucketName === privateBucket` 成立时拒绝当前输入并抛出 `BadRequestException`。
+ * 阻止通用资源入口访问媒体治理和Bot聊天的私有桶，避免绕过所属领域权限。
+ * @param bucketName - 通用资源请求指定的存储桶。
+ * @param configuredMediaDescriptorBucket - 媒体治理配置的私有桶；省略时使用默认私有桶。
+ * @returns 通过领域边界检查的通用存储桶名称。
+ * @throws 请求指定任一受保护私有桶时拒绝访问。
  */
 export function assertGenericAssetBucket(
   bucketName: string,
@@ -16,7 +16,10 @@ export function assertGenericAssetBucket(
 ) {
   const privateBucket =
     configuredMediaDescriptorBucket || MEDIA_GOVERNANCE_PRIVATE_BUCKET_DEFAULT;
-  if (bucketName === privateBucket) {
+  if (
+    bucketName === privateBucket ||
+    bucketName === 'kt-bot-artifacts-private'
+  ) {
     throw new BadRequestException('该 Bucket 只能通过所属领域服务访问');
   }
   return bucketName;

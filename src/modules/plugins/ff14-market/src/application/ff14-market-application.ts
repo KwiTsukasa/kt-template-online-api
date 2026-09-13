@@ -10,6 +10,7 @@ export class Ff14MarketApplication {
    * @returns 针对FF14 市场插件。
    */
   async getPrice(input: Record<string, any>) {
+    if (input.mode === 'stats') return this.client.getStatistics(input);
     return this.client.getPrice(input);
   }
 
@@ -31,6 +32,12 @@ export class Ff14MarketApplication {
    * @returns 条目。
    */
   async resolveItem(input: Record<string, any>) {
+    const raw = String(input.raw || input.text || input.item || '');
+    if (raw.startsWith('search='))
+      return this.client.findItems({
+        item: raw.slice(7),
+        language: input.language,
+      });
     return this.client.resolveItem(input);
   }
 

@@ -56,6 +56,8 @@ export type BotPluginReplyIntent =
 export type BotPluginEventResult = {
   handled: boolean;
   replies: BotPluginReplyIntent[];
+  continuation?: { state: Record<string, unknown>; delayMs: number };
+  failureCode?: string;
 };
 
 export type BotPluginEventDispatchInput = {
@@ -118,6 +120,7 @@ export type BotIntegrationPlugin = {
 };
 
 export interface BotPluginProtocol {
+  listConversationPlugins?(): string[];
   dispatchEvent(
     input: BotPluginEventDispatchInput,
   ): Promise<BotPluginEventResult>;

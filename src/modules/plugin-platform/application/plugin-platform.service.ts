@@ -14,10 +14,7 @@ import {
   type BotPluginSummary as PluginSummary,
   type BotPluginTriggerMode as PluginTriggerMode,
 } from '@/modules/plugin-platform/contract/plugin-protocol';
-import {
-  parsePluginManifest,
-  type PluginManifest,
-} from '../domain/manifest';
+import { parsePluginManifest, type PluginManifest } from '../domain/manifest';
 import type {
   PluginRuntimeEvent as PluginWorkerRuntimeEvent,
   PluginWorkerRuntime,
@@ -46,9 +43,7 @@ import {
   type PluginRuntimeStatus,
 } from '../infrastructure/persistence';
 
-export const PLUGIN_RUNTIME_FACTORY = Symbol(
-  'PLUGIN_RUNTIME_FACTORY',
-);
+export const PLUGIN_RUNTIME_FACTORY = Symbol('PLUGIN_RUNTIME_FACTORY');
 
 export type PluginRuntimeFactory = {
   create(
@@ -119,9 +114,7 @@ type PersistedPluginRuntimeState = {
 };
 
 @Injectable()
-export class PluginPlatformService
-  implements OnModuleInit, BotPluginProtocol
-{
+export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
   private readonly activeWorkers = new Map<string, PluginWorkerRuntime>();
   private readonly activeWorkerContexts = new Map<
     string,
@@ -235,7 +228,8 @@ export class PluginPlatformService
   async listPlugins(): Promise<PluginSummary[]> {
     const summaries = await this.listPluginSummaries();
     const seen = new Set(summaries.map((summary) => summary.key));
-    for (const definition of this.eventPluginRegistry?.listDefinitions() || []) {
+    for (const definition of this.eventPluginRegistry?.listDefinitions() ||
+      []) {
       if (seen.has(definition.key)) continue;
       summaries.push({
         description: definition.description,
@@ -248,6 +242,26 @@ export class PluginPlatformService
       seen.add(definition.key);
     }
     return summaries;
+  }
+
+  /**
+   * 从已启用工作线程的公开事件清单读取持久对话能力，不按插件名称推断执行方式。
+   * @returns 当前可接收持久对话任务的插件键，账号绑定仍由调用方核对。
+   */
+  listConversationPlugins(): string[] {
+    return [
+      ...new Set(
+        [...this.activeWorkerContexts.values()]
+          .filter((context) =>
+            context.manifest.events.some(
+              (event) =>
+                event.eventName === 'message' &&
+                event.conversationMode === 'persistent',
+            ),
+          )
+          .map((context) => context.pluginKey),
+      ),
+    ];
   }
 
   /**
@@ -563,14 +577,17 @@ export class PluginPlatformService
   }
 
   /**
-   * 通过 `activeWorkerContexts.values` 遍历或定位集合元素。
-   * @param input - 用于事件的结构化输入，包含 `eventKey`、`message` 字段。
-   * @returns 事件。
+   * 将事件交给获准的运行态插件，汇总回复，并保留单插件后台续执行和终止失败结果。
+   * @param input - 真实消息信封、事件名和允许参与处理的插件列表。
+   * @returns 平台无关的回复意图及可选后台任务状态。
+   * @throws 多个插件同时参与后台续执行时拒绝混合它们的任务状态。
    */
   async dispatchEvent(
     input: BotPluginEventDispatchInput,
   ): Promise<BotPluginEventResult> {
     let handled = false;
+    let continuation: BotPluginEventResult['continuation'];
+    let failureCode: string | undefined;
     const replies: BotPluginEventResult['replies'] = [];
     const allowedPluginKeys = new Set(input.pluginKeys);
     for (const workerContext of this.activeWorkerContexts.values()) {
@@ -591,18 +608,25 @@ export class PluginPlatformService
           const normalized = this.normalizeEventResult(result);
           handled = normalized.handled || handled;
           replies.push(...normalized.replies);
+          if (normalized.failureCode) failureCode = normalized.failureCode;
+          if (normalized.continuation) {
+            if (input.pluginKeys.length !== 1 || continuation)
+              throw new Error('后台事件必须由单个插件处理');
+            continuation = normalized.continuation;
+          }
         } finally {
           await this.flushWorkerRuntimeEvents(workerContext);
         }
       }
     }
-    return { handled, replies };
+    return { handled, replies, continuation, failureCode };
   }
 
   /**
    * 将插件事件返回值收敛为平台无关的 handled 与回复意图，兼容旧插件布尔返回但拒绝未知副作用结构。
    * @param result - 插件工作线程返回的未知事件结果。
    * @returns 可由任意 Bot 适配器消费的标准事件结果。
+   * @throws 续执行状态、延迟范围或终止失败标识不符合插件契约时拒绝接收。
    */
   private normalizeEventResult(result: unknown): BotPluginEventResult {
     if (result === true) return { handled: true, replies: [] };
@@ -610,6 +634,38 @@ export class PluginPlatformService
       return { handled: false, replies: [] };
     }
     const record = result as Record<string, unknown>;
+    let failureCode: string | undefined;
+    if (record.failureCode !== undefined) {
+      if (
+        typeof record.failureCode !== 'string' ||
+        !/^[a-z][a-z0-9_]{1,80}$/u.test(record.failureCode) ||
+        record.continuation
+      )
+        throw new Error('事件终止失败标识无效');
+      failureCode = record.failureCode;
+    }
+    let continuation: BotPluginEventResult['continuation'];
+    if (record.continuation && typeof record.continuation === 'object') {
+      const pending = record.continuation as Record<string, unknown>;
+      if (
+        !pending.state ||
+        typeof pending.state !== 'object' ||
+        Array.isArray(pending.state)
+      )
+        throw new Error('后台事件续执行状态必须是对象');
+      if (JSON.stringify(pending.state).length > 16000)
+        throw new Error('后台事件续执行状态超过大小上限');
+      if (
+        !Number.isInteger(pending.delayMs) ||
+        Number(pending.delayMs) < 1000 ||
+        Number(pending.delayMs) > 60000
+      )
+        throw new Error('后台事件续执行状态无效');
+      continuation = {
+        state: pending.state as Record<string, unknown>,
+        delayMs: Number(pending.delayMs),
+      };
+    }
     const replies: BotPluginEventResult['replies'] = [];
     if (Array.isArray(record.replies)) {
       record.replies.forEach((candidate) => {
@@ -657,6 +713,8 @@ export class PluginPlatformService
     return {
       handled: record.handled === true || replies.length > 0,
       replies,
+      continuation,
+      failureCode,
     };
   }
 
@@ -1229,9 +1287,7 @@ export class PluginPlatformService
    * @param pluginKey - 用于读取或更新启用的工作进程插件摘要的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
    * @returns 按输入顺序得到的启用的工作进程插件摘要列表；没有匹配项时为空数组。
    */
-  private listActiveWorkerPluginSummaries(
-    pluginKey?: string,
-  ): PluginSummary[] {
+  private listActiveWorkerPluginSummaries(pluginKey?: string): PluginSummary[] {
     return this.listActiveWorkerCommandContexts(pluginKey).map(
       (workerContext) => ({
         description: workerContext.manifest.description,
@@ -1290,9 +1346,7 @@ export class PluginPlatformService
    * @param status - 决定插件健康状态内容、边界或目标的 `status` 值。
    * @returns 当前状态对应的插件健康状态，取值为 `'healthy'`。
    */
-  private normalizePluginHealthStatus(
-    status: unknown,
-  ): PluginHealth['status'] {
+  private normalizePluginHealthStatus(status: unknown): PluginHealth['status'] {
     if (status === 'degraded' || status === 'offline' || status === 'healthy') {
       return status;
     }
@@ -1505,9 +1559,7 @@ export class PluginPlatformService
    * 按`installation`停止Workers安装记录并清理该入口拥有的运行态资源；从 `getPluginKey` 读取Workers安装记录。
    * @param installation - 用于Workers安装记录的领域对象，包含 `pluginId`、`id` 字段。
    */
-  private async stopWorkersForInstallation(
-    installation: PluginInstallation,
-  ) {
+  private async stopWorkersForInstallation(installation: PluginInstallation) {
     const pluginKey = await this.getPluginKey(installation.pluginId);
     const installationIds = new Set([installation.id]);
     const pluginWorkerContext = this.activeWorkersByPluginKey.get(pluginKey);

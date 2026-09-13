@@ -1,0 +1,34 @@
+diff --git a/gateway/platforms/api_server_runs.py b/gateway/platforms/api_server_runs.py
+--- a/gateway/platforms/api_server_runs.py
++++ b/gateway/platforms/api_server_runs.py
+@@ -695,6 +695,7 @@
+     # Background task outlives the HTTP response (and thus the middleware
+     # profile scope). Capture now and re-enter inside the task/executor.
+     request_profile = _api_request_profile.get()
++    kt_tool_context = _api_server._kt_tool_context.get()
+     request_browser_control_principal = (
+         _api_request_browser_control_principal.get()
+     )
+@@ -717,9 +718,13 @@
+                 )
+                 return
+             with self._profile_scope(request_profile):
++                kt_prompt = ephemeral_system_prompt or ""
++                if kt_tool_context:
++                    from pathlib import Path as KtPath
++                    kt_prompt += "\n\n" + KtPath("/opt/kt-tools/persona-identity.md").read_text(encoding="utf-8")
+                 agent = self._create_agent(
+-                    ephemeral_system_prompt=ephemeral_system_prompt,
++                    ephemeral_system_prompt=kt_prompt,
+                     session_id=session_id,
+                     stream_delta_callback=_text_cb,
+                     tool_progress_callback=event_cb,
+                     gateway_session_key=gateway_session_key,
+@@ -801,6 +806,7 @@
+                             chat_id=session_id or "",
+                             session_key=approval_session_key,
+                             session_id=session_id or "",
++                            message_id=kt_tool_context,
+                             browser_control_principal=(
+                                 request_browser_control_principal
+                             ),

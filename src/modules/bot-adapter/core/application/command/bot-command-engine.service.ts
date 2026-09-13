@@ -63,9 +63,35 @@ export class BotCommandEngineService {
           '使用返回的前缀与别名组成完整命令，后接空格及原始参数。inputSchema描述业务字段，不表示聊天命令接受JSON。',
         defaults: command.defaultParams,
         inputSchema: operation.inputSchema,
+        readOnly: operation.inputSchema?.['x-agent-read-only'] === true,
       });
     }
     return result;
+  }
+
+  /**
+   * 从当前获准的插件契约判断命令是否只读，不接受模型自行声明读写权限。
+   * @param message - 工具绑定的真实发起人及会话。
+   * @param adapterContext - 当前适配器已刷新过的授权目录。
+   * @param commandId - 准备调用的在线命令标识。
+   * @returns 仅当当前启用操作显式声明只读且允许模型调用时为真。
+   */
+  async isReadOnlyForTools(
+    message: BotNormalizedMessage,
+    adapterContext: BotAdapterExecutionContext | undefined,
+    commandId: string,
+  ): Promise<boolean> {
+    const commands = await this.commandService.listEnabledForMessage(
+      message,
+      adapterContext,
+    );
+    const command = commands.find((item) => item.id === commandId);
+    if (!command) return false;
+    const operation = await this.pluginExecution.getOperationByCommand(command);
+    return (
+      operation?.inputSchema?.['x-agent-read-only'] === true &&
+      operation.inputSchema['x-agent-invocable'] !== false
+    );
   }
 
   /**

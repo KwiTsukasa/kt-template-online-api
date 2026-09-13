@@ -106,6 +106,10 @@ export class BotChatHistoryService {
         mentions: event.metadata.mentions,
         replyTo: event.metadata.replyTo,
         quote: event.metadata.quote,
+        images: (event.imageUrls || []).map((_url, index) => ({
+          messageId: event.eventId,
+          index,
+        })),
         text: row.messageText.slice(0, 4000),
         truncated: row.messageText.length > 4000,
       };

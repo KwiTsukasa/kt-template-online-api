@@ -122,6 +122,7 @@ export class BotSendService {
    * @returns 文本。
    */
   async sendText(params: {
+    deliveryId?: string;
     channelId?: string;
     guildId?: string;
     message: string;
@@ -137,6 +138,9 @@ export class BotSendService {
     }
 
     const { action, actionParams } = this.buildAction(params);
+    let audit: SendPipelineInput['audit'];
+    if (params.deliveryId)
+      audit = { deliveryId: params.deliveryId, attemptNumber: 1 };
     return this.sendWithAccount(account, {
       action,
       actionParams,
@@ -145,10 +149,29 @@ export class BotSendService {
       message: params.message,
       adapterReplyContext: params.adapterReplyContext,
       replyMessageId: params.replyMessageId,
-      strict: false,
+      strict: Boolean(params.deliveryId),
+      audit,
       targetId: params.targetId,
       targetType: params.targetType,
     });
+  }
+
+  /**
+   * 按持久任务的发送凭证回读日志，用于进程中断后核实消息是否已经送达。
+   * @param selfId - 原始任务绑定的 Bot 账号。
+   * @param deliveryId - 宿主生成的单次发送凭证。
+   * @returns 最近一次发送的真实记录，不存在时为空。
+   */
+  async readDelivery(selfId: string, deliveryId: string) {
+    return this.sendLogRepository
+      .createQueryBuilder('log')
+      .where('log.selfId = :selfId', { selfId })
+      .andWhere(
+        "JSON_UNQUOTE(JSON_EXTRACT(log.params, '$.messagePush.deliveryId')) = :deliveryId",
+        { deliveryId },
+      )
+      .orderBy('log.createTime', 'DESC')
+      .getOne();
   }
 
   /**

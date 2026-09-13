@@ -10,6 +10,13 @@ import {
 export type Ff14MarketPriceInput = {
   dataCenter?: string;
   hq?: boolean;
+  mode?: string;
+  items?: string;
+  category?: string;
+  searchCategory?: string;
+  days?: string;
+  date?: string;
+  metric?: string;
   item?: string;
   language?: string;
   raw: string;
@@ -85,6 +92,13 @@ export function parseFf14MarketPriceInput(
   }
 
   return {
+    mode: normalizeString(flags.get('mode')),
+    items: normalizeString(flags.get('items')),
+    category: normalizeString(flags.get('category')),
+    searchCategory: normalizeString(flags.get('searchCategory')),
+    days: normalizeString(flags.get('days')),
+    date: normalizeString(flags.get('date')),
+    metric: normalizeString(flags.get('metric')),
     dataCenter,
     hq: normalizeHq(flags.get('hq')),
     item,
@@ -129,12 +143,17 @@ function pickTrailingFf14Location(
       beforePrevious && isFf14RegionName(catalog, beforePrevious);
     return {
       dataCenter: previous,
-      item: positional.slice(0, (() => {
-        if (hasRegion) {
-          return -3;
-        }
-        return -2;
-      })()).join(' '),
+      item: positional
+        .slice(
+          0,
+          (() => {
+            if (hasRegion) {
+              return -3;
+            }
+            return -2;
+          })(),
+        )
+        .join(' '),
       region: (() => {
         if (hasRegion) {
           return beforePrevious;

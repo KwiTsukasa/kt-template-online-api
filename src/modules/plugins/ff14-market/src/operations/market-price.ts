@@ -22,6 +22,7 @@ export function createFf14MarketPriceOperation(
       return application.getPrice(removeEmpty({ ...input, ...parsed }));
     },
     inputSchema: {
+      'x-agent-read-only': true,
       properties: {
         dataCenter: { description: '大区名，如陆行鸟', type: 'string' },
         hq: { description: '是否只查 HQ', type: 'boolean' },

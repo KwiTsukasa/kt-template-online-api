@@ -20,6 +20,7 @@ type ReminderData = {
   sourcePluginKey: string;
   message: BotNormalizedMessage;
   text: string;
+  variants?: string[];
   platformId?: string;
   dueAt: string;
   repeat?: string;
@@ -89,7 +90,7 @@ export class BotReminderService
   }
 
   /**
-   * 提醒可单独指定 Redis，缺省时沿用现有队列基础设施连接而不依赖插件调度代码。
+   * 按提醒专用、插件队列、通用 Redis 的次序读取首个已配置值，不依赖插件调度代码。
    * @param field - Redis 主机、端口、数据库或认证字段。
    * @returns 第一项非空连接设置，全部缺失时返回空字符串。
    */
@@ -157,12 +158,14 @@ export class BotReminderService
           pattern: item.pattern,
           timezone: item.tz,
           text: item.template?.data?.text,
+          variants: item.template?.data?.variants || [],
           platformId: item.template?.data?.platformId,
         })),
         jobs: await Promise.all(
           jobs.map(async (job) => ({
             id: job.id,
             text: job.data.text,
+            variants: job.data.variants || [],
             platformId: job.data.platformId,
             dueAt: job.data.dueAt,
             status: await job.getState(),
@@ -188,6 +191,7 @@ export class BotReminderService
     const runAt = String(input.runAt || '');
     if (!text || text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))
       throw new Error('提醒正文应为1至1200字普通文本；真实提及请传platformId');
+    const variants = this.normalizeVariants(input.variants);
     let platformId: string | undefined;
     if (input.platformId !== undefined && input.platformId !== '') {
       if (message.messageType === 'private')
@@ -229,6 +233,7 @@ export class BotReminderService
       owner,
       sourcePluginKey,
       text,
+      variants,
       platformId,
       dueAt: dueAt.toISOString(),
       repeat,
@@ -269,6 +274,7 @@ export class BotReminderService
       status: 'scheduled',
       platformId,
       nextRunAt: dueAt.toISOString(),
+      variants,
       timezone: 'Asia/Shanghai',
       delivery:
         '执行时检查权限并记录发送结果；平台拒绝会记为失败，不冒充已送达',
@@ -305,7 +311,7 @@ export class BotReminderService
       !pluginKeys.includes(job.data.sourcePluginKey)
     )
       throw new Error('提醒来源插件绑定已撤销');
-    let text = job.data.text;
+    let text = this.occurrenceText(job);
     const platformId = job.data.platformId;
     if (platformId !== undefined) {
       if (
@@ -328,5 +334,50 @@ export class BotReminderService
       guildId: message.guildId,
       message: text,
     });
+  }
+
+  /**
+   * 校验可轮换文案，逐项拒绝内嵌提及标签，成员身份仍由独立字段控制。
+   * @param value - 创建提醒时提供的可选文案数组。
+   * @returns 去重后的文案；未指定时为空数组并保留固定正文。
+   * @throws 数量、类型、长度或内容不合法时拒绝保存提醒。
+   */
+  private normalizeVariants(value: unknown): string[] {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 24)
+      throw new Error('提醒轮换文案应为最多24条普通文本');
+    const result: string[] = [];
+    for (const item of value) {
+      if (
+        typeof item !== 'string' ||
+        !item.trim() ||
+        item.trim().length > 1200 ||
+        /\[CQ:|<(?:@|qqbot-)/iu.test(item)
+      )
+        throw new Error('每条提醒轮换文案应为1至1200字普通文本');
+      if (!result.includes(item.trim())) result.push(item.trim());
+    }
+    if (result.length === 1) throw new Error('轮换提醒至少需要两条不同文案');
+    return result;
+  }
+
+  /**
+   * 依据持久化计划时刻选择当次文案，同一天重试保持相同内容，不依赖进程内计数。
+   * @param job - 包含首次到期时间及本次计划时间的队列任务。
+   * @returns 本次应投递的普通文本，未配置轮换时返回固定正文。
+   */
+  private occurrenceText(job: Job<ReminderData>): string {
+    const variants = job.data.variants || [];
+    if (!variants.length) return job.data.text;
+    const first = Date.parse(job.data.dueAt);
+    const scheduled = Number(job.opts?.prevMillis);
+    if (
+      !job.data.repeat ||
+      !Number.isFinite(scheduled) ||
+      !Number.isFinite(first)
+    )
+      return variants[0];
+    const days = Math.max(0, Math.round((scheduled - first) / 86400000));
+    return variants[days % variants.length];
   }
 }

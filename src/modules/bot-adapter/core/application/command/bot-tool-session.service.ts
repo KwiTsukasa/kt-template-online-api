@@ -1,5 +1,8 @@
 import { Injectable, Optional } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { BotAdapterRegistry } from '@/modules/bot';
+import { BotAccountService } from '../account/bot-account.service';
+import { BotTaskStoreService } from '../message/bot-task-store.service';
 import type { BotNormalizedMessage } from '../../contract/bot.types';
 import type { BotAdapterExecutionContext } from '../../domain/bot-adapter-execution-context';
 import { BotPermissionService } from '../permission/bot-permission.service';
@@ -7,6 +10,7 @@ import { BotCommandEngineService } from './bot-command-engine.service';
 import { BotChatHistoryService } from '../message/bot-chat-history.service';
 import { BotReminderService } from '../message/bot-reminder.service';
 import { BotSendService } from '../send/bot-send.service';
+import { BotArtifactService } from '../message/bot-artifact.service';
 
 type ToolTurn = {
   message: BotNormalizedMessage;
@@ -14,6 +18,8 @@ type ToolTurn = {
   expiresAt: number;
   calls: Map<string, Promise<unknown>>;
   closed: boolean;
+  durableId?: string;
+  sourcePluginKey: string;
 };
 
 @Injectable()
@@ -26,16 +32,22 @@ export class BotToolSessionService {
     @Optional() private readonly history?: BotChatHistoryService,
     @Optional() private readonly reminders?: BotReminderService,
     @Optional() private readonly send?: BotSendService,
+    @Optional() private readonly artifacts?: BotArtifactService,
+    @Optional() private readonly store?: BotTaskStoreService,
+    @Optional() private readonly adapters?: BotAdapterRegistry,
+    @Optional() private readonly accounts?: BotAccountService,
   ) {}
 
   /**
    * 为已授权的真实入站消息建立短期工具上下文，不把平台身份交给模型选择。
    * @param message - 经过去重与权限检查的原始消息。
+   * @param sourcePluginKey - 宿主确认的当前调用插件。
    * @param adapterContext - 当前适配器的授权刷新入口。
    * @returns 仅在本次处理期间有效的随机上下文标识。
    */
   open(
     message: BotNormalizedMessage,
+    sourcePluginKey: string,
     adapterContext?: BotAdapterExecutionContext,
   ) {
     for (const [key, turn] of this.turns) {
@@ -44,6 +56,7 @@ export class BotToolSessionService {
     const id = randomUUID();
     this.turns.set(id, {
       message,
+      sourcePluginKey,
       adapterContext,
       // 覆盖事件执行 920 秒及宿主队列 120 秒；完成时仍立即撤销，每次工具调用重查权限。
       expiresAt: Date.now() + 1_050_000,
@@ -64,6 +77,122 @@ export class BotToolSessionService {
   }
 
   /**
+   * 将真实发起人和固定过期时间持久保存，后台任务重启不更换工具授权标识。
+   * @param id - 入队时生成的随机标识。
+   * @param message - 已通过入站权限检查的消息。
+   * @param expiresAt - 本次任务的最晚有效时间，恢复时不得延长。
+   * @param sourcePluginKey - 宿主确认的调用插件，随任务持久化。
+   * @throws 持久存储不可用时拒绝启动后台工具调用。
+   */
+  async openDurable(
+    id: string,
+    message: BotNormalizedMessage,
+    expiresAt: number,
+    sourcePluginKey: string,
+  ): Promise<void> {
+    if (!this.store) throw new Error('后台工具授权存储未就绪');
+    await this.store.write(
+      `turn:${id}`,
+      { message, expiresAt, sourcePluginKey },
+      Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000)),
+    );
+  }
+
+  /**
+   * 在后台推理结束后撤销持久授权，已完成的工具结果仍保留供审计。
+   * @param id - 需要撤销的固定任务授权。
+   */
+  async closeDurable(id: string): Promise<void> {
+    this.close(id);
+    await this.store?.write(`turn:${id}`, { expiresAt: 0 }, 86400);
+  }
+
+  /**
+   * 按持久任务恢复真实发起人，并通过适配器重新绑定实时权限和会话读取能力。
+   * @param id - Hermes 元数据携带的随机授权标识。
+   * @returns 尚未过期的工具上下文，不存在或已撤销时为空。
+   */
+  private async restore(id: string): Promise<ToolTurn | undefined> {
+    if (!this.store) return undefined;
+    const saved = await this.store.read(`turn:${id}`);
+    if (
+      !saved?.message ||
+      !saved.sourcePluginKey ||
+      saved.expiresAt <= Date.now()
+    )
+      return undefined;
+    const message = {
+      ...saved.message,
+      eventTime: new Date(saved.message.eventTime),
+    } as BotNormalizedMessage;
+    let refreshPluginKeys = async () =>
+      this.accounts?.getBoundEventPluginKeys(message.selfId) || [];
+    let readPlatformApi: BotAdapterExecutionContext['readPlatformApi'];
+    if (message.connectionMode !== 'reverse-ws') {
+      const adapter = this.adapters?.require('tencent');
+      refreshPluginKeys = async () =>
+        adapter?.listBoundPluginKeys?.(message.selfId) || [];
+      if (adapter?.readConversationApi)
+        readPlatformApi = (input) =>
+          adapter.readConversationApi!({
+            ...input,
+            connectionKey: message.selfId,
+            targetKey: message.targetId,
+            guildId: message.guildId,
+            channelId: message.channelId,
+          });
+    }
+    const turn: ToolTurn = {
+      message,
+      expiresAt: saved.expiresAt,
+      calls: new Map(),
+      closed: false,
+      durableId: id,
+      sourcePluginKey: saved.sourcePluginKey,
+      adapterContext: {
+        pluginKeys: await refreshPluginKeys(),
+        refreshPluginKeys,
+        readPlatformApi,
+      },
+    };
+    const existing = this.turns.get(id);
+    if (existing) return existing;
+    this.turns.set(id, turn);
+    return turn;
+  }
+
+  /**
+   * 为后台任务的副作用保存执行凭证；中断时返回待核实状态而不重复操作。
+   * @param turn - 已验证的消息授权。
+   * @param key - 操作参数序列化后的键。
+   * @param execute - 首次占有执行权后运行的实际操作。
+   * @returns 首次操作或之前保存的真实结果。
+   * @throws 前次操作结果未知或已失败时要求核实，防止重复副作用。
+   */
+  private async durableCall(
+    turn: ToolTurn,
+    key: string,
+    execute: () => Promise<unknown>,
+  ): Promise<unknown> {
+    if (!turn.durableId || !this.store) return execute();
+    const storageKey = `call:${turn.durableId}:${createHash('sha256').update(key).digest('hex')}`;
+    if (!(await this.store.reserve(storageKey))) {
+      const saved = await this.store.read(storageKey);
+      if (saved?.status === 'completed') return saved.value;
+      throw new Error(
+        '前次操作的执行结果尚未确认，禁止重复执行，请先查询实际状态',
+      );
+    }
+    const counter = `kt:bot:tasks:call-count:${turn.durableId}`;
+    const count = await this.store.redis!.incr(counter);
+    await this.store.redis!.expire(counter, 86400);
+    if (count > 8) throw new Error('本任务命令调用次数已达上限');
+    const value = await execute();
+    await this.store.write(storageKey, { status: 'completed', value });
+    return value;
+  }
+
+  /**
    * 重新验证当前身份与插件绑定后列出命令，或幂等执行目录内的完整命令文本。
    * @param id - 由 Hermes 执行层元数据携带的上下文标识。
    * @param input - 仅包含工具动作、命令标识及完整文本的请求。
@@ -71,9 +200,16 @@ export class BotToolSessionService {
    * @throws 上下文过期、身份权限撤销、参数无效或调用次数超限时拒绝执行。
    */
   async call(id: string, input: Record<string, unknown>): Promise<unknown> {
-    const turn = this.turns.get(id);
+    const turn = this.turns.get(id) || (await this.restore(id));
     if (!turn || turn.expiresAt <= Date.now())
       throw new Error('当前消息工具授权已失效');
+    if (turn.durableId) {
+      const saved = await this.store?.read(`turn:${turn.durableId}`);
+      if (!saved?.message || saved.expiresAt <= Date.now()) {
+        this.close(id);
+        throw new Error('当前消息工具授权已失效');
+      }
+    }
     if (
       (await this.permissions.isBlocked(turn.message)) ||
       !(await this.permissions.isAllowed(turn.message))
@@ -86,11 +222,22 @@ export class BotToolSessionService {
     }
     if (this.turns.get(id) !== turn || turn.expiresAt <= Date.now())
       throw new Error('当前消息已结束');
-    if (context?.pluginKeys && !context.pluginKeys.includes('hermes-agent'))
-      throw new Error('当前Bot的Hermes授权已撤销');
+    if (
+      context?.pluginKeys &&
+      !context.pluginKeys.includes(turn.sourcePluginKey)
+    )
+      throw new Error('当前Bot的调用插件授权已撤销');
     if (input.action === 'history') {
       if (!this.history) throw new Error('同群历史服务未就绪');
       return this.history.read(turn.message, input);
+    }
+    if (input.action === 'image') {
+      if (!this.artifacts) throw new Error('历史图片服务未就绪');
+      return this.artifacts.readImage(turn.message, input);
+    }
+    if (input.action === 'tasks') {
+      if (!this.store) throw new Error('后台任务查询未就绪');
+      return this.store.listTasks(turn.message);
     }
     if (input.action === 'platform_api') {
       if (
@@ -107,11 +254,16 @@ export class BotToolSessionService {
       });
     }
     if (input.action === 'reminder' || input.action === 'mention') {
+      if (input.action === 'reminder' && input.operation === 'list') {
+        return this.runChatAction(turn, input);
+      }
       const key = JSON.stringify(input);
       const previous = turn.calls.get(key);
       if (previous) return previous;
       if (turn.calls.size >= 8) throw new Error('本轮工具调用次数已达上限');
-      const result = this.runChatAction(turn, input);
+      const result = this.durableCall(turn, key, () =>
+        this.runChatAction(turn, input),
+      );
       turn.calls.set(key, result);
       return result;
     }
@@ -127,15 +279,28 @@ export class BotToolSessionService {
       throw new Error('命令参数无效');
     }
     // 同一轮相同命令文本只执行一次，模型或 HTTP 重试不会重复产生副作用。
+    if (
+      await this.commands.isReadOnlyForTools(
+        turn.message,
+        context,
+        input.commandId,
+      )
+    ) {
+      return this.commands.executeForTools(
+        turn.message,
+        context,
+        input.commandId,
+        input.text,
+      );
+    }
     const key = JSON.stringify([input.commandId, input.text]);
     const previous = turn.calls.get(key);
     if (previous) return previous;
     if (turn.calls.size >= 8) throw new Error('本轮命令调用次数已达上限');
-    const result = this.commands.executeForTools(
-      turn.message,
-      context,
-      input.commandId,
-      input.text,
+    const commandId = input.commandId;
+    const text = input.text;
+    const result = this.durableCall(turn, key, () =>
+      this.commands.executeForTools(turn.message, context, commandId, text),
     );
     turn.calls.set(key, result);
     return result;
@@ -154,7 +319,7 @@ export class BotToolSessionService {
   ): Promise<unknown> {
     if (input.action === 'reminder') {
       if (!this.reminders) throw new Error('提醒服务未就绪');
-      return this.reminders.manage(turn.message, input, 'hermes-agent');
+      return this.reminders.manage(turn.message, input, turn.sourcePluginKey);
     }
     if (!this.history || !this.send || turn.message.messageType === 'private')
       throw new Error('当前会话不支持成员提及');

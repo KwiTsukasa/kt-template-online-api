@@ -348,14 +348,12 @@ export class BotReminderService
       throw new Error('提醒轮换文案应为最多24条普通文本');
     const result: string[] = [];
     for (const item of value) {
-      if (
-        typeof item !== 'string' ||
-        !item.trim() ||
-        item.trim().length > 1200 ||
-        /\[CQ:|<(?:@|qqbot-)/iu.test(item)
-      )
+      if (typeof item !== 'string')
         throw new Error('每条提醒轮换文案应为1至1200字普通文本');
-      if (!result.includes(item.trim())) result.push(item.trim());
+      const text = item.trim();
+      if (!text || text.length > 1200 || /\[CQ:|<(?:@|qqbot-)/iu.test(text))
+        throw new Error('每条提醒轮换文案应为1至1200字普通文本');
+      if (!result.includes(text)) result.push(text);
     }
     if (result.length === 1) throw new Error('轮换提醒至少需要两条不同文案');
     return result;

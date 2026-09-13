@@ -11,6 +11,7 @@ import { BotChatHistoryService } from '../message/bot-chat-history.service';
 import { BotReminderService } from '../message/bot-reminder.service';
 import { BotSendService } from '../send/bot-send.service';
 import { BotArtifactService } from '../message/bot-artifact.service';
+import { describeToolResult, readToolResultPage } from './bot-tool-result';
 
 type ToolTurn = {
   message: BotNormalizedMessage;
@@ -239,6 +240,17 @@ export class BotToolSessionService {
       if (!this.store) throw new Error('后台任务查询未就绪');
       return this.store.listTasks(turn.message);
     }
+    if (input.action === 'result') {
+      if (
+        !this.store ||
+        typeof input.resultId !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(input.resultId)
+      )
+        throw new Error('命令结果标识无效');
+      const saved = await this.store.read(`result:${id}:${input.resultId}`);
+      if (!saved) throw new Error('当前消息没有这个命令结果或结果已过期');
+      return readToolResultPage(saved.value, input);
+    }
     if (input.action === 'platform_api') {
       if (
         !context?.readPlatformApi ||
@@ -286,16 +298,19 @@ export class BotToolSessionService {
         input.commandId,
       )
     ) {
-      return this.commands.executeForTools(
-        turn.message,
-        context,
-        input.commandId,
-        input.text,
+      return this.presentResult(
+        id,
+        await this.commands.executeForTools(
+          turn.message,
+          context,
+          input.commandId,
+          input.text,
+        ),
       );
     }
     const key = JSON.stringify([input.commandId, input.text]);
     const previous = turn.calls.get(key);
-    if (previous) return previous;
+    if (previous) return this.presentResult(id, await previous);
     if (turn.calls.size >= 8) throw new Error('本轮命令调用次数已达上限');
     const commandId = input.commandId;
     const text = input.text;
@@ -303,7 +318,31 @@ export class BotToolSessionService {
       this.commands.executeForTools(turn.message, context, commandId, text),
     );
     turn.calls.set(key, result);
-    return result;
+    return this.presentResult(id, await result);
+  }
+
+  /**
+   * 长命令结果按授权身份持久保存并返回读取入口，小结果保留原有协议。
+   * @param id - 当前消息的授权标识，模型不能覆盖。
+   * @param value - 命令执行返回的完整结果。
+   * @returns 原始小结果或带字段摘要的长结果引用。
+   * @throws 长结果持久层不可用时拒绝产生无法读取的文件占位符。
+   */
+  private async presentResult(id: string, value: unknown): Promise<unknown> {
+    const serialized = JSON.stringify(value);
+    if (!serialized || Buffer.byteLength(serialized) <= 12000) return value;
+    if (!this.store) throw new Error('长命令结果存储未就绪');
+    const resultId = createHash('sha256').update(serialized).digest('hex');
+    await this.store.write(`result:${id}:${resultId}`, { value }, 3600);
+    return {
+      kind: 'paged_result',
+      resultId,
+      bytes: Buffer.byteLength(serialized),
+      structure: describeToolResult(value),
+      readTool: 'kt_command_result',
+      instruction:
+        '使用字段路径读取完整结果；text为JSON片段，nextOffset非空时可继续读取，无需再次执行命令。',
+    };
   }
 
   /**

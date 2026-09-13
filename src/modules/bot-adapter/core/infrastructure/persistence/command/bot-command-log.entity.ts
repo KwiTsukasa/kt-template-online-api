@@ -40,10 +40,10 @@ export class BotCommandLog {
   @Column({ name: 'raw_message', type: 'text' })
   rawMessage: string;
 
-  @Column({ default: null, nullable: true, type: 'text' })
+  @Column({ default: null, nullable: true, type: 'longtext' })
   input: string | null;
 
-  @Column({ default: null, nullable: true, type: 'text' })
+  @Column({ default: null, nullable: true, type: 'longtext' })
   output: string | null;
 
   @Column({ default: 'success', length: 32 })

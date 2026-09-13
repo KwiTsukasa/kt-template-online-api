@@ -12,6 +12,14 @@ export class PluginExecutionAdapter implements BotPluginProtocol {
   constructor(private readonly platformService: PluginPlatformService) {}
 
   /**
+   * 将平台声明的持久对话能力传给宿主，保证后台调度与工具授权使用同一公开目录。
+   * @returns 当前已启用的持久对话插件键。
+   */
+  listConversationPlugins(): string[] {
+    return this.platformService.listConversationPlugins();
+  }
+
+  /**
    * 将插件能力执行请求交给平台服务，并采用其异步执行结果。
    * @param input - 用于操作的结构化输入。
    * @returns 操作。

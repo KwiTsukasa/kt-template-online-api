@@ -111,7 +111,7 @@ export class BotRuleEngineService {
     }
     if (pluginKeys.length === 0) return;
     const conversationKeys = new Set(
-      this.pluginExecution.listConversationPlugins?.() || [],
+      this.pluginExecution.listConversationPlugins(),
     );
     const activeConversationKeys = pluginKeys.filter((key) =>
       conversationKeys.has(key),

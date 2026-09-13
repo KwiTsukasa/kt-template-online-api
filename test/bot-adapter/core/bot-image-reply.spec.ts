@@ -19,7 +19,10 @@ const harness = (replies: unknown[]) => {
     {} as any,
     { handleMessage: async () => false } as any,
     { isBlocked: async () => false, isAllowed: async () => true } as any,
-    { dispatchEvent: async () => ({ handled: true, replies }) } as any,
+    {
+      listConversationPlugins: () => [],
+      dispatchEvent: async () => ({ handled: true, replies }),
+    } as any,
     { listEnabledForMessage: async () => [] } as any,
     send as any,
     new ToolsService(),

@@ -3,6 +3,7 @@ import { resolve, dirname, relative } from 'node:path';
 import * as ts from 'typescript';
 import { parsePluginManifest } from '@/modules/plugin-platform/domain/manifest';
 import { PluginPlatformService } from '@/modules/plugin-platform/application/plugin-platform.service';
+import { PluginExecutionAdapter } from '@/modules/plugin-platform/application/plugin-execution.adapter';
 import { BotRuleEngineService } from '@/modules/bot-adapter/core/application/send/bot-rule-engine.service';
 import { ToolsService } from '@/common';
 
@@ -45,10 +46,10 @@ describe('持久对话能力与插件边界', () => {
       {} as any,
       { handleMessage: async () => false } as any,
       { isBlocked: async () => false, isAllowed: async () => true } as any,
-      {
+      new PluginExecutionAdapter({
         dispatchEvent,
         listConversationPlugins: () => ['independent-assistant'],
-      } as any,
+      } as any),
       { listEnabledForMessage: async () => [] } as any,
       {} as any,
       new ToolsService(),

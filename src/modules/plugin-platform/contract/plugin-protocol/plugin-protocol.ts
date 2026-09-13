@@ -120,7 +120,7 @@ export type BotIntegrationPlugin = {
 };
 
 export interface BotPluginProtocol {
-  listConversationPlugins?(): string[];
+  listConversationPlugins(): string[];
   dispatchEvent(
     input: BotPluginEventDispatchInput,
   ): Promise<BotPluginEventResult>;

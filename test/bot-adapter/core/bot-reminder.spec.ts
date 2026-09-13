@@ -15,6 +15,7 @@ import { BotReminderService } from '@/modules/bot-adapter/core/application/messa
 import { Queue } from 'bullmq';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { HttpException } from '@nestjs/common';
 import { BotToolController } from '@/modules/bot-adapter/core/contract/command/bot-tool.controller';
 import { BotToolSessionService } from '@/modules/bot-adapter/core/application/command/bot-tool-session.service';
 
@@ -193,6 +194,10 @@ describe('Persistent reminders', () => {
       new Error('platform rejected proactive message'),
     );
     await expect(service.deliver(job)).rejects.toThrow('platform rejected');
+    send.sendText.mockRejectedValueOnce(
+      new HttpException({ msg: '主动消息失败, 无权限' }, 403),
+    );
+    await expect(service.deliver(job)).rejects.toThrow('主动消息失败, 无权限');
     expect(send.sendText).toHaveBeenCalledWith(
       expect.objectContaining({ targetId: 'group-a', selfId: 'qq-official:1' }),
     );

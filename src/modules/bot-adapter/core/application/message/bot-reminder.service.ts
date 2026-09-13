@@ -14,6 +14,7 @@ import { BotAccountService } from '../account/bot-account.service';
 import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from '../send/bot-send.service';
 import { BotChatHistoryService } from './bot-chat-history.service';
+import { ToolsService } from '@/common';
 
 type ReminderData = {
   owner: string;
@@ -40,6 +41,7 @@ export class BotReminderService
     private readonly send: BotSendService,
     private readonly adapters: BotAdapterRegistry,
     private readonly history: BotChatHistoryService,
+    private readonly tools: ToolsService = new ToolsService(),
   ) {
     if (!this.connectionValue('HOST')) {
       this.logger.error('提醒队列缺少 Redis 连接，提醒功能暂不可用');
@@ -285,7 +287,7 @@ export class BotReminderService
    * 到期重新检查发起人和 Bot 绑定，再通过统一发送服务投递，平台拒绝时保留失败任务。
    * @param job - Redis 持久队列中的提醒任务。
    * @returns 统一发送服务返回的投递结果。
-   * @throws 发起人权限或插件绑定已撤销、持久化成员标识无效时拒绝发送。
+   * @throws 权限、绑定或成员标识无效时拒绝发送；平台拒绝时保留其实际错误原因。
    */
   async deliver(job: Job<ReminderData>): Promise<unknown> {
     const message = job.data.message;
@@ -326,14 +328,18 @@ export class BotReminderService
       else if (message.messageType === 'channel') tag = `<@${platformId}>`;
       text = `${tag} ${text}`;
     }
-    return this.send.sendText({
-      selfId: message.selfId,
-      targetType: message.messageType,
-      targetId: message.targetId,
-      channelId: message.channelId,
-      guildId: message.guildId,
-      message: text,
-    });
+    try {
+      return await this.send.sendText({
+        selfId: message.selfId,
+        targetType: message.messageType,
+        targetId: message.targetId,
+        channelId: message.channelId,
+        guildId: message.guildId,
+        message: text,
+      });
+    } catch (error) {
+      throw new Error(this.tools.getErrorMessage(error, '提醒投递失败'));
+    }
   }
 
   /**

@@ -123,6 +123,50 @@ describe('MobileHomeService', () => {
     expect(result.notices.items[0]).not.toHaveProperty('notifyUsers');
   });
 
+  it('preserves display metadata and explicit names while marking infrastructure as read-only', async () => {
+    homeAssistant.snapshot.mockResolvedValueOnce({
+      areas: [{ area_id: 'bedroom', name: '卧室' }],
+      devices: [
+        {
+          id: 'socket',
+          area_id: 'bedroom',
+          name_by_user: '床边插座',
+          labels: ['chang_gong_dian'],
+        },
+      ],
+      entities: [
+        {
+          entity_id: 'switch.socket',
+          device_id: 'socket',
+          name: '设备总电源',
+          hidden_by: 'user',
+          entity_category: 'config',
+          labels: ['power'],
+        },
+      ],
+      logbook: [],
+      states: [
+        {
+          entity_id: 'switch.socket',
+          state: 'on',
+          attributes: { friendly_name: '冗长原厂名称' },
+        },
+      ],
+    });
+    const snapshot = await service.getHomeSnapshot();
+    expect(snapshot.entities).toHaveLength(1);
+    expect(snapshot.entities[0]).toMatchObject({
+      entityId: 'switch.socket',
+      name: '设备总电源',
+      deviceName: '床边插座',
+      hidden: true,
+      category: 'config',
+      labels: ['chang_gong_dian', 'power'],
+      readOnly: true,
+    });
+    expect(homeAssistant.callService).not.toHaveBeenCalled();
+  });
+
   it('fails the whole snapshot when one authoritative source fails', async () => {
     environment.getDashboard.mockRejectedValueOnce(
       new Error('environment unavailable'),

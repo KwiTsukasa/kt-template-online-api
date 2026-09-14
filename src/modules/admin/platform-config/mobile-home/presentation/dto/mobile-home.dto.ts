@@ -88,6 +88,26 @@ export class MobileHomeEntitySnapshotDto {
   @ApiPropertyOptional()
   deviceId?: string;
 
+  @ApiPropertyOptional({ description: 'HA 设备的用户显示名' })
+  deviceName?: string;
+
+  @ApiPropertyOptional({ description: 'HA 实体类别，配置与诊断实体默认折叠' })
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'HA 隐藏或停用标记，仅影响列表展示' })
+  hidden?: boolean;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: '实体与所属设备的 HA 标签 ID',
+  })
+  labels?: string[];
+
+  @ApiPropertyOptional({
+    description: '常供电设备不显示快捷电源动作；此字段不是服务端授权策略',
+  })
+  readOnly?: boolean;
+
   @ApiProperty()
   domain!: string;
 

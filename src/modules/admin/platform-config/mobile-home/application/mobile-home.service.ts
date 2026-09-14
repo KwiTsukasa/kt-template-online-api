@@ -344,16 +344,31 @@ export class MobileHomeService {
     const friendlyName = `${attributes.friendly_name || ''}`.trim();
     const registryName =
       `${registry?.name || registry?.original_name || ''}`.trim();
+    const deviceName = `${device?.name_by_user || device?.name || ''}`.trim();
+    const labels = [
+      ...new Set([...(device?.labels || []), ...(registry?.labels || [])]),
+    ];
+    const name = this.localizeEntityName(
+      `${registry?.name || ''}`.trim() ||
+        friendlyName ||
+        registryName ||
+        state.entity_id,
+      state.entity_id,
+    );
     return {
       areaId,
       attributes: this.projectAttributes(attributes),
       deviceId,
+      deviceName: deviceName || undefined,
+      category: registry?.entity_category || undefined,
+      hidden: Boolean(registry?.hidden_by || registry?.disabled_by),
+      labels,
+      readOnly:
+        labels.includes('chang_gong_dian') ||
+        /常供电/u.test(`${name} ${deviceName}`),
       domain: this.domainOf(state.entity_id),
       entityId: state.entity_id,
-      name: this.localizeEntityName(
-        friendlyName || registryName || state.entity_id,
-        state.entity_id,
-      ),
+      name,
       state: state.state,
       updatedAt: state.last_updated || state.last_changed,
     };

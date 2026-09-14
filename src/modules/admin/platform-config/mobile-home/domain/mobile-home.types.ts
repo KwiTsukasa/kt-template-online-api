@@ -36,6 +36,11 @@ export interface MobileHomeEntitySnapshot {
   areaId?: string;
   attributes: MobileHomeEntityAttributeSnapshot[];
   deviceId?: string;
+  deviceName?: string;
+  category?: string;
+  hidden?: boolean;
+  labels?: string[];
+  readOnly?: boolean;
   domain: string;
   entityId: string;
   name: string;

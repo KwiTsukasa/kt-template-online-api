@@ -22,6 +22,7 @@ export interface HomeAssistantDevicePayload {
   id: string;
   name?: string | null;
   name_by_user?: string | null;
+  labels?: string[];
 }
 
 export interface HomeAssistantEntityRegistryPayload {
@@ -30,6 +31,10 @@ export interface HomeAssistantEntityRegistryPayload {
   entity_id: string;
   name?: string | null;
   original_name?: string | null;
+  entity_category?: string | null;
+  hidden_by?: string | null;
+  disabled_by?: string | null;
+  labels?: string[];
 }
 
 export interface HomeAssistantLogbookPayload {

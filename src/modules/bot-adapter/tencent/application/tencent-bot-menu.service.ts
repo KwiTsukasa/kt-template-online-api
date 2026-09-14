@@ -46,30 +46,35 @@ export class TencentBotMenuService {
   /**
    * 从 Tencent 适配器绑定构建官方菜单投影并交给官方 OpenAPI 同步，插件协议层不参与账号或菜单调用。
    * @param accountId - Tencent 内部账号主键。
-   * @returns 官方菜单与面板实际变更计数。
+   * @returns 官方菜单与面板实际变更计数，以及因面板容量未展示但仍可调用的命令。
    * @throws 当账号不存在或任一菜单投影违反官方数量、字符、唯一性限制时抛出错误。
    */
   async sync(accountId: string) {
     const account = await this.accountService.findById(accountId);
     if (!account) throw new Error('Tencent Bot 账号不存在');
-    const projection = await this.buildProjection(accountId);
-    return this.tencentService.syncPluginMenus({
+    const { projection, omittedPanelCommands } =
+      await this.buildProjection(accountId);
+    const result = await this.tencentService.syncPluginMenus({
       projection,
       selfId: account.selfId,
     });
+    if (Object.keys(omittedPanelCommands).length > 0)
+      return { ...result, omittedPanelCommands };
+    return result;
   }
 
   /**
    * 将当前账号绑定的启用插件和命令目录投影为 C2C 自定义菜单与四场景指令面板。
    * @param accountId - Tencent 内部账号主键。
-   * @returns 已完成数量与字符限制校验的官方菜单投影。
+   * @returns 满足官方容量的快捷入口与未展示项；完整命令目录和授权保持独立。
    */
-  private async buildProjection(
-    accountId: string,
-  ): Promise<TencentPluginMenuProjection> {
+  private async buildProjection(accountId: string): Promise<{
+    projection: TencentPluginMenuProjection;
+    omittedPanelCommands: Partial<Record<TencentPanelScope, string[]>>;
+  }> {
     const pluginKeys = await this.bindingService.listBoundPluginKeys(accountId);
     const plugins = await this.loadPlugins(pluginKeys);
-    return {
+    const projection: TencentPluginMenuProjection = {
       menuItems: this.buildCustomMenu(plugins),
       panels: {
         c2c: this.buildPanel(plugins, 'c2c'),
@@ -78,6 +83,15 @@ export class TencentBotMenuService {
         group: this.buildPanel(plugins, 'group'),
       },
     };
+    const omittedPanelCommands: Partial<Record<TencentPanelScope, string[]>> =
+      {};
+    for (const scope of ['c2c', 'channel', 'dm', 'group'] as const) {
+      const items = projection.panels[scope];
+      if (items.length <= 20) continue;
+      omittedPanelCommands[scope] = items.slice(20).map((item) => item.name);
+      projection.panels[scope] = items.slice(0, 20);
+    }
+    return { projection, omittedPanelCommands };
   }
 
   /**
@@ -186,8 +200,7 @@ export class TencentBotMenuService {
    * 将指定场景可执行命令转换为官方全局指令面板元素。
    * @param plugins - Tencent 已授权插件命令组。
    * @param scope - 官方面板场景。
-   * @returns 最多二十项的官方面板元素。
-   * @throws 当指定场景的可执行指令超过二十项时抛出错误。
+   * @returns 按既有顺序生成的全部面板候选，由投影阶段应用容量并记录未展示项。
    */
   private buildPanel(
     plugins: TencentMenuPlugin[],
@@ -203,11 +216,6 @@ export class TencentBotMenuService {
           type: 'command' as const,
         })),
     );
-    if (items.length > 20) {
-      throw new Error(
-        `Tencent ${scope} 指令面板需要 ${items.length} 项，超过 20 项`,
-      );
-    }
     return items;
   }
 

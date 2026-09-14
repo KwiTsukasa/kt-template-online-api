@@ -101,13 +101,13 @@ export class TencentDocuments {
     let response: Awaited<ReturnType<Request>>;
     try {
       response = await this.request({
-        url: new URL(`https://docs.qq.com${endpoints[service]}`),
+        url: `https://docs.qq.com${endpoints[service]}`,
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         timeoutMs: 20000,
         maxResponseBytes: 4 * 1024 * 1024,
-        contextLabel: '腾讯文档官方 API',
+        context: '腾讯文档官方 API',
       });
     } catch {
       this.sessions.delete(service);

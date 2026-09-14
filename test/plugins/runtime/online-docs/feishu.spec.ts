@@ -82,7 +82,9 @@ describe('飞书独立文档连接器', () => {
         FEISHU_DOCS_APP_SECRET: 'fixture-secret',
       },
       async (input) => {
-        const target = input.url as URL;
+        const transported = structuredClone(input);
+        expect(typeof transported.url).toBe('string');
+        const target = new URL(transported.url as string);
         expect(target.origin).toBe('https://open.feishu.cn');
         const result = await fetch(
           `http://127.0.0.1:${port}${target.pathname}${target.search}`,

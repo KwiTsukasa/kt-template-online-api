@@ -71,13 +71,13 @@ export class FeishuDocuments {
     let response: { body: Uint8Array };
     try {
       response = await this.request({
-        url: new URL(`https://open.feishu.cn/open-apis${path}`),
+        url: `https://open.feishu.cn/open-apis${path}`,
         method,
         headers,
         body: payload,
         timeoutMs: 15000,
         maxResponseBytes: 4 * 1024 * 1024,
-        contextLabel: '飞书文档 API',
+        context: '飞书文档 API',
       });
     } catch (error) {
       const status = Number((error as any)?.statusCode || 0);

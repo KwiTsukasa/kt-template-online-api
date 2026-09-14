@@ -93,7 +93,9 @@ describe('腾讯文档独立官方服务适配器', () => {
     await once(server, 'listening');
     const port = (server.address() as { port: number }).port;
     const client = new TencentDocuments('fixture-token', async (input) => {
-      const url = input.url as URL;
+      const transported = structuredClone(input);
+      expect(typeof transported.url).toBe('string');
+      const url = new URL(transported.url as string);
       expect(url.origin).toBe('https://docs.qq.com');
       const result = await fetch(`http://127.0.0.1:${port}${url.pathname}`, {
         method: 'POST',

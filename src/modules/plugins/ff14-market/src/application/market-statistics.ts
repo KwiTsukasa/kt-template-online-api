@@ -16,7 +16,7 @@ type Sale = {
 export function summarizeMarketSales(
   item: { itemId: number; name: string },
   history: { entries?: Sale[]; lastUploadTime?: number } | undefined,
-  range: { start: number; end: number; hq?: boolean },
+  range: { start: number; end: number; hq?: boolean; sourceLimit?: number },
 ) {
   if (!history || !Array.isArray(history.entries))
     return { ...item, status: 'unavailable' as const, complete: false };
@@ -70,8 +70,12 @@ export function summarizeMarketSales(
       !Number.isSafeInteger(row.pricePerUnit) ||
       row.pricePerUnit! < 0,
   ).length;
+  const sourceLimit = range.sourceLimit ?? 1000;
   const complete =
-    raw.length < 1000 && invalidRecords === 0 && Number.isSafeInteger(turnover);
+    raw.length < sourceLimit &&
+    invalidRecords === 0 &&
+    Number.isSafeInteger(quantity) &&
+    Number.isSafeInteger(turnover);
   return {
     ...item,
     status: 'available' as const,
@@ -86,7 +90,7 @@ export function summarizeMarketSales(
     invalidRecords,
     sourceRecords: raw.length,
     lastUploadTime: history.lastUploadTime,
-    sourceLimit: 1000,
+    sourceLimit,
   };
 }
 

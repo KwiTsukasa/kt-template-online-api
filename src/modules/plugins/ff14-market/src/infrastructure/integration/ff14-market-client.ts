@@ -5,6 +5,7 @@ import {
   resolveFf14MarketTarget,
 } from '../../domain/ff14-worlds';
 import { resolveFf14MarketConfig } from '../../config/ff14-market-config';
+import { parseChineseItemCatalog } from './chinese-item-catalog';
 import {
   marketTimeRange,
   summarizeMarketSales,
@@ -19,6 +20,12 @@ import type {
 } from '../../domain/ff14-market.types';
 
 export type Ff14MarketPluginHost = {
+  requestBuffer?: (options: {
+    context: string;
+    timeoutMs: number;
+    maxResponseBytes: number;
+    url: URL;
+  }) => Promise<Uint8Array>;
   getConfig: <T = string>(key: string) => T | undefined;
   getDictItemsByKey: (
     dictCode: string,
@@ -48,6 +55,10 @@ export class Ff14MarketClient {
   private readonly xivapiBaseUrl: string;
   private readonly xivapiChsBaseUrl: string;
   private readonly universalisBaseUrl: string;
+  private chineseCatalog?: {
+    expiresAt: number;
+    data: Promise<Map<number, XivapiSearchItem>>;
+  };
 
   constructor(private readonly host: Ff14MarketPluginHost) {
     const config = resolveFf14MarketConfig(host);
@@ -122,29 +133,66 @@ export class Ff14MarketClient {
       query: clauses.join(' '),
     }).toString();
     const data = await this.requestJson<any>(url, 'GET', 'XIVAPI物品目录');
-    const items = (data.results || []).map((row: any) => ({
+    let items = (data.results || []).map((row: any) => ({
       itemId: Number(row.row_id),
       name: row.fields?.Name,
       isUntradable: row.fields?.IsUntradable,
       searchCategory: row.fields?.ItemSearchCategory?.fields?.Name,
     }));
+    const supplementalSources: string[] = [];
+    const warnings: string[] = [];
+    if (language === 'chs' && keyword && !params.searchCategory) {
+      let catalog = new Map<number, XivapiSearchItem>();
+      try {
+        catalog = await this.getChineseCatalog();
+      } catch (error) {
+        if (!items.length) throw error;
+        warnings.push(`最新中文目录读取失败，保留API候选：${String(error)}`);
+      }
+      const merged = new Map<number, any>(
+        items.map((item: any) => [item.itemId, item]),
+      );
+      for (const row of catalog.values()) {
+        if (
+          !row.fields?.Name?.normalize('NFKC').includes(
+            keyword.normalize('NFKC'),
+          )
+        )
+          continue;
+        const itemId = Number(row.row_id);
+        merged.set(itemId, {
+          ...merged.get(itemId),
+          itemId,
+          name: row.fields.Name,
+          isUntradable: row.fields.IsUntradable,
+        });
+      }
+      items = [...merged.values()];
+      if (catalog.size)
+        supplementalSources.push(this.chineseCatalogUrl().toString());
+    }
+    const complete = items.length < 100 && !data.next;
+    items = items.slice(0, 100);
     return {
       keyword,
       items,
-      complete: items.length < 100 && !data.next,
+      complete,
       version: data.version,
       source: url.toString(),
+      supplementalSources,
+      warnings,
       replyText: `${items.length}个物品候选：\n${items.map((item: any) => `${item.itemId} ${item.name}`).join('\n')}`,
     };
   }
 
   /**
    * 按统一时间范围分批读取多个物品的真实成交，并由代码完成统计和排名。
-   * @param params - 显式物品ID集合或目录关键词、地区、时间范围和品质筛选。
+   * @param params - 可选物品范围、地区、时间范围和品质筛选；省略范围时扫描完整可交易目录。
    * @returns 带每项来源覆盖、缺失项及确定性排名的成交统计。
-   * @throws 缺少物品范围、数量或排序参数无效时拒绝计算。
+   * @throws 数量、排序参数或上游目录无效时拒绝计算。
    */
   async getStatistics(params: Record<string, any>) {
+    const deadline = Date.now() + 90_000;
     const metric = String(params.metric || 'turnover');
     if (
       !['turnover', 'quantity', 'transactions', 'weightedAverage'].includes(
@@ -159,6 +207,7 @@ export class Ff14MarketClient {
     let items: Array<{ itemId: number; name: string }>;
     let catalogComplete = true;
     let catalogSource = '';
+    let allMarket = false;
     if (params.items) {
       const ids = String(params.items).split(/[,，]/u).map(Number);
       if (
@@ -179,10 +228,25 @@ export class Ff14MarketClient {
     } else if (params.item || params.itemId) {
       const item = await this.resolveItem(params);
       items = [item];
-    } else
-      throw new Error(
-        '统计需要items=物品ID列表、category=名称关键词或searchCategory=市场分类',
+    } else {
+      catalogSource = `${this.universalisBaseUrl}/marketable`;
+      const ids = await this.requestJson<unknown>(
+        new URL(catalogSource),
+        'GET',
+        'Universalis可交易物品目录',
       );
+      if (
+        !Array.isArray(ids) ||
+        !ids.length ||
+        ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+      )
+        throw new Error('Universalis可交易物品目录无效，未生成排名');
+      items = [...new Set<number>(ids)].map((itemId) => ({
+        itemId,
+        name: `物品${itemId}`,
+      }));
+      allMarket = true;
+    }
     if (!items.length)
       return {
         status: 'no_items',
@@ -191,22 +255,23 @@ export class Ff14MarketClient {
         replyText: '该目录未找到可交易物品，未生成虚构的零成交排名。',
       };
     const batches: Array<typeof items> = [];
-    for (let index = 0; index < items.length; index += 10)
-      batches.push(items.slice(index, index + 10));
+    for (let index = 0; index < items.length; index += 100)
+      batches.push(items.slice(index, index + 100));
     const rows: Array<ReturnType<typeof summarizeMarketSales>> = [];
     const sources: string[] = [];
     const failures: Array<{ itemIds: number[]; error: string }> = [];
-    // 同时最多三个网络请求，结果范围保持固定，不因分页时间流逝改变统计窗口。
-    for (let offset = 0; offset < batches.length; offset += 3) {
+    // 使用上游允许的每批一百项；固定自然日窗口，分批聚合后释放原始成交记录。
+    for (let offset = 0; offset < batches.length; offset += 4) {
+      if (Date.now() >= deadline) break;
       await Promise.all(
-        batches.slice(offset, offset + 3).map(async (batch) => {
+        batches.slice(offset, offset + 4).map(async (batch) => {
           const url = new URL(
             `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}/${batch.map((item) => item.itemId).join(',')}`,
           );
           url.search = new URLSearchParams({
-            entriesToReturn: '1000',
-            entriesWithin: String(range.end - range.start),
-            entriesUntil: String(range.end),
+            entriesToReturn: '99999',
+            entriesWithin: String(range.end - 1 - range.start),
+            entriesUntil: String(range.end - 1),
           }).toString();
           sources.push(url.toString());
           try {
@@ -222,6 +287,7 @@ export class Ff14MarketClient {
                 summarizeMarketSales(item, history, {
                   ...range,
                   hq: params.hq,
+                  sourceLimit: 99999,
                 }),
               );
             }
@@ -245,21 +311,80 @@ export class Ff14MarketClient {
           Number(b[metric] || 0) - Number(a[metric] || 0) ||
           a.itemId - b.itemId,
       );
-    const complete = catalogComplete && rows.every((row) => row.complete);
+    const scannedItems = rows.length;
+    const scanComplete = scannedItems === items.length;
+    const complete =
+      catalogComplete && scanComplete && rows.every((row) => row.complete);
+    const rankings = ranked.filter((row) => Number(row.transactions) > 0);
+    const warnings: string[] = [];
+    if (allMarket && rankings.length) {
+      const leaders = rankings.slice(0, 20);
+      const namesUrl = this.buildXivapiUrl(
+        '/sheet/Item',
+        this.normalizeXivapiLanguage(params.language),
+      );
+      namesUrl.search = new URLSearchParams({
+        rows: leaders.map((row) => row.itemId).join(','),
+        fields: 'Name',
+        language: this.normalizeXivapiLanguage(params.language),
+      }).toString();
+      try {
+        const names = await this.requestJson<{ rows?: XivapiSearchItem[] }>(
+          namesUrl,
+          'GET',
+          'XIVAPI排行榜物品名称',
+        );
+        for (const row of leaders) {
+          const name = names.rows?.find((item) => item.row_id === row.itemId)
+            ?.fields?.Name;
+          if (name) row.name = name;
+        }
+        if (this.normalizeXivapiLanguage(params.language) === 'chs') {
+          const latest = await this.getChineseCatalog();
+          for (const row of leaders) {
+            const name = latest.get(row.itemId)?.fields?.Name;
+            if (name) row.name = name;
+          }
+        }
+      } catch (error) {
+        warnings.push(`物品名称读取失败，保留真实ID：${String(error)}`);
+      }
+    }
+    let returnedRankings = rankings;
+    let returnedSources = sources;
+    if (allMarket) {
+      returnedRankings = rankings.slice(0, 20);
+      returnedSources = [
+        `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}/{itemIds}?entriesToReturn=99999&entriesWithin=${range.end - 1 - range.start}&entriesUntil=${range.end - 1}`,
+      ];
+    }
     return {
       range: { ...range, timezone: 'Asia/Shanghai' },
       world: target.label,
       metric,
       catalogComplete,
       complete,
+      scanComplete,
+      allMarket,
+      catalogItems: items.length,
+      scannedItems,
+      unscannedItems: items.length - scannedItems,
+      availableItems: ranked.length,
+      itemsWithSales: rankings.length,
+      truncatedItems: rows
+        .filter(
+          (row) => row.status === 'available' && row.sourceRecords >= 99999,
+        )
+        .map((row) => row.itemId),
+      warnings,
       catalogSource,
-      sources,
+      sources: returnedSources,
       failures,
       unavailable: rows.filter((row) => row.status === 'unavailable'),
-      rankings: ranked,
+      rankings: returnedRankings,
       coverage:
-        'Universalis玩家上传的成交记录；不代表游戏服务器全部成交。单物品最多1000条，complete仅表示本次接口窗口未发现截断或缺失。',
-      replyText: `${target.label}成交统计（${items.length}件物品，排序${metric}）\n${ranked
+        'Universalis玩家上传的成交记录；不代表游戏服务器全部成交。单物品最多99999条，complete仅表示本次接口窗口未发现截断或缺失；缺失项不当作零成交，扫描未完成不能宣称全区前20。',
+      replyText: `${target.label}成交统计（${params.date || '最近' + (params.days || 1) + '天'}，已查询${scannedItems}/${items.length}件物品，排序${metric}）\n${rankings
         .slice(0, 20)
         .map(
           (row, index) =>
@@ -267,7 +392,7 @@ export class Ff14MarketClient {
         )
         .join(
           '\n',
-        )}\n数据为玩家上传成交；完整性=${complete}，缺失${rows.length - ranked.length}项。`,
+        )}\n数据为玩家上传成交；完整性=${complete}，缺失${rows.length - ranked.length}项，未查询${items.length - scannedItems}项。`,
     };
   }
 
@@ -343,6 +468,7 @@ export class Ff14MarketClient {
         world: marketTarget.label,
       }),
       updatedAt,
+      source: url.toString(),
       world: marketTarget.label,
     };
   }
@@ -371,7 +497,11 @@ export class Ff14MarketClient {
       'GET',
       'XIVAPI 物品解析',
     );
-    const fields = data.fields || data;
+    let fields = data.fields || data;
+    if (normalizedLanguage === 'chs' && !fields.Name) {
+      const current = (await this.getChineseCatalog()).get(itemId);
+      if (current?.fields) fields = { ...fields, ...current.fields };
+    }
     return {
       icon: this.normalizeItemIcon(fields.Icon),
       isUntradable: fields.IsUntradable,
@@ -559,10 +689,10 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 根据`keyword`、`language`处理针对FF14 市场插件；当 `language !== 'en'` 成立时返回 `enItem`。
-   * @param keyword - 决定针对FF14 市场插件内容、边界或目标的 `keyword` 值。
-   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值。
-   * @returns 针对FF14 市场插件。
+   * 优先完成当前语言的精确与模糊查找；拉丁文本才回退英文源，避免中文简称被无关网络失败阻断。
+   * @param keyword - 用户提供的原始物品名称或简称。
+   * @param language - 本次物品目录语言。
+   * @returns 唯一命中的真实物品；没有命中时返回空值。
    * @throws 精确名称不存在但有同类候选时返回候选查询入口，不将同类物品认作目标。
    */
   private async searchItem(keyword: string, language: string) {
@@ -572,26 +702,38 @@ export class Ff14MarketClient {
     );
     if (item) return item;
 
-    if (language !== 'en') {
+    const fuzzyItems = await this.searchItemsByLanguage(keyword, language, '~');
+    const fuzzyItem = this.pickSingleFuzzySearchItem(fuzzyItems);
+    if (fuzzyItem) return fuzzyItem;
+
+    if (language !== 'en' && !/\p{Script=Han}/u.test(keyword)) {
       const enItem = this.pickFirstSearchItem(
         await this.searchItemsByLanguage(keyword, 'en', '='),
       );
       if (enItem) return enItem;
+      const enFuzzyItems = await this.searchItemsByLanguage(keyword, 'en', '~');
+      const fallback = this.pickSingleFuzzySearchItem(enFuzzyItems);
+      if (fallback) return fallback;
     }
-
-    const fuzzyItems = await this.searchItemsByLanguage(keyword, language, '~');
-    const fuzzyItem = this.pickSingleFuzzySearchItem(fuzzyItems);
-    if (fuzzyItem || language === 'en') return fuzzyItem;
-
-    const enFuzzyItems = await this.searchItemsByLanguage(keyword, 'en', '~');
-    const fallback = this.pickSingleFuzzySearchItem(enFuzzyItems);
-    if (fallback) return fallback;
+    if (language === 'chs') {
+      const catalog = await this.getChineseCatalog();
+      const normalized = keyword.normalize('NFKC');
+      const candidates = [...catalog.values()].filter((row) =>
+        row.fields?.Name?.normalize('NFKC').includes(normalized),
+      );
+      const exact = candidates.find(
+        (row) => row.fields?.Name?.normalize('NFKC') === normalized,
+      );
+      if (exact) return exact;
+      const current = this.pickSingleFuzzySearchItem(candidates);
+      if (current) return current;
+    }
     const category = keyword.split('：')[0];
     if (category !== keyword && category.length >= 2) {
       const candidates = await this.findItems({ category, language });
       if (candidates.items.length)
         throw new Error(
-          `未找到名称“${keyword}”；同类正式名称和ID可用 /物品 search=${category} 查询（目录版本${candidates.version}）。不能直接把同类物品当作目标。`,
+          `未找到名称“${keyword}”（目录版本${candidates.version}）。请使用用户原始简称查询，不要自行补写正式名称。真实同类候选：${candidates.items.map((item: any) => `${item.name}(ID:${item.itemId})`).join('、')}。不能直接把同类物品当作目标。`,
         );
     }
     return undefined;
@@ -710,22 +852,104 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 针对FF14 市场插件，按 `this.host.requestJson<T>({ context, failureMessage: (statusCode) => `${context}失败：${statusC…` 计算并返回结果。
-   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
-   * @param method - 决定JSON 数据内容、边界或目标的 `method` 值。
-   * @param context - 决定JSON 数据内容、边界或目标的 `context` 值。
-   * @returns JSON 数据。
+   * 在中文API落后时读取同一维护方的最新原始目录，按需缓存十五分钟且失败不缓存。
+   * @returns 可供精确或唯一简称匹配的中文物品表；旧宿主未提供二进制读取时返回空表。
    */
-  private requestJson<T>(url: URL, method: Ff14HttpMethod, context: string) {
-    return this.host.requestJson<T>({
-      context,
-      failureMessage: (statusCode) => `${context}失败：${statusCode}`,
-      invalidJsonMessage: 'FF14 接口返回不是合法 JSON',
-      method,
-      timeoutMessage: 'FF14 接口请求超时',
-      timeoutMs: 8000,
+  private async getChineseCatalog(): Promise<Map<number, XivapiSearchItem>> {
+    if (!this.host.requestBuffer) return new Map();
+    if (this.chineseCatalog && this.chineseCatalog.expiresAt > Date.now())
+      return this.chineseCatalog.data;
+    const url = this.chineseCatalogUrl();
+    const data = this.retryRead(
+      async () => {
+        const bytes = await this.host.requestBuffer!({
+          url,
+          context: '最新中文物品目录',
+          timeoutMs: 20000,
+          maxResponseBytes: 32 * 1024 * 1024,
+        });
+        return parseChineseItemCatalog(Buffer.from(bytes).toString('utf8'));
+      },
       url,
+      '最新中文物品目录',
+    );
+    this.chineseCatalog = { data, expiresAt: Date.now() + 15 * 60_000 };
+    data.catch(() => {
+      if (this.chineseCatalog?.data === data) this.chineseCatalog = undefined;
     });
+    return data;
+  }
+
+  /**
+   * 从插件配置解析维护方原始目录地址，供下载和来源说明共用。
+   * @returns 当前中文目录URL。
+   */
+  private chineseCatalogUrl(): URL {
+    return new URL(
+      this.host.getConfig<string>('FF14_CHINESE_ITEM_DATA_URL') ||
+        'https://raw.githubusercontent.com/thewakingsands/ffxiv-datamining-cn/master/Item.csv',
+    );
+  }
+
+  /**
+   * 对只读上游查询的临时连接、限流和服务错误退避重试，保留最终失败来源而不关闭TLS校验。
+   * @param url - 本次配置解析出的上游地址。
+   * @param method - 只读请求方法。
+   * @param context - 失败时保留的市场或目录查询阶段。
+   * @returns 成功解析的上游JSON数据。
+   * @throws 非临时错误或三次尝试耗尽时带上来源域名和原始错误抛出。
+   */
+  private async requestJson<T>(
+    url: URL,
+    method: Ff14HttpMethod,
+    context: string,
+  ): Promise<T> {
+    return this.retryRead(
+      () =>
+        this.host.requestJson<T>({
+          context,
+          failureMessage: (statusCode) => `${context}失败：${statusCode}`,
+          invalidJsonMessage: 'FF14 接口返回不是合法 JSON',
+          method,
+          timeoutMessage: 'FF14 接口请求超时',
+          timeoutMs: 8000,
+          url,
+        }),
+      url,
+      context,
+    );
+  }
+
+  /**
+   * 对幂等数据读取执行最多三次退避重试，永久错误立即返回给调用方。
+   * @param read - 单次只读上游请求。
+   * @param url - 错误中显示来源域名的目标地址。
+   * @param context - 物品或成交查询阶段。
+   * @returns 首次成功读取的结果。
+   * @throws 永久错误或临时错误重试耗尽时保留原始原因抛出。
+   */
+  private async retryRead<T>(
+    read: () => Promise<T>,
+    url: URL,
+    context: string,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await read();
+      } catch (error) {
+        let message = String(error);
+        if (error instanceof Error) message = error.message;
+        const transient =
+          /ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|disconnected before secure TLS|fetch failed|请求超时|失败[：:]\s*(?:429|500|502|503|504)\b/iu.test(
+            message,
+          );
+        if (!transient || attempt >= 3)
+          throw new Error(
+            `${context}（${url.hostname}，尝试${attempt}次）：${message}`,
+          );
+        await new Promise((resolve) => setTimeout(resolve, attempt * 400));
+      }
+    }
   }
 }
 

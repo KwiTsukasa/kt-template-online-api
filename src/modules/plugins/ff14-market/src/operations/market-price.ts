@@ -19,7 +19,9 @@ export function createFf14MarketPriceOperation(
         }
         return {};
       })();
-      return application.getPrice(removeEmpty({ ...input, ...parsed }));
+      return application.getPrice(
+        removeEmpty({ ...input, ...removeEmpty(parsed) }),
+      );
     },
     inputSchema: {
       'x-agent-read-only': true,

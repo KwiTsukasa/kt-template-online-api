@@ -1,7 +1,7 @@
 {
   "pluginKey": "ff14-market",
   "name": "FF14 市场价格",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minApiSdkVersion": "1.0.0",
   "description": "对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。",
   "author": "KT",
@@ -10,14 +10,15 @@
   "permissions": ["runtime.http", "plugin.config.read"],
   "runtime": {
     "workerType": "thread",
-    "timeoutMs": 60000,
+    "timeoutMs": 300000,
     "memoryMb": 256,
     "maxConcurrency": 1,
     "configKeys": [
       "FF14_DEFAULT_WORLD",
       "FF14_UNIVERSALIS_BASE_URL",
       "FF14_XIVAPI_BASE_URL",
-      "FF14_XIVAPI_CHS_BASE_URL"
+      "FF14_XIVAPI_CHS_BASE_URL",
+      "FF14_CHINESE_ITEM_DATA_URL"
     ]
   },
   "configSchema": {
@@ -42,7 +43,7 @@
       "description": "按名称或ID解析物品；候选查询：/物品 search=发型样式，返回正式名称、ID和数据版本，不自动替用户认定模糊候选。",
       "aliases": ["物品", "item", "ff14item"],
       "permissions": ["runtime.http", "plugin.config.read"],
-      "timeoutMs": 15000,
+      "timeoutMs": 90000,
       "inputSchema": {
         "x-agent-read-only": true,
         "properties": {
@@ -81,7 +82,7 @@
       "key": "ff14.market.price",
       "name": "市场查价",
       "handlerName": "getPrice",
-      "description": "查价：/查价 物品名或ID，默认使用已配置地区。实际成交统计：/查价 mode=stats items=ID1,ID2 days=1 world=红玉海；也可用category=名称关键词或searchCategory=原生市场分类，date=YYYY-MM-DD为北京时间自然日，metric=turnover/quantity/transactions/weightedAverage。结果由代码计算，带来源、缺失项和覆盖范围；不得把玩家上传样本当全市场成交。物品模糊先/物品 search=关键词查候选。",
+      "description": "查价：/查价 用户原始物品名、简称或ID，默认已配置地区，不自行补写正式名称。每日全区销量前20：/查价 mode=stats date=YYYY-MM-DD metric=quantity world=中国；不指定物品范围会自动查询完整可交易物品目录并排名。成交笔数用metric=transactions，成交额用turnover，均价用weightedAverage；date为北京时间自然日，days为最近天数。也支持items=ID1,ID2、category=名称关键词或searchCategory=市场分类缩小范围。全目录首次扫描可能需要数分钟。结果由代码计算，带扫描覆盖、缺失和截断项；仅代表Universalis玩家上传成交。模糊多义先/物品 search=用户原始关键词查真实候选。",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -95,7 +96,7 @@
       },
       "aliases": ["查价", "price", "ff14price"],
       "permissions": ["runtime.http", "plugin.config.read"],
-      "timeoutMs": 55000
+      "timeoutMs": 290000
     }
   ],
   "events": [],

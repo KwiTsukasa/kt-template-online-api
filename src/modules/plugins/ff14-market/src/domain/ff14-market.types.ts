@@ -46,6 +46,7 @@ export type Ff14PriceResult = {
   minPrice?: number;
   replyText: string;
   updatedAt?: string;
+  source?: string;
   world: string;
 };
 

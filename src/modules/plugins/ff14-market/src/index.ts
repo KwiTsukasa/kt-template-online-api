@@ -131,6 +131,11 @@ function createFf14MarketGenericHostAdapter(
 ): Ff14MarketPluginHost {
   const { host, runtime } = options;
   return {
+    requestBuffer: async (request) =>
+      await callFf14GenericHost<Uint8Array>(host, 'requestBuffer', {
+        ...request,
+        url: request.url.toString(),
+      }),
     getConfig: <T = string>(key: string) =>
       runtime.configSnapshot[key] as T | undefined,
     getDictItemsByKey: async (dictCode) =>

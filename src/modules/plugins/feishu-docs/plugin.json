@@ -1,7 +1,7 @@
 {
   "pluginKey": "feishu-docs",
   "name": "飞书在线文档",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minApiSdkVersion": "1.0.0",
   "description": "独立接入飞书云文档、知识库、电子表格和多维表，支持分页读取与指定目标修改后回读核验。",
   "author": "KT",

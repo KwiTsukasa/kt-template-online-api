@@ -1,8 +1,99 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { FeishuDocuments } from '@/modules/plugins/feishu-docs/src/client';
+import { PluginHttpClientService } from '@/modules/plugin-platform/infrastructure/integration/sdk/plugin-http-client.service';
+import { PluginHostBridgeService } from '@/modules/plugin-platform/infrastructure/integration/runtime/plugin-host-bridge.service';
+import type { PluginPackageDescriptor } from '@/modules/plugin-platform/infrastructure/integration/package/plugin-package.types';
 
 describe('飞书独立文档连接器', () => {
+  it('preserves denied wiki API responses through the real host bridge instead of reporting a network failure', async () => {
+    let status = 400;
+    let body = JSON.stringify({
+      code: 131006,
+      msg: 'fixture-token must not leak',
+    });
+    let requests = 0;
+    const server = createServer((request, response) => {
+      requests++;
+      if (request.url?.endsWith('/tenant_access_token/internal')) {
+        response.end(
+          JSON.stringify({
+            code: 0,
+            tenant_access_token: 'fixture-token',
+            expire: 7200,
+          }),
+        );
+        return;
+      }
+      response.writeHead(status, { 'Content-Type': 'application/json' });
+      response.end(body);
+    }).listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as { port: number };
+    const bridge = new PluginHostBridgeService(
+      {} as any,
+      new PluginHttpClientService(),
+    );
+    const client = new FeishuDocuments(
+      {
+        FEISHU_DOCS_APP_ID: 'fixture-app',
+        FEISHU_DOCS_APP_SECRET: 'fixture-secret',
+      },
+      async (input) => {
+        const transported = structuredClone(input);
+        const url = new URL(String(transported.url));
+        const response = await bridge.handleHostCall(
+          {
+            manifest: { permissions: ['runtime.http'] },
+          } as PluginPackageDescriptor,
+          {
+            method: 'requestResponse',
+            pluginKey: 'feishu-docs',
+            args: {
+              options: {
+                ...transported,
+                url: `http://127.0.0.1:${port}${url.pathname}${url.search}`,
+              },
+            },
+          },
+        );
+        if (response.ok === false) throw new Error(response.message);
+        return structuredClone(response.value) as {
+          body: Uint8Array;
+          statusCode: number;
+        };
+      },
+    );
+    const input = { url: 'https://example.feishu.cn/wiki/wikiA' };
+    try {
+      const error = await client.read(input).catch((value: Error) => value);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('HTTP 400，错误码 131006');
+      expect((error as Error).message).not.toMatch(
+        /网络|fixture-token|fixture-secret/u,
+      );
+      expect(requests).toBe(2);
+      body = JSON.stringify({ code: 99991672, msg: 'fixture-secret' });
+      await expect(client.read(input)).rejects.toThrow('应用缺少当前接口权限');
+      status = 502;
+      body = '<html>fixture-token</html>';
+      await expect(client.read(input)).rejects.toThrow(
+        '响应格式无效（HTTP 502）',
+      );
+      status = 503;
+      body = JSON.stringify({ code: 0, data: {} });
+      await expect(client.read(input)).rejects.toThrow(
+        'HTTP 请求失败（HTTP 503）',
+      );
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await expect(client.read(input)).rejects.toThrow('网络请求未完成');
+    } finally {
+      server.closeAllConnections();
+      if (server.listening)
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('uses real HTTP to resolve wiki, page records, edit exact targets and read back; rejects stale or out-of-scope edits', async () => {
     let values: any[][] = [['原值', 12]];
     let text = '原始正文';

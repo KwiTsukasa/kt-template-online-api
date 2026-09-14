@@ -106,6 +106,34 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
+  it('only returns HTTP error bodies when explicitly requested with a size bound', async () => {
+    const client = new PluginHttpClientService();
+    const options = { url: `${baseUrl}/missing`, timeoutMs: 1000 };
+    await expect(client.requestResponse(options)).rejects.toMatchObject({
+      statusCode: 404,
+    });
+    expect(() =>
+      client.requestResponse({ ...options, acceptHttpErrors: true }),
+    ).toThrow('必须设置大小上限');
+    await expect(
+      client.requestResponse({
+        ...options,
+        acceptHttpErrors: true,
+        maxResponseBytes: 100,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 404,
+      body: Buffer.from('missing'),
+    });
+    await expect(
+      client.requestResponse({
+        ...options,
+        acceptHttpErrors: true,
+        maxResponseBytes: 3,
+      }),
+    ).rejects.toThrow('响应超过大小上限');
+  });
+
   it('bounds declared and streamed binary response sizes while preserving ordinary requests', async () => {
     const client = new PluginHttpClientService();
     for (const path of ['/large', '/chunked']) {

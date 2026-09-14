@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 type Request = (
   input: Record<string, unknown>,
-) => Promise<{ body: Uint8Array }>;
+) => Promise<{ body: Uint8Array; statusCode?: number }>;
 type Input = Record<string, any>;
 type Target = { kind: string; id: string };
 
@@ -68,7 +68,7 @@ export class FeishuDocuments {
     if (token) headers.Authorization = `Bearer ${token}`;
     let payload: string | undefined;
     if (body !== undefined) payload = JSON.stringify(body);
-    let response: { body: Uint8Array };
+    let response: { body: Uint8Array; statusCode?: number };
     try {
       response = await this.request({
         url: `https://open.feishu.cn/open-apis${path}`,
@@ -77,22 +77,50 @@ export class FeishuDocuments {
         body: payload,
         timeoutMs: 15000,
         maxResponseBytes: 4 * 1024 * 1024,
+        acceptHttpErrors: true,
         context: '飞书文档 API',
       });
-    } catch (error) {
-      const status = Number((error as any)?.statusCode || 0);
+    } catch {
       throw new Error(
-        `飞书文档请求失败（HTTP ${status || '网络异常'}）；请核对应用已发布、API 权限及目标文档授权。写入未自动重试，请先回读目标。`,
+        '飞书文档网络请求未完成；未取得可核验的 HTTP 响应，不能据此判断文档权限。',
       );
     }
-    const result = JSON.parse(Buffer.from(response.body).toString('utf8'));
+    const status = response.statusCode ?? 200;
+    let result: any;
+    try {
+      result = JSON.parse(Buffer.from(response.body).toString('utf8'));
+    } catch {
+      throw new Error(
+        `飞书文档响应格式无效（HTTP ${status}），未取得文档内容。`,
+      );
+    }
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      !Number.isSafeInteger(result.code)
+    )
+      throw new Error(
+        `飞书文档响应缺少有效业务状态（HTTP ${status}），未取得文档内容。`,
+      );
     if (result.code !== 0) {
       if ([99991663, 99991664, 99991668].includes(result.code))
         this.expiresAt = 0;
+      if (result.code === 131006)
+        throw new Error(
+          `飞书知识库拒绝当前应用访问（HTTP ${status}，错误码 131006）；需知识库或文档所有者授予应用读取权限。浏览器账号与应用身份的权限分别判断。`,
+        );
+      if (result.code === 99991672)
+        throw new Error(
+          `飞书应用缺少当前接口权限（HTTP ${status}，错误码 99991672）；请在开放平台开通对应权限并发布应用。`,
+        );
       throw new Error(
-        `飞书文档 API 返回错误 ${Number(result.code)}；请核对应用身份权限及文档协作者权限。`,
+        `飞书文档 API 返回错误 ${result.code}（HTTP ${status}）；请核对应用身份权限及文档协作者权限。`,
       );
     }
+    if (status < 200 || status >= 300)
+      throw new Error(
+        `飞书文档 HTTP 请求失败（HTTP ${status}），未把响应作为文档内容。`,
+      );
     return result;
   }
 

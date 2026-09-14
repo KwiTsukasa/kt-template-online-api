@@ -3,6 +3,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 
 export type PluginHttpClientRequest = {
+  acceptHttpErrors?: boolean;
   body?: Buffer | string;
   context?: string;
   failureMessage?: (statusCode: number) => string;
@@ -92,10 +93,10 @@ export class PluginHttpClientService {
   }
 
   /**
-   * 在二进制大小和耗时边界内保留响应头与状态码，供需要会话 Cookie 的插件完成认证。
+   * 在大小与耗时边界内保留响应头和状态码，显式选择后允许插件解析非成功 HTTP 响应。
    * @param input - 请求地址、正文、请求头及可选响应大小上限。
-   * @returns 成功响应的原始字节、状态码与响应头；不自动跟随重定向。
-   * @throws 响应大小上限不是有效正整数或超过 32 MiB 时拒绝请求。
+   * @returns 原始字节、状态码与响应头；默认拒绝 HTTP 错误且不自动跟随重定向。
+   * @throws 响应大小上限无效，或选择读取 HTTP 错误但未设置大小上限时拒绝请求。
    */
   requestResponse(input: PluginHttpClientRequest): Promise<{
     body: Buffer;
@@ -112,6 +113,9 @@ export class PluginHttpClientService {
     const timeoutMs = input.timeoutMs || 8000;
     const context = input.context || '插件 HTTP 接口';
     const maxBytes = input.maxResponseBytes;
+    if (input.acceptHttpErrors === true && maxBytes === undefined) {
+      throw new Error('读取 HTTP 错误响应必须设置大小上限');
+    }
     if (
       maxBytes !== undefined &&
       (!Number.isSafeInteger(maxBytes) ||
@@ -167,7 +171,7 @@ export class PluginHttpClientService {
           });
           response.on('end', () => {
             const statusCode = response.statusCode || 500;
-            if (statusCode >= 400) {
+            if (statusCode >= 400 && input.acceptHttpErrors !== true) {
               reject(
                 createPluginHttpError(
                   input.failureMessage?.(statusCode) ||

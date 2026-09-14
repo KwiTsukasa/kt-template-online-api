@@ -68,7 +68,9 @@ export class MarketScan {
       .digest('hex');
     let snapshot = await this.read();
     let jobs = ((snapshot.value?.jobs || []) as Job[]).filter(
-      (job) => job.expiresAt > this.now() && Boolean(job.range),
+      (job) =>
+        Math.max(job.expiresAt, (Date.parse(job.updatedAt) || 0) + 900_000) >
+          this.now() && Boolean(job.range),
     );
     let job = jobs.find((entry) => entry.key === key);
     const count = Math.ceil(input.ids.length / 100);

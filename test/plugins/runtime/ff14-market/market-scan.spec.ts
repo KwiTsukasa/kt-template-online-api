@@ -47,6 +47,8 @@ describe('市场完整扫描检查点', () => {
     });
     // 超过任务创建后的十五分钟，但仍处于最后一次检查点的有效期内。
     now = 900_001;
+    // 兼容升级前使用创建时间计算有效期的持久检查点。
+    snapshot.value.jobs[0].expiresAt = 900_000;
     const second = await new MarketScan(storage, () => now).run({
       ...input,
       range: { start: 200, end: 300 },

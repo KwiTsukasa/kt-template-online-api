@@ -8,23 +8,27 @@ const pluginRoot = join(repoRoot, 'src/modules/plugins');
 const collectTsFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
-  return readdirSync(root).flatMap((name) => {
-    const filePath = join(root, name);
-    const stat = statSync(filePath);
-    if (stat.isDirectory()) return collectTsFiles(filePath);
-    return filePath.endsWith('.ts') ? [filePath] : [];
-  });
+  return readdirSync(root)
+    .filter((name) => name !== 'node_modules')
+    .flatMap((name) => {
+      const filePath = join(root, name);
+      const stat = statSync(filePath);
+      if (stat.isDirectory()) return collectTsFiles(filePath);
+      return filePath.endsWith('.ts') ? [filePath] : [];
+    });
 };
 
 const collectFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
-  return readdirSync(root).flatMap((name) => {
-    const filePath = join(root, name);
-    const stat = statSync(filePath);
-    if (stat.isDirectory()) return collectFiles(filePath);
-    return [filePath];
-  });
+  return readdirSync(root)
+    .filter((name) => name !== 'node_modules')
+    .flatMap((name) => {
+      const filePath = join(root, name);
+      const stat = statSync(filePath);
+      if (stat.isDirectory()) return collectFiles(filePath);
+      return [filePath];
+    });
 };
 
 const toRepoPath = (filePath: string) =>
@@ -121,12 +125,14 @@ describe('QQBot plugin package boundary', () => {
     expect(pluginDirs).toEqual([
       'bangdream',
       'bilibili-card',
+      'feishu-docs',
       'ff14-market',
       'fflogs',
       'hermes-agent',
       'natmap-port',
       'persona-switch',
       'repeater',
+      'tencent-docs',
     ]);
   });
 

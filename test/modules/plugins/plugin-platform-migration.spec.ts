@@ -31,12 +31,14 @@ describe('existing plugin platform migration', () => {
     ).toEqual([
       'bangdream',
       'bilibili-card',
+      'feishu-docs',
       'ff14-market',
       'fflogs',
       'hermes-agent',
       'natmap-port',
       'persona-switch',
       'repeater',
+      'tencent-docs',
     ]);
 
     const legacySources = collectFiles(legacyPluginRoot).filter((filePath) =>
@@ -49,12 +51,14 @@ describe('existing plugin platform migration', () => {
     const manifests = [
       'bangdream',
       'bilibili-card',
+      'feishu-docs',
       'ff14-market',
       'fflogs',
       'hermes-agent',
       'natmap-port',
       'persona-switch',
       'repeater',
+      'tencent-docs',
     ].map((pluginName) => {
       const root = join(pluginRoot, pluginName);
       const manifest = parsePluginManifest(
@@ -69,12 +73,14 @@ describe('existing plugin platform migration', () => {
     expect(manifests.map((manifest) => manifest.pluginKey).sort()).toEqual([
       'bangdream',
       'bilibili-card',
+      'feishu-docs',
       'ff14-market',
       'fflogs',
       'hermes-agent',
       'natmap-port',
       'persona-switch',
       'repeater',
+      'tencent-docs',
     ]);
     expect(
       manifests.every(

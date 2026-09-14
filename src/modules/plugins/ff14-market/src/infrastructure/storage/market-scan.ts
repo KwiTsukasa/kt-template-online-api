@@ -107,6 +107,7 @@ export class MarketScan {
     }
     job.owner = owner;
     job.leaseUntil = this.now() + 180_000;
+    job.expiresAt = this.now() + 900_000;
     snapshot = await this.save(snapshot.revision, jobs);
     const deadline = this.now() + this.sliceMs;
     const pending = Array.from({ length: count }, (_, index) => index).filter(
@@ -166,6 +167,7 @@ export class MarketScan {
         job.leaders = job.leaders.slice(0, 20);
         job.updatedAt = new Date(this.now()).toISOString();
         job.leaseUntil = this.now() + 180_000;
+        job.expiresAt = this.now() + 900_000;
         snapshot = await this.save(snapshot.revision, jobs);
       }
     } finally {

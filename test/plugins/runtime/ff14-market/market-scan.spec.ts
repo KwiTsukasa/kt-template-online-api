@@ -45,6 +45,8 @@ describe('市场完整扫描检查点', () => {
       scannedItems: 800,
       rankings: [],
     });
+    // 超过任务创建后的十五分钟，但仍处于最后一次检查点的有效期内。
+    now = 900_001;
     const second = await new MarketScan(storage, () => now).run({
       ...input,
       range: { start: 200, end: 300 },

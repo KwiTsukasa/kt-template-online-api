@@ -10,6 +10,20 @@ const schema = (properties, required = []) => ({
 });
 export const tools = [
   {
+    name: 'kt_web_read',
+    description:
+      '在 NAS 直接读取公开网页正文，不经过 Parallel 提取服务。web_extract 超时后可换此路径；传 url 和可选 offset/limit 分页。只提取公开内容；需要账号授权的对象通过已启用命令的对应文档能力读取。登录页、验证页和内网地址不会作为正文返回。',
+    inputSchema: schema(
+      {
+        url: { type: 'string' },
+        offset: { type: 'integer', minimum: 0 },
+        limit: { type: 'integer', minimum: 100, maximum: 20000 },
+      },
+      ['url'],
+    ),
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: 'kt_plan_check',
     description:
       '对基于已持有内容或指定攻略的配置做结构化一致性核对：按游戏/地区/版本/单人多人/关卡比较已读来源，检查方案是否用了未观察到的持有项、未确认识别或错误数量。先读取原始消息/图片/网页，传真实来源引用；本工具不替代事实核验，不保证通关。返回每个冲突，支持修正后复核。',
@@ -415,6 +429,17 @@ export async function handle(request, index) {
   try {
     const { name, arguments: args = {}, _meta: meta } = request.params || {};
     let result;
+    if (name === 'kt_web_read') {
+      const { readWeb } = await import('./web-reader/kt-web.mjs');
+      return {
+        ...base,
+        result: {
+          content: [
+            { type: 'text', text: JSON.stringify(await readWeb(args)) },
+          ],
+        },
+      };
+    }
     if (name === 'kt_plan_check') {
       const { checkPlan } = await import('./kt-plan-check.mjs');
       return {

@@ -6,6 +6,7 @@ import {
 } from '../../domain/ff14-worlds';
 import { resolveFf14MarketConfig } from '../../config/ff14-market-config';
 import { parseChineseItemCatalog } from './chinese-item-catalog';
+import { MarketScan, type MarketScanStorage } from '../storage/market-scan';
 import {
   marketTimeRange,
   summarizeMarketSales,
@@ -19,7 +20,7 @@ import type {
   XivapiSearchItem,
 } from '../../domain/ff14-market.types';
 
-export type Ff14MarketPluginHost = {
+export type Ff14MarketPluginHost = MarketScanStorage & {
   requestBuffer?: (options: {
     context: string;
     timeoutMs: number;
@@ -55,6 +56,7 @@ export class Ff14MarketClient {
   private readonly xivapiBaseUrl: string;
   private readonly xivapiChsBaseUrl: string;
   private readonly universalisBaseUrl: string;
+  private readonly marketScan: MarketScan;
   private chineseCatalog?: {
     expiresAt: number;
     data: Promise<Map<number, XivapiSearchItem>>;
@@ -65,6 +67,7 @@ export class Ff14MarketClient {
     this.xivapiBaseUrl = config.xivapiBaseUrl;
     this.xivapiChsBaseUrl = config.xivapiChsBaseUrl;
     this.universalisBaseUrl = config.universalisBaseUrl;
+    this.marketScan = new MarketScan(host);
   }
 
   /**
@@ -192,7 +195,6 @@ export class Ff14MarketClient {
    * @throws 数量、排序参数或上游目录无效时拒绝计算。
    */
   async getStatistics(params: Record<string, any>) {
-    const deadline = Date.now() + 90_000;
     const metric = String(params.metric || 'turnover');
     if (
       !['turnover', 'quantity', 'transactions', 'weightedAverage'].includes(
@@ -247,6 +249,16 @@ export class Ff14MarketClient {
       }));
       allMarket = true;
     }
+    if (allMarket) {
+      return this.getFullMarketStatistics(
+        items.map((item) => item.itemId),
+        params,
+        range,
+        target,
+        metric,
+        catalogSource,
+      );
+    }
     if (!items.length)
       return {
         status: 'no_items',
@@ -262,7 +274,6 @@ export class Ff14MarketClient {
     const failures: Array<{ itemIds: number[]; error: string }> = [];
     // 使用上游允许的每批一百项；固定自然日窗口，分批聚合后释放原始成交记录。
     for (let offset = 0; offset < batches.length; offset += 4) {
-      if (Date.now() >= deadline) break;
       await Promise.all(
         batches.slice(offset, offset + 4).map(async (batch) => {
           const url = new URL(
@@ -317,47 +328,6 @@ export class Ff14MarketClient {
       catalogComplete && scanComplete && rows.every((row) => row.complete);
     const rankings = ranked.filter((row) => Number(row.transactions) > 0);
     const warnings: string[] = [];
-    if (allMarket && rankings.length) {
-      const leaders = rankings.slice(0, 20);
-      const namesUrl = this.buildXivapiUrl(
-        '/sheet/Item',
-        this.normalizeXivapiLanguage(params.language),
-      );
-      namesUrl.search = new URLSearchParams({
-        rows: leaders.map((row) => row.itemId).join(','),
-        fields: 'Name',
-        language: this.normalizeXivapiLanguage(params.language),
-      }).toString();
-      try {
-        const names = await this.requestJson<{ rows?: XivapiSearchItem[] }>(
-          namesUrl,
-          'GET',
-          'XIVAPI排行榜物品名称',
-        );
-        for (const row of leaders) {
-          const name = names.rows?.find((item) => item.row_id === row.itemId)
-            ?.fields?.Name;
-          if (name) row.name = name;
-        }
-        if (this.normalizeXivapiLanguage(params.language) === 'chs') {
-          const latest = await this.getChineseCatalog();
-          for (const row of leaders) {
-            const name = latest.get(row.itemId)?.fields?.Name;
-            if (name) row.name = name;
-          }
-        }
-      } catch (error) {
-        warnings.push(`物品名称读取失败，保留真实ID：${String(error)}`);
-      }
-    }
-    let returnedRankings = rankings;
-    let returnedSources = sources;
-    if (allMarket) {
-      returnedRankings = rankings.slice(0, 20);
-      returnedSources = [
-        `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}/{itemIds}?entriesToReturn=99999&entriesWithin=${range.end - 1 - range.start}&entriesUntil=${range.end - 1}`,
-      ];
-    }
     return {
       range: { ...range, timezone: 'Asia/Shanghai' },
       world: target.label,
@@ -378,10 +348,10 @@ export class Ff14MarketClient {
         .map((row) => row.itemId),
       warnings,
       catalogSource,
-      sources: returnedSources,
+      sources,
       failures,
       unavailable: rows.filter((row) => row.status === 'unavailable'),
-      rankings: returnedRankings,
+      rankings,
       coverage:
         'Universalis玩家上传的成交记录；不代表游戏服务器全部成交。单物品最多99999条，complete仅表示本次接口窗口未发现截断或缺失；缺失项不当作零成交，扫描未完成不能宣称全区前20。',
       replyText: `${target.label}成交统计（${params.date || '最近' + (params.days || 1) + '天'}，已查询${scannedItems}/${items.length}件物品，排序${metric}）\n${rankings
@@ -393,6 +363,113 @@ export class Ff14MarketClient {
         .join(
           '\n',
         )}\n数据为玩家上传成交；完整性=${complete}，缺失${rows.length - ranked.length}项，未查询${items.length - scannedItems}项。`,
+    };
+  }
+
+  /**
+   * 通过私有扫描检查点完成全目录查询，慢请求续查而不丢弃尚未读取的物品。
+   * @param ids - 上游返回的完整可交易物品目录。
+   * @param params - 用户指定的日期、品质及语言。
+   * @param range - 全部批次共用的固定时间窗口。
+   * @param target - 已解析的真实地区或服务器。
+   * @param metric - 已校验的排序指标。
+   * @param catalogSource - 目录来源地址。
+   * @returns 完整扫描榜单或可继续执行的进度，不将局部排名作为最终答案。
+   */
+  private async getFullMarketStatistics(
+    ids: number[],
+    params: Record<string, any>,
+    range: { start: number; end: number },
+    target: { target: string; label: string },
+    metric: string,
+    catalogSource: string,
+  ) {
+    const result = await this.marketScan.run({
+      ids,
+      range,
+      world: target.target,
+      metric,
+      hq: params.hq,
+      windowKey: params.date || `days=${Number(params.days ?? 1)}`,
+      readBatch: async (batch, fixedRange) => {
+        const url = new URL(
+          `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}/${batch.join(',')}`,
+        );
+        url.search = new URLSearchParams({
+          entriesToReturn: '99999',
+          entriesWithin: String(fixedRange.end - 1 - fixedRange.start),
+          entriesUntil: String(fixedRange.end - 1),
+        }).toString();
+        return this.requestJson<any>(url, 'GET', 'Universalis成交统计');
+      },
+    });
+    const warnings: string[] = [];
+    const rankings: any[] = result.rankings;
+    if (rankings.length) {
+      const language = this.normalizeXivapiLanguage(params.language);
+      const url = this.buildXivapiUrl('/sheet/Item', language);
+      url.search = new URLSearchParams({
+        rows: rankings.map((row) => row.itemId).join(','),
+        fields: 'Name,Icon',
+        language,
+      }).toString();
+      try {
+        const names = await this.requestJson<{ rows?: XivapiSearchItem[] }>(
+          url,
+          'GET',
+          'XIVAPI排行榜物品名称',
+        );
+        for (const row of rankings) {
+          const item = names.rows?.find((entry) => entry.row_id === row.itemId);
+          if (item?.fields?.Name) row.name = item.fields.Name;
+          row.icon = this.normalizeItemIcon(item?.fields?.Icon);
+        }
+      } catch {
+        warnings.push('名称接口读取失败，保留真实物品ID与详情入口');
+      }
+      if (language === 'chs') {
+        try {
+          const names = await this.getChineseCatalog();
+          for (const row of rankings) {
+            const name = names.get(row.itemId)?.fields?.Name;
+            if (name) row.name = name;
+          }
+        } catch {
+          warnings.push('最新中文目录读取失败，保留已核实名称');
+        }
+      }
+      for (const row of rankings) {
+        row.itemUrl = `https://universalis.app/market/${row.itemId}`;
+        row.nameStatus = 'source_name';
+        if (/^(?:物品\d+|追加.+\d+)$/u.test(row.name)) {
+          row.nameStatus = 'unresolved_placeholder';
+          row.sourceName = row.name;
+          row.name = `${row.name}（ID ${row.itemId}，正式名称待核实）`;
+        }
+      }
+    }
+    let replyText = `全区扫描进度${result.scannedItems}/${ids.length}；尚未完成，不生成局部前20。请继续同一查询以复用进度。`;
+    if (result.scanComplete) {
+      replyText = `${target.label}成交统计（${params.date || '固定时间窗口'}，${result.scannedItems}/${ids.length}件，${metric}）\n${rankings.map((row, index) => `${index + 1}. ${row.name}：销量${row.quantity}，成交额${row.turnover}，成交笔数${row.transactions}；${row.itemUrl}`).join('\n')}\n玩家上传成交；缺失${result.unavailableCount}项，完整性=${result.complete}。`;
+    }
+    return {
+      ...result,
+      allMarket: true,
+      catalogComplete: true,
+      catalogSource,
+      range: { ...result.range, timezone: 'Asia/Shanghai' },
+      world: target.label,
+      metric,
+      warnings,
+      rankings,
+      resume: { ...params, mode: 'stats' },
+      sources: [
+        catalogSource,
+        `${this.universalisBaseUrl}/history/${encodeURIComponent(target.target)}`,
+      ],
+      coverage:
+        'Universalis玩家上传成交；扫描完成不代表官方全部流水。缺失项不视为零，未扫描完不返回全区排名。',
+      replyText,
     };
   }
 

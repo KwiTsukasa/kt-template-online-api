@@ -1,0 +1,66 @@
+{
+  "pluginKey": "feishu-docs",
+  "name": "飞书在线文档",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "独立接入飞书云文档、知识库、电子表格和多维表，支持分页读取与指定目标修改后回读核验。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "permissions": ["runtime.http", "plugin.config.read"],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 95000,
+    "memoryMb": 128,
+    "maxConcurrency": 1,
+    "configKeys": ["FEISHU_DOCS_APP_ID", "FEISHU_DOCS_APP_SECRET"]
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "operations": [
+    {
+      "key": "feishu.docs.read",
+      "name": "飞书文档读取",
+      "handlerName": "readDocument",
+      "description": "读取飞书文档：/飞书读取 {\"url\":\"飞书docx/sheets/wiki/base链接\"}。先取得真实块/表ID；docx可追加blockId，表格追加range=\"sheetId!A1:B2\"，多维表追加tableId/recordId。has_more为true时使用pageToken继续，不把一页当全文。结果snapshot用于精确编辑。",
+      "aliases": ["飞书读取"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": {
+            "type": "string",
+            "description": "命令后的JSON对象"
+          }
+        },
+        "required": ["raw"],
+        "x-agent-read-only": true
+      }
+    },
+    {
+      "key": "feishu.docs.edit",
+      "name": "飞书文档编辑",
+      "handlerName": "editDocument",
+      "description": "修改用户明确指定的飞书对象：先读取精确目标，再/飞书编辑 {\"url\":\"链接\",\"blockId\":\"真实块ID\",\"expectedSnapshot\":\"读取返回的snapshot\",\"text\":\"新文本\"}；表格用range和尺寸相同values二维数组；多维表用tableId/recordId和fields对象。只写指定范围，回读核对成功后才确认；拒绝以改写正文代替操作。",
+      "aliases": ["飞书编辑"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": {
+            "type": "string",
+            "description": "命令后的JSON对象"
+          }
+        },
+        "required": ["raw"],
+        "x-agent-read-only": false
+      }
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": []
+}

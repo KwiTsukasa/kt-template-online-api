@@ -131,6 +131,9 @@ function createFf14MarketGenericHostAdapter(
 ): Ff14MarketPluginHost {
   const { host, runtime } = options;
   return {
+    readPluginState: async () => callFf14GenericHost(host, 'readPluginState'),
+    compareAndSwapPluginState: async (input) =>
+      callFf14GenericHost(host, 'compareAndSwapPluginState', input),
     requestBuffer: async (request) =>
       await callFf14GenericHost<Uint8Array>(host, 'requestBuffer', {
         ...request,

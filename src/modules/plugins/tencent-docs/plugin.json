@@ -1,0 +1,57 @@
+{
+  "pluginKey": "tencent-docs",
+  "name": "腾讯在线文档",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "使用专用账号授权的官方文档服务，独立读取在线文档及精确编辑Word原文、Excel区域，写后回读核验。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "permissions": ["runtime.http", "plugin.config.read"],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 115000,
+    "memoryMb": 128,
+    "maxConcurrency": 1,
+    "configKeys": ["TENCENT_DOCS_TOKEN"]
+  },
+  "configSchema": { "type": "object", "properties": {} },
+  "operations": [
+    {
+      "key": "tencent.docs.read",
+      "name": "腾讯文档读取",
+      "handlerName": "readDocument",
+      "description": "使用官方API读取：/腾讯文档读取 {\"url\":\"https://docs.qq.com/doc/链接ID\"}。正文用offset/limit分页；Word可传findText取得精确匹配位置；Excel先读工作表，再传sheetId/startRow/endRow/startCol/endCol读取矩形（零基，结束不包含，最多2000格）。snapshot供精确编辑使用，不能把一页当全文。",
+      "aliases": ["腾讯文档读取"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 110000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": { "type": "string", "description": "命令后的JSON对象" }
+        },
+        "required": ["raw"],
+        "x-agent-read-only": true
+      }
+    },
+    {
+      "key": "tencent.docs.edit",
+      "name": "腾讯文档编辑",
+      "handlerName": "editDocument",
+      "description": "先读取再改指定目标：/腾讯文档编辑 {\"url\":\"链接\",\"expectedSnapshot\":\"读取返回的snapshot\",\"oldText\":\"明确原文\",\"text\":\"新文\"}；原文多处时用findText返回的begin选定一处。Word只改单段普通文字，带版本约束；Excel传同一sheetId和矩形及尺寸一致的values二维数组。回读验证成功才确认完成。",
+      "aliases": ["腾讯文档编辑"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 110000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw": { "type": "string", "description": "命令后的JSON对象" }
+        },
+        "required": ["raw"],
+        "x-agent-read-only": false
+      }
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": []
+}

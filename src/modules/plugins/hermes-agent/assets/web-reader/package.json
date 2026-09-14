@@ -1,0 +1,11 @@
+{
+  "name": "kt-hermes-web-reader",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@mozilla/readability": "0.6.0",
+    "linkedom": "0.18.12"
+  }
+}

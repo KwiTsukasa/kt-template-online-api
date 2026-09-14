@@ -8,7 +8,7 @@ RUN cd /opt/hermes \
  && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py \
  && rm /tmp/kt-soul-hot-reload.patch
 ENV KT_SOUL_HOT_RELOAD=1
-LABEL top.kwitsukasa.hermes.kt-tools="4"
+LABEL top.kwitsukasa.hermes.kt-tools="5"
 RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp -o /usr/local/bin/yt-dlp \
  && printf '%s  %s\n' 1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6 /usr/local/bin/yt-dlp | sha256sum -c - \
  && chmod 755 /usr/local/bin/yt-dlp \
@@ -20,6 +20,9 @@ COPY src/modules/plugins/hermes-agent/assets/hermes-mcp-images.patch /tmp/kt-mcp
 COPY src/modules/plugins/hermes-agent/assets/kt-tools.mjs /opt/kt-tools/server.mjs
 COPY src/modules/plugins/hermes-agent/assets/kt-video.mjs /opt/kt-tools/kt-video.mjs
 COPY src/modules/plugins/hermes-agent/assets/kt-plan-check.mjs /opt/kt-tools/kt-plan-check.mjs
+COPY src/modules/plugins/hermes-agent/assets/web-reader/package*.json /opt/kt-tools/web-reader/
+COPY src/modules/plugins/hermes-agent/assets/web-reader/kt-web.mjs /opt/kt-tools/web-reader/kt-web.mjs
+RUN cd /opt/kt-tools/web-reader && npm ci --omit=dev --ignore-scripts --no-audit --no-fund && node --check kt-web.mjs
 COPY src/modules/plugins/hermes-agent/assets/persona-identity.md /opt/kt-tools/persona-identity.md
 COPY src/modules/plugins/hermes-agent/assets/kt-research /opt/kt-tools/kt-research
 COPY src/modules/plugins/hermes-agent/assets/qqbot-skills /opt/kt-tools/qqbot-skills

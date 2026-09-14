@@ -21,6 +21,7 @@ describe('MediaGovernanceCatalogController', () => {
     createWork: jest.fn(),
     createWorkTask: jest.fn(),
     deleteEmptySeries: jest.fn(),
+    deleteRssSubscription: jest.fn(),
     detail: jest.fn(),
     discoverRssSources: jest.fn(),
     episodePage: jest.fn(),
@@ -68,6 +69,36 @@ describe('MediaGovernanceCatalogController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+
+  it('deletes the requested RSS with its revision and forbids caching', async () => {
+    catalog.deleteRssSubscription.mockResolvedValueOnce({
+      deleted: true,
+      seriesId: 'media-series-kept',
+      subscriptionId: 'rss-old',
+    });
+    const response = await request(apiUrl)
+      .delete('/media-governance/series/rss-subscriptions/rss-old')
+      .query({ expectedRevision: 7 })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(response.body.data).toEqual({
+      deleted: true,
+      seriesId: 'media-series-kept',
+      subscriptionId: 'rss-old',
+    });
+    expect(catalog.deleteRssSubscription).toHaveBeenCalledWith('rss-old', 7);
+  });
+
+  it.each([undefined, 'invalid'])(
+    'rejects invalid RSS deletion revision %s',
+    async (expectedRevision) => {
+      await request(apiUrl)
+        .delete('/media-governance/series/rss-subscriptions/rss-old')
+        .query({ expectedRevision })
+        .expect(400);
+      expect(catalog.deleteRssSubscription).not.toHaveBeenCalled();
+    },
+  );
 
   it('creates a Series with one verified primary Work before any Task exists', async () => {
     catalog.createSeries.mockResolvedValueOnce({

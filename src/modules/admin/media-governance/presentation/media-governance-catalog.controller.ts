@@ -477,6 +477,30 @@ export class MediaGovernanceCatalogController {
   }
 
   /**
+   * 删除版本匹配且未在轮询的 RSS 订阅及抓取记录，保留已有任务。
+   * @param subscriptionId - 待删除的 RSS 订阅标识。
+   * @param expectedRevision - 客户端读取到的订阅版本。
+   * @param response - 当前 HTTP 响应。
+   * @returns 已删除的订阅及所属系列标识。
+   */
+  @Delete('rss-subscriptions/:subscriptionId')
+  @MediaGovernancePermission('Media:Governance:Delete')
+  @ApiOperation({ summary: '删除 RSS 订阅并保留已有任务' })
+  async deleteRssSubscription(
+    @Param('subscriptionId') subscriptionId: string,
+    @Query('expectedRevision', ParseIntPipe) expectedRevision: number,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.deleteRssSubscription(
+        subscriptionId,
+        expectedRevision,
+      ),
+    );
+  }
+
+  /**
    * 分页返回 RSS 条目的解析和 Task 入队历史。
    * @param subscriptionId - RSS 订阅标识。
    * @param query - 分页参数。

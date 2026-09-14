@@ -226,8 +226,7 @@ describe('media governance rss torrent resolver', () => {
     internal.resolveRssTorrentSource = jest.fn().mockResolvedValue({
       descriptor: TORRENT_FIXTURE,
       infoHash: 'd9470856384840edd9b61478c8352095b2c3e885',
-      magnetUri:
-        'magnet:?xt=urn:btih:d9470856384840edd9b61478c8352095b2c3e885',
+      magnetUri: 'magnet:?xt=urn:btih:d9470856384840edd9b61478c8352095b2c3e885',
     });
     internal.createMagnetBatchWithRole = jest.fn().mockResolvedValue({
       sources: [{ id: 'media-source-xiangke-27' }],
@@ -409,6 +408,7 @@ describe('media governance rss torrent resolver', () => {
     } as MediaGovernanceRssSubscriptionEntity;
     const subscriptionRepository = {
       findOneBy: jest.fn().mockResolvedValue(duplicate),
+      findOne: jest.fn().mockResolvedValue(duplicate),
       save: jest.fn(),
     };
     const duplicateWorkReferenceRepository = {
@@ -526,6 +526,7 @@ describe('media governance rss torrent resolver', () => {
     ] as MediaGovernanceRssItemEntity[];
     const subscriptionRepository = {
       findOneBy: jest.fn().mockResolvedValue(subscription),
+      findOne: jest.fn().mockResolvedValue(subscription),
       save: jest.fn(async (value) => value),
     };
     const itemRepository = {

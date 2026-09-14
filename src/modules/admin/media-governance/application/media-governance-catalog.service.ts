@@ -1536,9 +1536,9 @@ export class MediaGovernanceCatalogService
       const repository = manager.getRepository(
         MediaGovernanceRssSubscriptionEntity,
       );
-      const duplicate = await repository.findOneBy({
-        feedUrlSha256,
-        seriesId,
+      const duplicate = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { feedUrlSha256, seriesId },
       });
       if (duplicate && duplicate.seasonId !== season.id) {
         throwVbenError('该 RSS 地址已绑定系列的其他季', HttpStatus.CONFLICT);
@@ -1643,7 +1643,10 @@ export class MediaGovernanceCatalogService
       const repository = manager.getRepository(
         MediaGovernanceRssSubscriptionEntity,
       );
-      const current = await repository.findOneBy({ id: subscriptionId });
+      const current = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: subscriptionId },
+      });
       if (!current || current.revision !== input.expectedRevision) {
         throwVbenError('RSS 订阅版本已变化', HttpStatus.CONFLICT);
       }
@@ -2131,6 +2134,12 @@ export class MediaGovernanceCatalogService
         HttpStatus.CONFLICT,
       );
     }
+    if (
+      subscription.status === 'polling' ||
+      this.pollingSubscriptions.has(subscriptionId)
+    ) {
+      throwVbenError('RSS 订阅正在轮询，请稍后重试', HttpStatus.CONFLICT);
+    }
     subscription.enabled = input.enabled;
     subscription.revision += 1;
     subscription.status = 'disabled';
@@ -2139,7 +2148,19 @@ export class MediaGovernanceCatalogService
       subscription.status = 'idle';
       subscription.nextPollAt = toKtDateTime(new Date());
     }
-    const saved = await repository.save(subscription);
+    const updated = await repository.update(
+      { id: subscriptionId, revision: input.expectedRevision },
+      {
+        enabled: subscription.enabled,
+        nextPollAt: subscription.nextPollAt,
+        revision: subscription.revision,
+        status: subscription.status,
+      },
+    );
+    if (updated.affected !== 1) {
+      throwVbenError('RSS 订阅状态已变化，请刷新后重试', HttpStatus.CONFLICT);
+    }
+    const saved = await this.requireSubscription(subscriptionId);
     await this.publishCatalogChanged(
       subscription.seriesId,
       [],
@@ -2156,6 +2177,55 @@ export class MediaGovernanceCatalogService
   async pollRssSubscription(subscriptionId: string) {
     const subscription = await this.requireSubscription(subscriptionId);
     return this.pollSubscription(subscription, true);
+  }
+
+  /**
+   * 锁定订阅并按版本删除其抓取记录，保留已入队任务、来源及剧集绑定。
+   * @param subscriptionId - 待删除的 RSS 订阅标识。
+   * @param expectedRevision - 客户端读取到的订阅版本。
+   * @returns 已删除的订阅及所属系列标识。
+   */
+  async deleteRssSubscription(
+    subscriptionId: string,
+    expectedRevision: number,
+  ) {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+      throwVbenError('订阅版本必须为正整数', HttpStatus.BAD_REQUEST);
+    }
+    const result = await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(
+        MediaGovernanceRssSubscriptionEntity,
+      );
+      const subscription = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: subscriptionId },
+      });
+      if (!subscription) {
+        throwVbenError('RSS 订阅不存在', HttpStatus.NOT_FOUND);
+      }
+      if (subscription.revision !== expectedRevision) {
+        throwVbenError('RSS 订阅版本已变化，请刷新后重试', HttpStatus.CONFLICT);
+      }
+      if (
+        subscription.status === 'polling' ||
+        this.pollingSubscriptions.has(subscriptionId)
+      ) {
+        throwVbenError('RSS 订阅正在轮询，请结束后再删除', HttpStatus.CONFLICT);
+      }
+      await manager
+        .getRepository(MediaGovernanceRssItemEntity)
+        .delete({ subscriptionId });
+      await repository.delete({ id: subscriptionId });
+      return {
+        deleted: true,
+        seriesId: subscription.seriesId,
+        subscriptionId,
+      };
+    });
+    await this.publishCatalogChanged(result.seriesId, [], 'updated').catch(
+      () => undefined,
+    );
+    return result;
   }
 
   /**

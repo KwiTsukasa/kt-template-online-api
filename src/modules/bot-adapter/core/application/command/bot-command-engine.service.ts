@@ -1,4 +1,4 @@
-import { toBotPluginMessageEvent } from '../event/plugin-event.mapper';
+import { toBotPluginConversation } from '../event/plugin-event.mapper';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ToolsService } from '@/common';
 import {
@@ -138,7 +138,7 @@ export class BotCommandEngineService {
         context: {
           arguments: matched.input,
           bot: { selfId: message.selfId },
-          conversation: this.conversationContext(message),
+          conversation: toBotPluginConversation(message),
         },
         input,
         operationKey: command.operationKey,
@@ -208,7 +208,7 @@ export class BotCommandEngineService {
           context: {
             arguments: matched.input,
             bot: { selfId: message.selfId },
-            conversation: this.conversationContext(message),
+            conversation: toBotPluginConversation(message),
           },
           input,
           operationKey: command.operationKey,
@@ -281,7 +281,7 @@ export class BotCommandEngineService {
         context: {
           arguments: matched.input,
           bot: { selfId: message.selfId },
-          conversation: this.conversationContext(message),
+          conversation: toBotPluginConversation(message),
         },
         input,
         operationKey: command.operationKey,
@@ -487,14 +487,5 @@ export class BotCommandEngineService {
       stage === 'low_risk_text' ||
       stage === 'manual_command'
     );
-  }
-  /**
-   * 复用消息事件的身份投影，将真实会话与命令参数分离传给插件。
-   * @param message - 当前适配器确认的发送账号、目标和会话类型。
-   * @returns 与普通消息完全一致的会话键和作用域，不含正文或凭据。
-   */
-  private conversationContext(message: BotNormalizedMessage) {
-    const event = toBotPluginMessageEvent(message);
-    return { key: event.conversationKey, scope: event.scope };
   }
 }

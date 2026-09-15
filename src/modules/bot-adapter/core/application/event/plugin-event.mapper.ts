@@ -16,12 +16,9 @@ const LINK_SCAN_MAX_DEPTH = 10;
 export function toBotPluginMessageEvent(
   message: BotNormalizedMessage,
 ): BotPluginMessageEvent {
+  const conversation = toBotPluginConversation(message);
   return {
-    conversationKey: hashOpaqueKey([
-      message.selfId,
-      message.messageType,
-      message.targetId,
-    ]),
+    conversationKey: conversation.key,
     eventId: message.messageId,
     imageUrls: collectImageUrls(message),
     isSelf: message.userId === message.selfId,
@@ -44,9 +41,23 @@ export function toBotPluginMessageEvent(
       quote: collectQuote(message),
     },
     rawText: message.rawMessage,
-    scope: toPluginScope(message.messageType),
+    scope: conversation.scope,
     senderKey: hashOpaqueKey([message.selfId, message.userId]),
     text: message.messageText,
+  };
+}
+
+/**
+ * 仅按账号、目标类型与目标标识投影会话身份，命令查询无需解析时间、正文或附件。
+ * @param message - 适配器已确认的会话身份字段。
+ * @returns 命令和普通消息共用的稳定会话键与作用域。
+ */
+export function toBotPluginConversation(
+  message: Pick<BotNormalizedMessage, 'selfId' | 'messageType' | 'targetId'>,
+) {
+  return {
+    key: hashOpaqueKey([message.selfId, message.messageType, message.targetId]),
+    scope: toPluginScope(message.messageType),
   };
 }
 

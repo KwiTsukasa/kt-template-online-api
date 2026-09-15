@@ -49,3 +49,5 @@ RUN cd /opt/hermes \
  && git apply /tmp/kt-conversation-souls.patch \
  && /opt/hermes/.venv/bin/python -m py_compile agent/turn_context.py agent/system_prompt.py gateway/platforms/api_server.py gateway/platforms/api_server_runs.py hermes_cli/web_routers/profiles.py \
  && rm /tmp/kt-conversation-souls.patch
+# CI 检出目录的 umask 不得改变运行用户读取固定工具及技能源码的能力。
+RUN chmod -R a+rX /opt/kt-tools

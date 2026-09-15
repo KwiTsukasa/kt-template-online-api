@@ -299,7 +299,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(extractStage('K8s Deploy')).toContain(
       './ci/jenkins/task13-prebuilt-release.sh',
     );
-    expect(task13PrebuiltReleaseScript).toContain('api_images != 3');
+    expect(task13PrebuiltReleaseScript).toContain('api_images != 4');
 
     for (const [path, script] of [
       [TASK13_PREBUILD_PUSH_SCRIPT_PATH, task13PrebuildPushScript],

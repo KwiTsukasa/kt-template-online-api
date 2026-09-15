@@ -287,7 +287,10 @@ describe('plugin platform API contract', () => {
 
   it('keeps TypeORM entity registration aligned with the persistence contract', () => {
     expect(PluginPlatformModule).toBeDefined();
-    expect(PLUGIN_PLATFORM_ENTITIES).toHaveLength(10);
+    expect(PLUGIN_PLATFORM_ENTITIES.map((entity) => entity.name)).toEqual([
+      'Plugin', 'PluginVersion', 'PluginInstallation', 'PluginOperation',
+      'PluginEventHandler', 'PluginConfig', 'PluginAsset', 'PluginRuntimeEvent',
+    ]);
   });
 
   it('passes runtime-event filters to persistence', async () => {

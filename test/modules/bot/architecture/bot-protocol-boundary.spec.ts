@@ -94,7 +94,7 @@ describe('Bot protocol architecture boundary', () => {
     expect(source).toContain('Bot:Account:MessagePush:List');
     expect(source).toContain('Bot:Account:WebUI');
     expect(source).toContain('PluginPlatform:Plugin:List');
-    expect(source).toContain('PluginPlatform:Task:List');
+    expect(source).not.toContain('PluginPlatform:Task:');
   });
 
   it('allows the qqbot name only at official SDK and exact outgoing interaction syntax boundaries', () => {

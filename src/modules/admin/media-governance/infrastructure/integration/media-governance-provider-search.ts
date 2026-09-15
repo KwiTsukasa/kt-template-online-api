@@ -134,11 +134,11 @@ export async function fetchTmdbTvSeasonFacts(
 }
 
 /**
- * 从 TMDB TV 季列表卡片读取季号、正集数和可选首播年份，并去除重复链接。
+ * 按独立季卡片读取同一 TMDB 身份的季号、摘要集数和首播年份，兼容带片名的规范链接。
  * @param html - TMDB 官方季列表 HTML。
  * @param providerId - 页面必须归属的 TMDB TV 编号。
  * @returns 可直接固化为连续 Season/Episode 的有界季事实。
- * @throws 页面出现越界季号或无法读取集数的季卡片时拒绝部分投影。
+ * @throws 身份非法、季号或集数越界、摘要缺失或重复季事实冲突时拒绝部分投影。
  */
 export function parseTmdbTvSeasonFactsHtml(
   html: string,
@@ -148,14 +148,24 @@ export function parseTmdbTvSeasonFactsHtml(
     throw new Error('tmdb-provider-id-invalid');
   }
   const facts: MediaGovernanceTmdbSeasonFact[] = [];
-  const seen = new Set<number>();
+  const seen = new Map<number, number>();
   const linkPattern = new RegExp(
-    `href="\\/tv\\/${providerId}\\/season\\/(\\d{1,3})(?:\\?[^\"]*)?"`,
-    'gu',
+    `href=["']\\/tv\\/${providerId}(?:-[^/"'?#]+)?\\/season\\/(\\d+)(?:\\?[^"']*)?["']`,
+    'u',
   );
-  for (const match of html.matchAll(linkPattern)) {
+  const cards = [
+    ...html.matchAll(
+      /<div\b[^>]*\bclass=["'](?:[^"']*\s)?season(?:\s[^"']*)?["'][^>]*>/gu,
+    ),
+  ];
+  for (const [index, card] of cards.entries()) {
+    const cardHtml = html.slice(
+      card.index,
+      cards[index + 1]?.index ?? html.length,
+    );
+    const match = cardHtml.match(linkPattern);
+    if (!match) continue;
     const seasonNumber = Number(match[1]);
-    if (seen.has(seasonNumber)) continue;
     if (
       !Number.isInteger(seasonNumber) ||
       seasonNumber < 0 ||
@@ -163,24 +173,28 @@ export function parseTmdbTvSeasonFactsHtml(
     ) {
       throw new Error('tmdb-provider-season-number-invalid');
     }
-    seen.add(seasonNumber);
-    let cardEnd = match.index + 16_000;
-    const nextSeason = html.indexOf('<div class="season">', match.index + 1);
-    if (nextSeason >= 0 && nextSeason < cardEnd) cardEnd = nextSeason;
+    const summary = cardHtml.match(/<h4\b[^>]*>([\s\S]*?)<\/h4>/iu)?.[1] ?? '';
     const cardText = decodeHtmlAttribute(
-      html.slice(match.index, cardEnd).replace(/<[^>]+>/gu, ' '),
+      summary.replace(/<[^>]+>/gu, ' '),
     ).replace(/\s+/gu, ' ');
     const episodeCountText = cardText.match(
-      /(?:共\s*)?(\d{1,4})\s*(?:集|Episodes?)/iu,
+      /(?:共\s*)?(\d+)\s*(?:集|Episodes?)/iu,
     )?.[1];
     if (!episodeCountText) {
       throw new Error('tmdb-provider-season-episode-count-missing');
     }
     const episodeCount = Number(episodeCountText);
-    if (episodeCount === 0) continue;
     if (episodeCount > 2_000) {
       throw new Error('tmdb-provider-season-episode-count-invalid');
     }
+    if (seen.has(seasonNumber)) {
+      if (seen.get(seasonNumber) !== episodeCount) {
+        throw new Error('tmdb-provider-season-facts-conflict');
+      }
+      continue;
+    }
+    seen.set(seasonNumber, episodeCount);
+    if (episodeCount === 0) continue;
     const releaseYearText = cardText.match(/(?:18|19|20|21)\d{2}/u)?.[0];
     let releaseYear: null | number = null;
     if (releaseYearText) releaseYear = Number(releaseYearText);
@@ -199,13 +213,13 @@ export function parseTmdbTvSeasonFactsHtml(
 }
 
 /**
- * 以禁用连接复用的两次有界请求读取 TMDB HTML，并限制重定向仍停留在预期官方路径。
+ * 以两次有界请求读取 TMDB HTML，只允许同一官方来源、作品身份和页面类型的规范片名重定向。
  * @param url - TMDB 搜索或详情页 URL。
- * @param expectedPathPrefix - 跟随重定向后仍必须命中的官方路径前缀。
+ * @param expectedPathname - 去除作品片名后必须精确一致的官方路径。
  * @returns 不超过 512 KiB 的 HTML 正文。
  * @throws 两次请求均失败、响应类型错误或最终地址漂移时抛出稳定不可用错误。
  */
-async function fetchTmdbHtml(url: URL, expectedPathPrefix: string) {
+async function fetchTmdbHtml(url: URL, expectedPathname: string) {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -218,8 +232,12 @@ async function fetchTmdbHtml(url: URL, expectedPathPrefix: string) {
         signal: AbortSignal.timeout(10_000),
       });
       const finalUrl = new URL(response.url);
-      const officialHost = finalUrl.hostname === 'www.themoviedb.org';
-      const expectedPath = finalUrl.pathname.startsWith(expectedPathPrefix);
+      const officialHost = finalUrl.origin === url.origin;
+      const canonicalPathname = finalUrl.pathname.replace(
+        /^\/(tv|movie)\/([1-9]\d*)(?:-[^/]+)?(?=\/|$)/u,
+        '/$1/$2',
+      );
+      const expectedPath = canonicalPathname === expectedPathname;
       const htmlResponse = String(response.headers.get('content-type') ?? '')
         .toLowerCase()
         .includes('text/html');

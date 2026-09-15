@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  fetchTmdbTvSeasonFacts,
   parseTmdbTvSeasonFactsHtml,
   parseTmdbSearchHtml,
   searchTmdbMediaCandidates,
@@ -6,6 +9,177 @@ import {
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-provider-search';
 
 describe('TMDB provider search', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValue(new Error('unexpected TMDB request'));
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const jackalSeasons = readFileSync(
+    join(__dirname, 'fixtures/tmdb-jackal-seasons.html'),
+    'utf8',
+  );
+
+  it('reads the captured Jackal cards through the official slug redirect', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        tmdbResponse(
+          jackalSeasons,
+          'https://www.themoviedb.org/tv/222766-the-day-of-the-jackal/seasons?language=zh-CN',
+        ),
+      );
+    await expect(fetchTmdbTvSeasonFacts('222766')).resolves.toEqual([
+      {
+        episodeCount: 10,
+        episodeStart: 1,
+        releaseYear: 2024,
+        seasonNumber: 1,
+        title: '第 1 季',
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['bare ID', '/tv/222766'],
+    ['canonical slug', '/tv/222766-the-day-of-the-jackal'],
+    ['encoded title', '/tv/222766-%E8%B1%BA%E7%8B%BC'],
+  ])(
+    'reads %s links, sorted seasons, specials and zero-episode future seasons',
+    (_label, base) => {
+      const seasons = [
+        `<div class="season"><a href="${base}/season/2">Season 2</a><h4>2025 • 8 Episodes</h4></div>`,
+        `<div class="season"><a href="${base}/season/0">Specials</a><h4>2024 • 1 Episode</h4></div>`,
+        `<div class="season"><a href="${base}/season/3">Season 3</a><h4>0 Episodes</h4></div>`,
+        `<div class="season"><a href="${base}/season/1?language=zh-CN">Cover</a><h2><a href="${base}/season/1">Title</a></h2><h4>2024 • 共 10 集</h4></div>`,
+      ].join('\n');
+      expect(parseTmdbTvSeasonFactsHtml(seasons, '222766')).toEqual([
+        {
+          episodeCount: 1,
+          episodeStart: 1,
+          releaseYear: 2024,
+          seasonNumber: 0,
+          title: '特别篇',
+        },
+        {
+          episodeCount: 10,
+          episodeStart: 1,
+          releaseYear: 2024,
+          seasonNumber: 1,
+          title: '第 1 季',
+        },
+        {
+          episodeCount: 8,
+          episodeStart: 1,
+          releaseYear: 2025,
+          seasonNumber: 2,
+          title: '第 2 季',
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    ['neighbouring ID', 'https://www.themoviedb.org/tv/2227660-jackal/seasons'],
+    ['other work', 'https://www.themoviedb.org/tv/222767-jackal/seasons'],
+    [
+      'wrong namespace',
+      'https://www.themoviedb.org/movie/222766-jackal/seasons',
+    ],
+    ['wrong route', 'https://www.themoviedb.org/tv/222766-jackal/season/1'],
+    [
+      'route prefix collision',
+      'https://www.themoviedb.org/tv/222766/seasons/edit',
+    ],
+    ['external origin', 'https://example.com/tv/222766/seasons'],
+    ['HTTP downgrade', 'http://www.themoviedb.org/tv/222766/seasons'],
+    ['unexpected port', 'https://www.themoviedb.org:8443/tv/222766/seasons'],
+  ])('rejects %s redirects without trusting the HTML', async (_label, url) => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(async () => tmdbResponse(jackalSeasons, url));
+    await expect(fetchTmdbTvSeasonFacts('222766')).rejects.toThrow(
+      'tmdb-provider-search-unavailable',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an identity whose numeric ID merely starts with the requested ID', async () => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(async () =>
+        tmdbResponse(
+          '<title>Another show (2024)</title>',
+          'https://www.themoviedb.org/tv/2227660-other-show',
+        ),
+      );
+    await expect(
+      verifyTmdbMediaCandidate({
+        mediaType: 'tv',
+        providerId: '222766',
+        releaseYear: 2024,
+      }),
+    ).rejects.toThrow('tmdb-provider-search-unavailable');
+  });
+
+  it.each(['100', '1000'])(
+    'rejects out-of-range season %s instead of ignoring it',
+    (season) => {
+      const invalid = jackalSeasons.replaceAll(
+        '/season/1',
+        `/season/${season}`,
+      );
+      expect(() => parseTmdbTvSeasonFactsHtml(invalid, '222766')).toThrow(
+        'tmdb-provider-season-number-invalid',
+      );
+    },
+  );
+
+  it.each(['2001', '10000'])(
+    'rejects out-of-range episode count %s',
+    (count) => {
+      expect(() =>
+        parseTmdbTvSeasonFactsHtml(
+          jackalSeasons.replace('共 10 集', `共 ${count} 集`),
+          '222766',
+        ),
+      ).toThrow('tmdb-provider-season-episode-count-invalid');
+    },
+  );
+
+  it('does not borrow a synopsis or another season count when the current summary is incomplete', () => {
+    const incomplete = `<div class="season card"><a href="/tv/222766/season/0">Specials</a><h4>2024</h4><p>本季共 99 集</p></div>${jackalSeasons}`;
+    expect(() => parseTmdbTvSeasonFactsHtml(incomplete, '222766')).toThrow(
+      'tmdb-provider-season-episode-count-missing',
+    );
+  });
+
+  it('rejects conflicting duplicate season cards', () => {
+    expect(() =>
+      parseTmdbTvSeasonFactsHtml(
+        jackalSeasons + jackalSeasons.replace('共 10 集', '共 11 集'),
+        '222766',
+      ),
+    ).toThrow('tmdb-provider-season-facts-conflict');
+  });
+
+  it.each([
+    ['empty page', '<html></html>'],
+    ['future-only', jackalSeasons.replace('共 10 集', '共 0 集')],
+    ['different identity', jackalSeasons.replaceAll('222766', '222767')],
+  ])('rejects %s without creating a TV shell', async (_label, body) => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        tmdbResponse(body, 'https://www.themoviedb.org/tv/222766/seasons'),
+      );
+    await expect(fetchTmdbTvSeasonFacts('222766')).rejects.toThrow(
+      'tmdb-provider-season-facts-missing',
+    );
+  });
+
   const html = `
     <div class="comp:media-card">
       <a href="/tv/105473?language=zh-CN">

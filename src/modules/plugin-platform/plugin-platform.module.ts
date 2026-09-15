@@ -11,13 +11,11 @@ import { PluginEventRegistryService } from './application/registry/plugin-event-
 import { PluginRegistryService } from './application/registry/plugin-registry.service';
 import { PluginExecutionAdapter } from './application/plugin-execution.adapter';
 import { PluginPlatformService } from './application/plugin-platform.service';
+import { PluginTaskCapabilityRegistry } from './application/registry/plugin-task-capability.registry';
 import {
-  PluginTaskManifestSynchronizer,
-  PluginTaskSchedulerService,
-  PluginTaskService,
-  PluginTaskWorkerProcessor,
-} from './application/task';
-import { PluginPlatformTaskController } from './contract/plugin-platform-task.controller';
+  PLUGIN_TASK_CAPABILITIES,
+  PLUGIN_TASK_EXECUTION,
+} from './contract/plugin-task-capability.port';
 import { PluginPlatformController } from './contract/plugin-platform.controller';
 import { PluginController } from './contract/plugin-catalog.controller';
 import { PluginPlatformPermissionGuard } from './contract/plugin-platform-permission.guard';
@@ -35,17 +33,14 @@ import {
 import { PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.service';
 
 @Module({
-  controllers: [
-    PluginController,
-    PluginPlatformController,
-    PluginPlatformTaskController,
-  ],
+  controllers: [PluginController, PluginPlatformController],
   exports: [
+    PLUGIN_TASK_CAPABILITIES,
+    PLUGIN_TASK_EXECUTION,
     BOT_PLUGIN_PROTOCOL,
     PluginHttpClientService,
     PluginPlatformPermissionGuard,
     PluginPlatformService,
-    PluginTaskService,
   ],
   imports: [
     ConfigModule,
@@ -71,10 +66,12 @@ import { PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.service';
     PluginPlatformPermissionGuard,
     PluginWorkerRuntimeFactoryService,
     PluginPackageReaderService,
-    PluginTaskManifestSynchronizer,
-    PluginTaskSchedulerService,
-    PluginTaskService,
-    PluginTaskWorkerProcessor,
+    PluginTaskCapabilityRegistry,
+    {
+      provide: PLUGIN_TASK_CAPABILITIES,
+      useExisting: PluginTaskCapabilityRegistry,
+    },
+    { provide: PLUGIN_TASK_EXECUTION, useExisting: PluginPlatformService },
     {
       provide: BOT_PLUGIN_PROTOCOL,
       useExisting: PluginExecutionAdapter,

@@ -136,7 +136,6 @@ WITH expected_menu AS (
   UNION ALL SELECT 2041700000000100421, 2041700000000100400, 'BotTencentConnection', '/bot/tencent', '/bot/tencent/list', NULL, 'Bot:Tencent:List'
   UNION ALL SELECT 2041700000000100422, 0, 'PluginPlatform', '/plugin-platform', NULL, '/plugin-platform/plugins', NULL
   UNION ALL SELECT 2041700000000100409, 2041700000000100422, 'PluginPlatformPlugins', '/plugin-platform/plugins', '/plugin-platform/plugin/list', NULL, 'PluginPlatform:Plugin:List'
-  UNION ALL SELECT 2041700000000100411, 2041700000000100422, 'PluginPlatformTasks', '/plugin-platform/tasks', '/plugin-platform/task/list', NULL, 'PluginPlatform:Task:List'
   UNION ALL SELECT 2041700000000120531, 2041700000000100421, 'BotTencentCreate', NULL, NULL, NULL, 'Bot:Tencent:Create'
   UNION ALL SELECT 2041700000000120532, 2041700000000100421, 'BotTencentEdit', NULL, NULL, NULL, 'Bot:Tencent:Edit'
   UNION ALL SELECT 2041700000000120533, 2041700000000100421, 'BotTencentDelete', NULL, NULL, NULL, 'Bot:Tencent:Delete'
@@ -746,3 +745,15 @@ WHERE role.role_code = 'super'
   )
   AND menu.is_deleted = 0
   AND role_menu.role_id IS NULL;
+
+SELECT 'automation_table_cardinality' AS check_name,COUNT(*) AS matched_rows
+FROM information_schema.tables WHERE table_schema=DATABASE() AND (table_name LIKE 'automation\_%' OR table_name='bot_reminder');
+-- Expected: 24 module tables, 50 menus, 0 missing super grants, 0 enabled legacy forms.
+SELECT 'automation_menu_cardinality' AS check_name,COUNT(*) AS matched_rows FROM admin_menu
+WHERE id BETWEEN 2041700000000300000 AND 2041700000000300999 AND status=1 AND is_deleted=0;
+SELECT 'automation_super_grant_missing' AS check_name,COUNT(*) AS missing_rows
+FROM admin_role role CROSS JOIN admin_menu menu LEFT JOIN admin_role_menu link ON link.role_id=role.id AND link.menu_id=menu.id
+WHERE role.role_code='super' AND role.status=1 AND role.is_deleted=0
+AND menu.id BETWEEN 2041700000000300000 AND 2041700000000300999 AND menu.status=1 AND menu.is_deleted=0 AND link.menu_id IS NULL;
+SELECT 'automation_legacy_entry_active' AS check_name,COUNT(*) AS unexpected_rows FROM admin_menu
+WHERE id IN (2041700000000100411,2041700000000120451,2041700000000120452,2041700000000120453,2041700000000120454,2041700000000120455) AND status=1 AND is_deleted=0;

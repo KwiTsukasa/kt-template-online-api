@@ -55,7 +55,7 @@ const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] =>
   Reflect.getMetadata(key, moduleClass) || [];
 
 const getNames = (items: unknown[]) =>
-  items.map((item) => (item as { name?: string }).name || `${item}`);
+  items.map((item) => (item as { name?: string }).name || String(item));
 
 type EntityClass = new (...args: never[]) => unknown;
 

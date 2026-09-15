@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MESSAGE_DELIVERY } from './contract/message-delivery.port';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { MessageSubscriberRegistry } from './application/subscriber/message-subscriber.registry';
@@ -32,6 +33,7 @@ export const MESSAGE_MANAGEMENT_ENTITIES = [
 export const MESSAGE_MANAGEMENT_CONTROLLERS = [MessageManagementController];
 
 export const MESSAGE_MANAGEMENT_PROVIDERS = [
+  { provide: MESSAGE_DELIVERY, useExisting: SystemMessageDeliveryCoordinatorService },
   SystemMessageSourceRegistry,
   MessageSubscriberRegistry,
   SystemMessageEventStagerService,
@@ -54,6 +56,7 @@ export const MESSAGE_MANAGEMENT_PROVIDERS = [
 ];
 
 export const MESSAGE_MANAGEMENT_EXPORTS = [
+  MESSAGE_DELIVERY,
   SYSTEM_MESSAGE_EVENT_STAGER,
   SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
   SystemMessageSourceRegistry,

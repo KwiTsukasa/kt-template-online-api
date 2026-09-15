@@ -461,8 +461,17 @@ CREATE TABLE IF NOT EXISTS `bot_dedupe` (
 
 CREATE TABLE IF NOT EXISTS `plugin_task` (
   `id` bigint NOT NULL,
-  `plugin_id` bigint NOT NULL,
-  `installation_id` bigint NOT NULL,
+  `plugin_id` bigint DEFAULT NULL,
+  `installation_id` bigint DEFAULT NULL,
+  `owner_kind` varchar(16) NOT NULL DEFAULT 'plugin',
+  `definition_key` varchar(191) DEFAULT NULL,
+  `trigger_config` json DEFAULT NULL,
+  `condition_config` json DEFAULT NULL,
+  `workflow_config` json DEFAULT NULL,
+  `input_template` json DEFAULT NULL,
+  `config_revision` int NOT NULL DEFAULT 1,
+  `max_attempts` int NOT NULL DEFAULT 1,
+  `retry_backoff_ms` int NOT NULL DEFAULT 5000,
   `task_key` varchar(128) NOT NULL,
   `task_name` varchar(128) NOT NULL,
   `handler_name` varchar(128) NOT NULL,
@@ -482,6 +491,7 @@ CREATE TABLE IF NOT EXISTS `plugin_task` (
   `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_plugin_task` (`installation_id`, `task_key`),
+  UNIQUE KEY `uk_plugin_task_definition` (`definition_key`),
   KEY `idx_plugin_task_plugin` (`plugin_id`),
   KEY `idx_plugin_task_enabled` (`enabled`),
   KEY `idx_plugin_task_status` (`runtime_status`)
@@ -490,8 +500,13 @@ CREATE TABLE IF NOT EXISTS `plugin_task` (
 CREATE TABLE IF NOT EXISTS `plugin_task_run` (
   `id` bigint NOT NULL,
   `task_id` bigint NOT NULL,
-  `plugin_id` bigint NOT NULL,
-  `installation_id` bigint NOT NULL,
+  `plugin_id` bigint DEFAULT NULL,
+  `installation_id` bigint DEFAULT NULL,
+  `execution_key` varchar(191) DEFAULT NULL,
+  `parent_run_id` bigint DEFAULT NULL,
+  `step_key` varchar(64) DEFAULT NULL,
+  `attempt_no` int NOT NULL DEFAULT 1,
+  `config_revision` int NOT NULL DEFAULT 1,
   `task_key` varchar(128) NOT NULL,
   `trigger_type` varchar(32) NOT NULL,
   `status` varchar(32) NOT NULL,
@@ -503,6 +518,8 @@ CREATE TABLE IF NOT EXISTS `plugin_task_run` (
   `error_message` text DEFAULT NULL,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_plugin_task_run_execution` (`execution_key`),
+  KEY `idx_plugin_task_run_parent` (`parent_run_id`, `step_key`),
   KEY `idx_plugin_task_run_task_time` (`task_id`, `create_time`),
   KEY `idx_plugin_task_run_plugin_time` (`plugin_id`, `create_time`),
   KEY `idx_plugin_task_run_status_time` (`status`, `create_time`)
@@ -1169,12 +1186,6 @@ VALUES
   (2041700000000120524, 2041700000000100409, 'PluginPlatformPluginUpgrade', NULL, NULL, NULL, 'PluginPlatform:Plugin:Upgrade', 'button', '{"title":"升级"}', 1, 0),
   (2041700000000120525, 2041700000000100409, 'PluginPlatformPluginUninstall', NULL, NULL, NULL, 'PluginPlatform:Plugin:Uninstall', 'button', '{"title":"卸载"}', 1, 0),
   (2041700000000120526, 2041700000000100409, 'PluginPlatformPluginConfig', NULL, NULL, NULL, 'PluginPlatform:Plugin:Config', 'button', '{"title":"配置"}', 1, 0),
-  (2041700000000100411, 2041700000000100422, 'PluginPlatformTasks', '/plugin-platform/tasks', '/plugin-platform/task/list', NULL, 'PluginPlatform:Task:List', 'menu', '{"icon":"lucide:calendar-clock","title":"定时任务"}', 1, 1),
-  (2041700000000120451, 2041700000000100411, 'PluginPlatformTaskUpdateCron', NULL, NULL, NULL, 'PluginPlatform:Task:UpdateCron', 'button', '{"title":"修改 Cron"}', 1, 0),
-  (2041700000000120452, 2041700000000100411, 'PluginPlatformTaskEnable', NULL, NULL, NULL, 'PluginPlatform:Task:Enable', 'button', '{"title":"启用"}', 1, 0),
-  (2041700000000120453, 2041700000000100411, 'PluginPlatformTaskDisable', NULL, NULL, NULL, 'PluginPlatform:Task:Disable', 'button', '{"title":"停用"}', 1, 0),
-  (2041700000000120454, 2041700000000100411, 'PluginPlatformTaskRun', NULL, NULL, NULL, 'PluginPlatform:Task:Run', 'button', '{"title":"手动运行"}', 1, 0),
-  (2041700000000120455, 2041700000000100411, 'PluginPlatformTaskRunLog', NULL, NULL, NULL, 'PluginPlatform:Task:RunLog', 'button', '{"title":"运行记录"}', 1, 0),
   (2041700000000120481, 2041700000000100410, 'BotAccountMessagePushList', NULL, NULL, NULL, 'Bot:Account:MessagePush:List', 'button', '{"title":"common.list"}', 1, 0),
   (2041700000000120482, 2041700000000100410, 'BotAccountMessagePushCreate', NULL, NULL, NULL, 'Bot:Account:MessagePush:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120483, 2041700000000100410, 'BotAccountMessagePushUpdate', NULL, NULL, NULL, 'Bot:Account:MessagePush:Update', 'button', '{"title":"common.edit"}', 1, 0),
@@ -1378,3 +1389,19 @@ WHERE role.`role_code` IN ('super', 'admin')
   AND menu.`is_deleted` = 0;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Bot 领域只保存提醒意图与发送状态；到期触发由 automation 模块负责。
+CREATE TABLE IF NOT EXISTS `bot_reminder` (
+  `id` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `owner` varchar(64) NOT NULL,
+  `data` json NOT NULL,
+  `status` varchar(16) NOT NULL,
+  `schedule_id` bigint DEFAULT NULL,
+  `sync_pending` tinyint NOT NULL DEFAULT 1,
+  `last_error` text,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_bot_reminder_owner` (`owner`,`status`),
+  KEY `idx_bot_reminder_sync` (`sync_pending`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

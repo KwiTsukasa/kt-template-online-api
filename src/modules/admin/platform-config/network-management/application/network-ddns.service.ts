@@ -53,7 +53,6 @@ type SafeProviderError = {
 
 const DEFAULT_AGENT_ID = 'nas-main';
 const DEFAULT_AGENT_IPV6_MAX_AGE_MS = 60_000;
-const DEFAULT_RECONCILE_INTERVAL_MS = 60_000;
 const RETRY_BASE_DELAY_MS = 5_000;
 const RETRY_MAX_DELAY_MS = 15 * 60_000;
 const RETRY_MAX_ATTEMPTS = 8;
@@ -79,7 +78,6 @@ const PROVIDER_ERROR_CODES: Record<string, string> = {
 export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NetworkDdnsService.name);
   private destroyed = false;
-  private reconcileInterval?: NodeJS.Timeout;
   private reconcileRequestTimer?: NodeJS.Timeout;
   private reconcileWorker: null | Promise<void> = null;
   private readonly reconcileRequests: ReconcileRequest[] = [];
@@ -104,11 +102,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     this.requestReconcile();
-    this.reconcileInterval = setInterval(
-      () => this.requestReconcile(),
-      this.reconcileIntervalMs(),
-    );
-    this.reconcileInterval.unref?.();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -116,10 +109,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     if (this.reconcileRequestTimer) {
       clearTimeout(this.reconcileRequestTimer);
       this.reconcileRequestTimer = undefined;
-    }
-    if (this.reconcileInterval) {
-      clearInterval(this.reconcileInterval);
-      this.reconcileInterval = undefined;
     }
     const pending = this.reconcileRequests.splice(0);
     pending.forEach((request) => request.resolve());
@@ -1545,17 +1534,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return this.durationConfig(
       'NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS',
       DEFAULT_AGENT_IPV6_MAX_AGE_MS,
-    );
-  }
-
-  /**
-   * 根据当前运行态处理间隔毫秒。
-   * @returns 间隔毫秒。
-   */
-  private reconcileIntervalMs(): number {
-    return this.durationConfig(
-      'NETWORK_DDNS_RECONCILE_INTERVAL_MS',
-      DEFAULT_RECONCILE_INTERVAL_MS,
     );
   }
 

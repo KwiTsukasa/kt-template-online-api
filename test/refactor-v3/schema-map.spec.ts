@@ -200,12 +200,7 @@ describe('refactor v3 schema skeleton', () => {
       'PluginPlatformPluginUninstall',
       'PluginPlatformPluginUpgrade',
       'PluginPlatformPlugins',
-      'PluginPlatformTasks',
-      'PluginPlatformTaskUpdateCron',
-      'PluginPlatformTaskEnable',
-      'PluginPlatformTaskDisable',
-      'PluginPlatformTaskRun',
-      'PluginPlatformTaskRunLog',
+      'Automation', 'AutomationTasks', 'AutomationTriggers', 'AutomationRules', 'AutomationForms', 'AutomationWorkflows', 'AutomationSchedules', 'AutomationExecutions', 'AutomationTaskReview',
     ];
 
     for (const name of requiredNames) {
@@ -215,11 +210,11 @@ describe('refactor v3 schema skeleton', () => {
     expect(seed).toContain("'Bot:Account:RefreshLogin'");
     expect(seed).toContain("'Bot:Command:Test'");
     expect(seed).toContain("'PluginPlatform:Plugin:List'");
-    expect(seed).toContain("'PluginPlatform:Task:Run'");
+    expect(seed).toContain("'Automation:Task:Run'");
     expect(seed).toContain("'/bot/napcat'");
     expect(seed).toContain("'/bot/tencent'");
     expect(seed).toContain("'/plugin-platform/plugins'");
-    expect(seed).toContain("'/plugin-platform/tasks'");
+    expect(seed).toContain("'/automation/tasks'");
     expect(seed).toContain('INSERT IGNORE INTO admin_role_menu');
   });
 

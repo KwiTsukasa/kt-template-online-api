@@ -49,7 +49,7 @@ const createPackageSource = (
 function createPlatformService(...args: unknown[]) {
   const currentArgs = [...args.slice(0, 5), ...args.slice(6)];
   return new (PluginPlatformService as any)(
-    ...currentArgs
+    ...currentArgs,
   ) as PluginPlatformService;
 }
 
@@ -1081,8 +1081,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       health: jest.fn(async () => ({ ok: true })),
       load: jest.fn(async () => ({ ok: true })),
     };
-    const taskSynchronizer = {
-      syncManifestTasks: jest.fn(async () => []),
+    const taskCapabilities = {
+      publish: jest.fn(),
+      suspend: jest.fn(),
     };
     const service = createPlatformService(
       pluginRepository,
@@ -1102,10 +1103,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       undefined,
       undefined,
       createPackageSource(manifest),
-      taskSynchronizer,
-      {
-        syncTaskScheduler: jest.fn(),
-      },
+      taskCapabilities,
     ) as PluginPlatformService;
 
     await service.onModuleInit();
@@ -1129,10 +1127,14 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         versionId: '2041700000000200002',
       }),
     );
-    expect(taskSynchronizer.syncManifestTasks).toHaveBeenCalledWith({
+    expect(taskCapabilities.publish).toHaveBeenCalledWith({
       installationId: '2041700000000200003',
-      manifestTasks: manifest.tasks,
+      versionId: '2041700000000200002',
+      tasks: expect.arrayContaining(
+        manifest.tasks.map((task) => expect.objectContaining(task)),
+      ),
       pluginId: '2041700000000200001',
+      active: true,
     });
   });
 

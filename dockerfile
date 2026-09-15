@@ -2,6 +2,9 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
+ARG RELEASE_ID=local-unversioned
+ENV RELEASE_ID=${RELEASE_ID}
+
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
 ENV APP_PORT=48085
@@ -42,6 +45,7 @@ RUN npm install -g pnpm@9.15.9 --registry=https://registry.npmmirror.com \
 
 # dist 由 Jenkins 的 Build stage 生成，这里只打包运行产物。
 COPY dist ./dist
+COPY sql/automation-definitions-v1.sql sql/automation-execution-v1.sql sql/automation-schedules-v1.sql sql/automation-menus-v1.sql sql/bot-reminders-v2.sql ./sql/
 COPY sql/bot-adapter-protocol-v1.sql sql/bot-adapter-menu-v1.sql sql/bot-adapter-protocol-v1-verify.sql sql/natmap-port-command-v1.sql sql/natmap-port-command-v1-verify.sql sql/persona-switch-command-v1.sql sql/persona-switch-command-v1-verify.sql sql/bot-permission-user-sets-v1.sql sql/bot-permission-user-sets-v1-verify.sql sql/media-governance-series-work-v1.sql sql/media-governance-series-work-v1-verify.sql sql/media-governance-rss-context-v2.sql sql/media-governance-rss-context-v2-verify.sql sql/media-governance-series-delete-v1.sql sql/media-governance-series-delete-v1-verify.sql sql/media-governance-mechanical-scrape-split.sql sql/media-governance-mechanical-scrape-split-verify.sql ./sql/
 
 EXPOSE 48085

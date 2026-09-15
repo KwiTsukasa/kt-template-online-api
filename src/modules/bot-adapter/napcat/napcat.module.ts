@@ -1,4 +1,5 @@
 import { forwardRef, Module } from '@nestjs/common';
+import { NAPCAT_INSPECTION } from './contract/napcat-inspection.port';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
@@ -36,6 +37,7 @@ export const NAPCAT_CONTROLLERS = [
 ];
 
 export const NAPCAT_PROVIDERS = [
+  { provide: NAPCAT_INSPECTION, useExisting: NapcatWatchdogService },
   NapcatConfigWriterService,
   NapcatDeviceIdentityService,
   NapcatLoginStateStoreService,
@@ -58,6 +60,7 @@ export const NAPCAT_PROVIDERS = [
 ];
 
 export const NAPCAT_EXPORTS = [
+  NAPCAT_INSPECTION,
   NapcatDeviceIdentityService,
   NapcatLoginStateStoreService,
   NapcatSessionBehaviorService,

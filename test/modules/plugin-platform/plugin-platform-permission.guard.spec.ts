@@ -7,7 +7,6 @@ import {
 } from '../../../src/modules/plugin-platform/contract/plugin-platform-permission.guard';
 import { PluginController } from '../../../src/modules/plugin-platform/contract/plugin-catalog.controller';
 import { PluginPlatformController } from '../../../src/modules/plugin-platform/contract/plugin-platform.controller';
-import { PluginPlatformTaskController } from '../../../src/modules/plugin-platform/contract/plugin-platform-task.controller';
 
 type RoleInput = {
   isDeleted?: boolean;
@@ -53,12 +52,6 @@ describe('PluginPlatformPermissionGuard', () => {
     expect(
       Reflect.getMetadata(PLUGIN_PLATFORM_PERMISSION, PluginPlatformController),
     ).toEqual(['PluginPlatform:Plugin:List']);
-    expect(
-      Reflect.getMetadata(
-        PLUGIN_PLATFORM_PERMISSION,
-        PluginPlatformTaskController,
-      ),
-    ).toEqual(['PluginPlatform:Task:List']);
 
     const pluginActions = {
       config: 'Config',
@@ -80,21 +73,6 @@ describe('PluginPlatformPermissionGuard', () => {
       ).toEqual([`PluginPlatform:Plugin:${action}`]);
     });
 
-    const taskActions = {
-      disable: 'Disable',
-      enable: 'Enable',
-      run: 'Run',
-      runs: 'RunLog',
-      updateCron: 'UpdateCron',
-    } as const;
-    Object.entries(taskActions).forEach(([method, action]) => {
-      expect(
-        Reflect.getMetadata(
-          PLUGIN_PLATFORM_PERMISSION,
-          PluginPlatformTaskController.prototype[method],
-        ),
-      ).toEqual([`PluginPlatform:Task:${action}`]);
-    });
   });
 
   it.each([

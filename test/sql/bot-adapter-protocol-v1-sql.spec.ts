@@ -172,13 +172,11 @@ describe('Bot Adapter protocol v1 SQL', () => {
       expect(sql).toContain(
         "'PluginPlatformPlugins', '/plugin-platform/plugins', '/plugin-platform/plugin/list'",
       );
-      expect(sql).toContain(
-        "'PluginPlatformTasks', '/plugin-platform/tasks', '/plugin-platform/task/list'",
-      );
+      expect(sql).not.toContain("'TaskSchedulingTasks'");
       expect(sql).toContain("'Bot:Account:WebUI'");
       expect(sql).toContain("'Bot:Account:MessagePush:List'");
       expect(sql).toContain("'PluginPlatform:Plugin:List'");
-      expect(sql).toContain("'PluginPlatform:Task:Run'");
+      expect(sql).not.toContain("'TaskScheduling:Task:Run'");
       expect(sql).toContain("LIKE 'QqBot:%'");
       expect(sql).toContain("LIKE 'Bot:PluginTask:%'");
     }

@@ -949,8 +949,17 @@ CREATE TABLE IF NOT EXISTS plugin_runtime_event (
 
 CREATE TABLE IF NOT EXISTS plugin_task (
   id BIGINT NOT NULL PRIMARY KEY,
-  plugin_id BIGINT NOT NULL,
-  installation_id BIGINT NOT NULL,
+  plugin_id BIGINT NULL,
+  installation_id BIGINT NULL,
+  owner_kind VARCHAR(16) NOT NULL DEFAULT 'plugin',
+  definition_key VARCHAR(191) NULL,
+  trigger_config JSON NULL,
+  condition_config JSON NULL,
+  workflow_config JSON NULL,
+  input_template JSON NULL,
+  config_revision INT NOT NULL DEFAULT 1,
+  max_attempts INT NOT NULL DEFAULT 1,
+  retry_backoff_ms INT NOT NULL DEFAULT 5000,
   task_key VARCHAR(128) NOT NULL,
   task_name VARCHAR(128) NOT NULL,
   handler_name VARCHAR(128) NOT NULL,
@@ -969,6 +978,7 @@ CREATE TABLE IF NOT EXISTS plugin_task (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_plugin_task (installation_id, task_key),
+  UNIQUE KEY uk_plugin_task_definition (definition_key),
   KEY idx_plugin_task_plugin (plugin_id),
   KEY idx_plugin_task_enabled (enabled),
   KEY idx_plugin_task_status (runtime_status)
@@ -977,8 +987,13 @@ CREATE TABLE IF NOT EXISTS plugin_task (
 CREATE TABLE IF NOT EXISTS plugin_task_run (
   id BIGINT NOT NULL PRIMARY KEY,
   task_id BIGINT NOT NULL,
-  plugin_id BIGINT NOT NULL,
-  installation_id BIGINT NOT NULL,
+  plugin_id BIGINT NULL,
+  installation_id BIGINT NULL,
+  execution_key VARCHAR(191) NULL,
+  parent_run_id BIGINT NULL,
+  step_key VARCHAR(64) NULL,
+  attempt_no INT NOT NULL DEFAULT 1,
+  config_revision INT NOT NULL DEFAULT 1,
   task_key VARCHAR(128) NOT NULL,
   trigger_type VARCHAR(32) NOT NULL,
   status VARCHAR(32) NOT NULL,
@@ -989,6 +1004,8 @@ CREATE TABLE IF NOT EXISTS plugin_task_run (
   safe_summary JSON NULL,
   error_message TEXT NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_plugin_task_run_execution (execution_key),
+  KEY idx_plugin_task_run_parent (parent_run_id, step_key),
   KEY idx_plugin_task_run_task_time (task_id, create_time),
   KEY idx_plugin_task_run_plugin_time (plugin_id, create_time),
   KEY idx_plugin_task_run_status_time (status, create_time)
@@ -1402,4 +1419,306 @@ CREATE TABLE IF NOT EXISTS admin_llm_message (
   UNIQUE KEY uk_admin_llm_message_sequence (conversation_id, sequence),
   UNIQUE KEY uk_admin_llm_message_client_id (conversation_id, client_message_id),
   CONSTRAINT fk_admin_llm_message_conversation FOREIGN KEY (conversation_id) REFERENCES admin_llm_conversation (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bot 领域只保存提醒意图与发送状态；到期触发由 automation 模块负责。
+CREATE TABLE IF NOT EXISTS bot_reminder (
+  `id` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `owner` varchar(64) NOT NULL,
+  `data` json NOT NULL,
+  `status` varchar(16) NOT NULL,
+  `schedule_id` bigint DEFAULT NULL,
+  `sync_pending` tinyint NOT NULL DEFAULT 1,
+  `last_error` text,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_bot_reminder_owner` (`owner`,`status`),
+  KEY `idx_bot_reminder_sync` (`sync_pending`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Independent automation modules; legacy plugin_task tables remain only for historical migration.
+-- Independent automation definition resources. Additive migration; existing task identities remain unchanged.
+
+CREATE TABLE IF NOT EXISTS automation_ruleset (
+  id BIGINT NOT NULL,
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1,
+  published_version INT NULL,
+  definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_ruleset_revision (
+  definition_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_form (
+  id BIGINT NOT NULL,
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1,
+  published_version INT NULL,
+  definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_form_revision (
+  definition_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_trigger (
+  id BIGINT NOT NULL,
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1,
+  published_version INT NULL,
+  definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_trigger_revision (
+  definition_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_workflow (
+  id BIGINT NOT NULL,
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1,
+  published_version INT NULL,
+  definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_workflow_revision (
+  definition_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Additive tables for independent atomic tasks and execution history.
+CREATE TABLE IF NOT EXISTS automation_task_run_review (
+  run_id BIGINT NOT NULL PRIMARY KEY,
+  reviewed_by BIGINT NOT NULL,
+  resolution VARCHAR(32) NOT NULL,
+  reason VARCHAR(2048) NOT NULL,
+  reviewed_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_task (
+  id BIGINT NOT NULL,
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1,
+  published_version INT NULL,
+  definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_task_revision (
+  definition_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '',
+  definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_task_run (
+  id BIGINT NOT NULL,
+  task_id BIGINT NOT NULL,
+  task_version INT NOT NULL,
+  execution_key VARCHAR(64) NOT NULL,
+  request_hash VARCHAR(64) NOT NULL,
+  parent_run_id BIGINT NULL,
+  node_id VARCHAR(64) NULL,
+  status VARCHAR(16) NOT NULL,
+  input_values JSON NOT NULL,
+  output_values JSON NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  cancel_requested TINYINT NOT NULL DEFAULT 0,
+  requires_review TINYINT NOT NULL DEFAULT 0,
+  error_message TEXT NULL,
+  deadline_at DATETIME(3) NOT NULL,
+  next_attempt_at DATETIME(3) NOT NULL,
+  finished_at DATETIME(3) NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_task_run_execution (execution_key),
+  KEY idx_automation_task_run_pending (status, next_attempt_at),
+  KEY idx_automation_task_run_parent (parent_run_id, node_id),
+  KEY idx_automation_task_run_review (task_id, requires_review)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_task_attempt (
+  id BIGINT NOT NULL,
+  run_id BIGINT NOT NULL,
+  attempt_no INT NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  runtime_identity VARCHAR(191) NOT NULL,
+  handler_key VARCHAR(191) NOT NULL,
+  handler_version INT NOT NULL,
+  error_message TEXT NULL,
+  started_at DATETIME(3) NOT NULL,
+  finished_at DATETIME(3) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_task_attempt (run_id, attempt_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_workflow_run (
+  id BIGINT NOT NULL,
+  workflow_id BIGINT NOT NULL,
+  workflow_version INT NOT NULL,
+  execution_key VARCHAR(64) NOT NULL,
+  request_hash VARCHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  input_values JSON NOT NULL,
+  form_values JSON NULL,
+  output_values JSON NULL,
+  cancel_requested TINYINT NOT NULL DEFAULT 0,
+  error_message TEXT NULL,
+  deadline_at DATETIME(3) NOT NULL,
+  next_wake_at DATETIME(3) NOT NULL,
+  finished_at DATETIME(3) NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_workflow_run_execution (execution_key),
+  KEY idx_automation_workflow_run_pending (status, next_wake_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_workflow_node_run (
+  run_id BIGINT NOT NULL,
+  node_id VARCHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  task_run_id BIGINT NULL,
+  selected_ports JSON NOT NULL,
+  output_values JSON NOT NULL,
+  error_message TEXT NULL,
+  wake_at DATETIME(3) NULL,
+  started_at DATETIME(3) NULL,
+  finished_at DATETIME(3) NULL,
+  PRIMARY KEY (run_id, node_id),
+  KEY idx_automation_workflow_node_task (task_run_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Trigger registrations and occurrences are owned exclusively by trigger-engine.
+-- Schedule tables are owned exclusively by task-scheduling; references are resolved through public ports.
+CREATE TABLE IF NOT EXISTS automation_schedule (
+  source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE,
+  id BIGINT NOT NULL, name VARCHAR(128) NOT NULL, description VARCHAR(2048) NOT NULL DEFAULT '',
+  revision INT NOT NULL DEFAULT 1, published_version INT NULL, definition JSON NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS automation_schedule_revision (
+  definition_id BIGINT NOT NULL, version INT NOT NULL, name VARCHAR(128) NOT NULL,
+  description VARCHAR(2048) NOT NULL DEFAULT '', definition JSON NOT NULL,
+  published_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), PRIMARY KEY (definition_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS automation_schedule_state (
+  schedule_id BIGINT NOT NULL, revision INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 0,
+  active_binding_id BIGINT NULL, error_message TEXT NULL, PRIMARY KEY (schedule_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS automation_schedule_binding (
+  id BIGINT NOT NULL, schedule_id BIGINT NOT NULL, schedule_version INT NOT NULL,
+  activation_revision INT NOT NULL, registration_id BIGINT NOT NULL, retired TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_schedule_activation (schedule_id, activation_revision),
+  UNIQUE KEY uk_automation_schedule_registration (registration_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS automation_schedule_dispatch (
+  id BIGINT NOT NULL, schedule_id BIGINT NOT NULL, schedule_version INT NOT NULL,
+  binding_id BIGINT NOT NULL, occurrence_id BIGINT NOT NULL, registration_id BIGINT NOT NULL,
+  occurrence_payload JSON NOT NULL, occurred_at DATETIME(3) NOT NULL, definition JSON NOT NULL,
+  status VARCHAR(16) NOT NULL, target_run_id BIGINT NULL, error_message TEXT NULL,
+  deadline_at DATETIME(3) NOT NULL, next_attempt_at DATETIME(3) NOT NULL, finished_at DATETIME(3) NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_schedule_occurrence (occurrence_id),
+  KEY idx_automation_schedule_dispatch (schedule_id, status, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS automation_trigger_registration (
+  id BIGINT NOT NULL,
+  consumer_key VARCHAR(191) COLLATE utf8mb4_bin NOT NULL,
+  trigger_id BIGINT NOT NULL,
+  trigger_version INT NOT NULL,
+  definition JSON NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  event_key VARCHAR(128) NULL,
+  event_version INT NULL,
+  next_at DATETIME(3) NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_trigger_consumer (consumer_key),
+  KEY idx_automation_trigger_due (status, next_at),
+  KEY idx_automation_trigger_source (status, event_key, event_version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_trigger_occurrence (
+  id BIGINT NOT NULL,
+  identity_key VARCHAR(64) NOT NULL,
+  registration_id BIGINT NOT NULL,
+  trigger_id BIGINT NOT NULL,
+  trigger_version INT NOT NULL,
+  event_receipt_id VARCHAR(64) NULL,
+  occurred_at DATETIME(3) NOT NULL,
+  payload JSON NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  acknowledged_at DATETIME(3) NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_automation_trigger_occurrence (identity_key),
+  KEY idx_automation_trigger_pending (registration_id, status, id),
+  KEY idx_automation_trigger_event (event_receipt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS automation_trigger_event_receipt (
+  id VARCHAR(64) NOT NULL,
+  request_hash VARCHAR(64) NOT NULL,
+  event_key VARCHAR(128) NOT NULL,
+  event_version INT NOT NULL,
+  occurred_at DATETIME(3) NOT NULL,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

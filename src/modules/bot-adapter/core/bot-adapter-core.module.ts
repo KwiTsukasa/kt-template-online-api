@@ -32,6 +32,9 @@ import { BotMessage } from '@/modules/bot-adapter/core/infrastructure/persistenc
 import { BotMessageService } from '@/modules/bot-adapter/core/application/message/bot-message.service';
 import { BotChatHistoryService } from './application/message/bot-chat-history.service';
 import { BotReminderService } from './application/message/bot-reminder.service';
+import { BotReminderStore } from './application/message/bot-reminder.store';
+import { BotReminder } from './infrastructure/persistence/message/bot-reminder.entity';
+import { BOT_REMINDERS } from './contract/message/bot-reminder.port';
 import { BotArtifactService } from './application/message/bot-artifact.service';
 import { BotTaskStoreService } from './application/message/bot-task-store.service';
 import { BotConversationTaskService } from './application/message/bot-conversation-task.service';
@@ -55,6 +58,7 @@ import { BotToolController } from './contract/command/bot-tool.controller';
 export { BOT_CORE_DOMAIN_CONTRACT } from './contract/bot-core.contract';
 
 export const BOT_CORE_ENTITIES = [
+  BotReminder,
   BotAccount,
   BotAccountAbility,
   BotAllowlist,
@@ -81,6 +85,8 @@ export const BOT_CORE_CONTROLLERS = [
 ];
 
 export const BOT_CORE_PROVIDERS = [
+  BotReminderStore,
+  { provide: BOT_REMINDERS, useExisting: BotReminderService },
   BotTaskStoreService,
   BotConversationTaskService,
   BotArtifactService,
@@ -109,6 +115,7 @@ export const BOT_CORE_PROVIDERS = [
 ];
 
 export const BOT_CORE_EXPORTS = [
+  BOT_REMINDERS,
   BotAccountExtensionRegistry,
   BotAccountService,
   BotCommandService,

@@ -2,7 +2,7 @@ import {
   parsePluginManifest,
   PluginManifestValidationError,
 } from '../../../src/modules/plugin-platform/domain/manifest';
-import { normalizePluginTaskCron } from '../../../src/modules/plugin-platform/application/task';
+import { normalizePluginTaskCron as normalizeTaskCron } from '@/modules/plugin-platform/domain/manifest/task-cron.policy';
 
 const createManifestWithTask = () => ({
   assets: [],
@@ -57,7 +57,7 @@ describe('QQBot plugin task manifest contract', () => {
         timeoutMs: 120000,
       }),
     ]);
-    expect(normalizePluginTaskCron('0 */6 * * *')).toBe('0 */6 * * *');
+    expect(normalizeTaskCron('0 */6 * * *')).toBe('0 */6 * * *');
   });
 
   it('rejects invalid task metadata', () => {
@@ -93,16 +93,16 @@ describe('QQBot plugin task manifest contract', () => {
   });
 
   it('rejects six-field cron and too-frequent task cron', () => {
-    expect(() => normalizePluginTaskCron('* * * * * *')).toThrow(
+    expect(() => normalizeTaskCron('* * * * * *')).toThrow(
       '定时任务 cron 必须是 5 段表达式',
     );
-    expect(() => normalizePluginTaskCron('* * * * *')).toThrow(
+    expect(() => normalizeTaskCron('* * * * *')).toThrow(
       '定时任务 cron 不允许每分钟执行',
     );
   });
 
   it('rejects cron ranges that BullMQ cannot schedule', () => {
-    expect(() => normalizePluginTaskCron('99 99 99 99 99')).toThrow(
+    expect(() => normalizeTaskCron('99 99 99 99 99')).toThrow(
       '定时任务 cron 表达式不合法',
     );
   });

@@ -32,8 +32,6 @@ describe('plugin platform persistence contract', () => {
       'plugin_config',
       'plugin_asset',
       'plugin_runtime_event',
-      'plugin_task',
-      'plugin_task_run',
     ]);
 
     for (const table of PLUGIN_PLATFORM_DOMAIN_CONTRACT.tables) {
@@ -51,8 +49,6 @@ describe('plugin platform persistence contract', () => {
       'PluginConfig',
       'PluginAsset',
       'PluginRuntimeEvent',
-      'PluginTask',
-      'PluginTaskRun',
     ]);
 
     for (const entity of PLUGIN_PLATFORM_ENTITIES) {

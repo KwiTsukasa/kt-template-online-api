@@ -2,6 +2,7 @@ import type {
   PluginPackageDescriptor,
   PluginRuntimeConfigSnapshot,
 } from '@/modules/plugin-platform/infrastructure/integration/package/plugin-package.types';
+import type { PluginTaskInvocationTrigger } from '@/modules/plugin-platform/contract/plugin-task-capability.port';
 
 export type PluginWorkerRequestType =
   | 'activate'
@@ -13,11 +14,7 @@ export type PluginWorkerRequestType =
   | 'health'
   | 'load';
 
-export type PluginRuntimeStatus =
-  | 'active'
-  | 'failed'
-  | 'loaded'
-  | 'stopped';
+export type PluginRuntimeStatus = 'active' | 'failed' | 'loaded' | 'stopped';
 
 export type PluginSafeInputSummary = {
   fieldCount: number;
@@ -42,7 +39,7 @@ export type PluginWorkerRequest = {
   taskId?: string;
   taskKey?: string;
   timeoutMs: number;
-  triggerType?: 'bootstrap' | 'manual' | 'schedule';
+  triggerType?: PluginTaskInvocationTrigger;
   type: PluginWorkerRequestType;
 };
 
@@ -98,5 +95,5 @@ export type PluginTaskRequest = {
   taskId: string;
   taskKey: string;
   timeoutMs?: number;
-  triggerType: 'bootstrap' | 'manual' | 'schedule';
+  triggerType: PluginTaskInvocationTrigger;
 };

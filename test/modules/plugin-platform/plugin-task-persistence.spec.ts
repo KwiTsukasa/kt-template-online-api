@@ -4,9 +4,13 @@ import { join } from 'path';
 import {
   PLUGIN_PLATFORM_DOMAIN_CONTRACT,
   PLUGIN_PLATFORM_ENTITIES,
-  PluginTask,
-  PluginTaskRun,
 } from '../../../src/modules/plugin-platform/infrastructure/persistence';
+import {
+  AtomicTaskDraft,
+  AtomicTaskRun,
+  AtomicTaskAttempt,
+  AtomicTaskRunReview,
+} from '@/modules/task-execution/infrastructure/persistence/task-execution.entities';
 import { readRefactorV3SqlSchema } from '../../helpers/sql-schema.helper';
 
 describe('plugin task persistence contract', () => {
@@ -14,18 +18,17 @@ describe('plugin task persistence contract', () => {
   const repoRoot = join(__dirname, '../../..');
 
   it('declares task tables in SQL and entity registry', () => {
-    expect(PLUGIN_PLATFORM_DOMAIN_CONTRACT.tables).toEqual(
-      expect.arrayContaining(['plugin_task', 'plugin_task_run']),
-    );
-    expect(PLUGIN_PLATFORM_ENTITIES).toEqual(
-      expect.arrayContaining([PluginTask, PluginTaskRun]),
-    );
+    expect(PLUGIN_PLATFORM_DOMAIN_CONTRACT.tables).not.toContain('plugin_task');
+    expect(PLUGIN_PLATFORM_ENTITIES).not.toContain(AtomicTaskDraft);
+    expect(PLUGIN_PLATFORM_ENTITIES).not.toContain(AtomicTaskRun);
+    expect(schema.hasTable('automation_task')).toBe(true);
+    expect(schema.hasTable('automation_task_run')).toBe(true);
     expect(schema.hasTable('plugin_task')).toBe(true);
     expect(schema.hasTable('plugin_task_run')).toBe(true);
   });
 
   it('maps task entity columns to SQL schema', () => {
-    for (const entity of [PluginTask, PluginTaskRun]) {
+    for (const entity of [AtomicTaskRun, AtomicTaskAttempt, AtomicTaskRunReview]) {
       const tableName = getMetadataArgsStorage().tables.find(
         (table) => table.target === entity,
       )?.name;

@@ -24,6 +24,7 @@ import { BotMessageSubscriberModule } from './modules/bot-adapter/message-manage
 import { NapcatModule } from './modules/bot-adapter/napcat/napcat.module';
 import { TencentBotAdapterModule } from './modules/bot-adapter/tencent/tencent-bot-adapter.module';
 import { PluginPlatformModule } from './modules/plugin-platform/plugin-platform.module';
+import { AutomationApplicationModule } from './integrations/automation/automation-application.module';
 import { RuntimeModule } from './runtime';
 
 /**
@@ -84,6 +85,7 @@ export function buildTypeOrmOptions(configService: ConfigService) {
     CommonModule,
     SecurityBoundaryModule,
     RuntimeModule,
+    AutomationApplicationModule,
     AdminModule,
     BlogContentModule,
     AssetModule,

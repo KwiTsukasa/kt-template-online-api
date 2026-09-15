@@ -2,11 +2,9 @@ import {
   Injectable,
   Logger,
   type OnModuleDestroy,
-  type OnModuleInit,
 } from '@nestjs/common';
 import {
   SYSTEM_MESSAGE_BATCH_SIZE,
-  SYSTEM_MESSAGE_SCAN_INTERVAL_MS,
 } from './system-message-runner.constants';
 import type { SystemMessageScalar } from '../contract/message-management.types';
 import { MessageSubscriberRegistry } from './subscriber/message-subscriber.registry';
@@ -14,7 +12,7 @@ import { SystemMessageFanoutService } from './system-message-fanout.service';
 
 @Injectable()
 export class SystemMessageDeliveryCoordinatorService
-  implements OnModuleInit, OnModuleDestroy
+  implements OnModuleDestroy
 {
   private readonly logger = new Logger(
     SystemMessageDeliveryCoordinatorService.name,
@@ -22,35 +20,28 @@ export class SystemMessageDeliveryCoordinatorService
   private destroyed = false;
   private drainRequested = false;
   private drainPromise: null | Promise<void> = null;
-  private scanInterval?: NodeJS.Timeout;
-  private startupTimer?: NodeJS.Timeout;
+  private drainOutcome?: { error?: unknown };
 
   constructor(
     private readonly fanoutRunner: SystemMessageFanoutService,
     private readonly subscriberRegistry: MessageSubscriberRegistry,
   ) {}
 
-  onModuleInit(): void {
-    if (this.destroyed || this.scanInterval) return;
-    this.startupTimer = setTimeout(() => {
-      this.startupTimer = undefined;
-      this.requestDrain();
-    }, 0);
-    this.startupTimer.unref?.();
-    this.scanInterval = setInterval(
-      () => this.requestDrain(),
-      SYSTEM_MESSAGE_SCAN_INTERVAL_MS,
-    );
-    this.scanInterval.unref?.();
+  /**
+   * 等待既有发件箱和订阅者完成本轮排空，失败原样交给调用方记录。
+   * @throws 任一投递阶段失败时拒绝本轮调用。
+   */
+  async drain(): Promise<void> {
+    if (this.destroyed) throw new Error('消息投递服务已经关闭');
+    this.requestDrain();
+    const outcome = this.drainOutcome;
+    await this.drainPromise;
+    if (outcome?.error) throw outcome.error;
   }
 
   async onModuleDestroy(): Promise<void> {
     this.destroyed = true;
     this.drainRequested = false;
-    if (this.startupTimer) clearTimeout(this.startupTimer);
-    if (this.scanInterval) clearInterval(this.scanInterval);
-    this.startupTimer = undefined;
-    this.scanInterval = undefined;
     await this.drainPromise;
   }
 
@@ -61,8 +52,11 @@ export class SystemMessageDeliveryCoordinatorService
     if (this.destroyed) return;
     this.drainRequested = true;
     if (this.drainPromise) return;
+    const outcome: { error?: unknown } = {};
+    this.drainOutcome = outcome;
     this.drainPromise = this.drainLoop()
-      .catch((error: unknown) =>
+      .catch((error: unknown) => {
+        outcome.error = error;
         this.logger.warn(
           'System message drain failed',
           (() => {
@@ -71,8 +65,8 @@ export class SystemMessageDeliveryCoordinatorService
             }
             return undefined;
           })(),
-        ),
-      )
+        );
+      })
       .finally(() => {
         this.drainPromise = null;
         if (!this.destroyed && this.drainRequested) this.requestDrain();
@@ -130,6 +124,7 @@ export class SystemMessageDeliveryCoordinatorService
     try {
       return await runner();
     } catch (error) {
+      if (this.drainOutcome) this.drainOutcome.error = error;
       this.logger.warn(
         `System message ${name} scan failed`,
         (() => {

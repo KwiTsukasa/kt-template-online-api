@@ -4,7 +4,6 @@ import {
   HttpStatus,
   Inject,
   Injectable,
-  OnModuleDestroy,
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
@@ -270,9 +269,8 @@ const HIGH_FREQUENCY_EXECUTOR_EVENTS = new Set([
 ]);
 
 @Injectable()
-export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
+export class MediaGovernanceService implements OnModuleInit {
   private readonly tasks: MediaGovernanceTask[] = [];
-  private dispatchTimer: null | NodeJS.Timeout = null;
   private dispatchRetryActive = false;
   private executionReconcileActive = false;
   private readonly rssContinuationTasks = new Set<string>();
@@ -315,19 +313,25 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         await this.continueMechanicalPipeline(task).catch(() => false);
         await this.continueRssIntakePipeline(task).catch(() => false);
       }
-      void this.retryPendingDispatches();
-      void this.reconcileActiveExecutions();
-      this.dispatchTimer = setInterval(() => {
-        void this.retryPendingDispatches();
-        void this.reconcileActiveExecutions();
-      }, 5_000);
-      this.dispatchTimer.unref?.();
     }
   }
 
-  onModuleDestroy() {
-    if (this.dispatchTimer) clearInterval(this.dispatchTimer);
-    this.dispatchTimer = null;
+  /**
+   * 判断媒体持久状态与执行网关是否均已装配，不把运行可用性与调度启停混为一体。
+   * @returns 当前实例可以核对媒体执行状态时为真。
+   */
+  executionAvailable(): boolean {
+    return Boolean(this.stateStore && this.executionGateway?.enabled());
+  }
+
+  /**
+   * 沿既有运行身份重试未确认投递并核对状态，不创建新的媒体业务任务。
+   * @throws 执行网关不可用或状态核对失败时拒绝本轮调用。
+   */
+  async reconcileExecutions(): Promise<void> {
+    if (!this.executionAvailable()) throw new Error('媒体执行网关当前不可用');
+    await this.retryPendingDispatches();
+    await this.reconcileActiveExecutions();
   }
 
   /**

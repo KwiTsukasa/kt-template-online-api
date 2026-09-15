@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MEDIA_RSS_OPERATIONS, MEDIA_EXECUTION_OPERATIONS } from './contract/media-automation.port';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
@@ -31,6 +32,7 @@ import { MediaGovernanceCatalogService } from '@/modules/admin/media-governance/
 import { AdminMediaScrapeValidationModule } from '@/modules/admin/media-scrape-validation/admin-media-scrape-validation.module';
 
 @Module({
+  exports: [MEDIA_RSS_OPERATIONS, MEDIA_EXECUTION_OPERATIONS],
   controllers: [
     MediaGovernanceExecutorInternalController,
     MediaGovernanceCatalogController,
@@ -47,6 +49,8 @@ import { AdminMediaScrapeValidationModule } from '@/modules/admin/media-scrape-v
     ]),
   ],
   providers: [
+    { provide: MEDIA_RSS_OPERATIONS, useExisting: MediaGovernanceCatalogService },
+    { provide: MEDIA_EXECUTION_OPERATIONS, useExisting: MediaGovernanceService },
     MediaGovernanceExecutorInternalGuard,
     MediaGovernanceExecutionGatewayClient,
     {

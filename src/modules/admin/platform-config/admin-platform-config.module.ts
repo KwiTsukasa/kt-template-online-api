@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NETWORK_DDNS_OPERATIONS } from './network-management/contract/network-ddns-automation.port';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { ComponentController } from '@/modules/admin/platform-config/component/component.controller';
@@ -123,6 +124,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
 ];
 
 @Module({
+  exports: [NETWORK_DDNS_OPERATIONS],
   imports: [
     TypeOrmModule.forFeature([
       Component,
@@ -143,6 +145,6 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
     PluginPlatformModule,
   ],
   controllers: ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS,
-  providers: ADMIN_PLATFORM_CONFIG_PROVIDERS,
+  providers: [...ADMIN_PLATFORM_CONFIG_PROVIDERS, { provide: NETWORK_DDNS_OPERATIONS, useExisting: NetworkDdnsService }],
 })
 export class AdminPlatformConfigModule {}

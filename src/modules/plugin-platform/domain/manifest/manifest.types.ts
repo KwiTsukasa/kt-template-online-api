@@ -1,3 +1,5 @@
+import type { DataSchema } from '@/common/automation/data-schema';
+
 export const PLUGIN_ALLOWED_PERMISSIONS = [
   'asset.read',
   'plugin.config.read',
@@ -51,6 +53,9 @@ export type PluginEventManifest = {
 };
 
 export type PluginTaskManifest = {
+  inputSchema?: DataSchema;
+  outputSchema?: DataSchema;
+  idempotent?: boolean;
   defaultCron: string;
   description?: string;
   enabled: boolean;

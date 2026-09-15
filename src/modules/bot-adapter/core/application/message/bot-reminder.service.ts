@@ -1,13 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnApplicationBootstrap,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { BotAdapterRegistry } from '@/modules/bot';
-import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'node:crypto';
-import { Job, Queue, Worker } from 'bullmq';
 import { parseExpression } from 'cron-parser';
 import type { BotNormalizedMessage } from '../../contract/bot.types';
 import { BotAccountService } from '../account/bot-account.service';
@@ -15,98 +8,85 @@ import { BotPermissionService } from '../permission/bot-permission.service';
 import { BotSendService } from '../send/bot-send.service';
 import { BotChatHistoryService } from './bot-chat-history.service';
 import { ToolsService } from '@/common';
-
-type ReminderData = {
-  owner: string;
-  sourcePluginKey: string;
-  message: BotNormalizedMessage;
-  text: string;
-  variants?: string[];
-  platformId?: string;
-  dueAt: string;
-  repeat?: string;
-};
+import { BotReminderStore } from './bot-reminder.store';
+import type {
+  BotReminderData,
+  BotReminderPort,
+  BotReminderScheduling,
+} from '../../contract/message/bot-reminder.port';
 
 @Injectable()
-export class BotReminderService
-  implements OnApplicationBootstrap, OnModuleDestroy
-{
-  private readonly logger = new Logger(BotReminderService.name);
-  private readonly queue?: Queue<ReminderData>;
-  private worker?: Worker<ReminderData>;
+export class BotReminderService implements BotReminderPort {
+  private scheduler?: BotReminderScheduling;
   constructor(
-    private readonly config: ConfigService,
+    private readonly store: BotReminderStore,
     private readonly permissions: BotPermissionService,
     private readonly accounts: BotAccountService,
     private readonly send: BotSendService,
     private readonly adapters: BotAdapterRegistry,
     private readonly history: BotChatHistoryService,
     private readonly tools: ToolsService = new ToolsService(),
-  ) {
-    if (!this.connectionValue('HOST')) {
-      this.logger.error('提醒队列缺少 Redis 连接，提醒功能暂不可用');
-      return;
-    }
-    this.queue = new Queue<ReminderData>('bot-reminders', this.queueOptions());
-    this.queue.on('error', (error) => this.logger.error(error.message));
-  }
-
-  async onApplicationBootstrap() {
-    if (!this.queue) return;
-    this.worker = new Worker<ReminderData>(
-      'bot-reminders',
-      async (job) => this.deliver(job),
-      {
-        ...this.queueOptions(),
-        concurrency: 1,
-      },
-    );
-    this.worker.on('error', (error) => this.logger.error(error.message));
-    void this.worker
-      .waitUntilReady()
-      .catch((error) => this.logger.error(error.message));
-  }
-
-  async onModuleDestroy() {
-    await this.worker?.close();
-    await this.queue?.close();
-  }
+  ) {}
 
   /**
-   * 提醒队列沿用 NAS Redis 凭据，通过独立前缀与插件调度任务分开持久保存。
-   * @returns BullMQ 持久连接配置。
+   * 接入应用层提供的调度适配器，Bot 领域自身不引入触发器或调度模块。
+   * @param scheduler - 提供确认、状态和取消能力的应用适配器。
+   * @returns 只释放本次装配的函数。
+   * @throws 已装配其他调度适配器时拒绝双重拥有者。
    */
-  private queueOptions() {
-    return {
-      connection: {
-        host: this.connectionValue('HOST'),
-        port: Number(this.connectionValue('PORT') || 6379),
-        db: Number(this.connectionValue('DB') || 0),
-        password: this.connectionValue('PASSWORD') || undefined,
-        connectTimeout: 5000,
-      },
-      prefix:
-        this.config.get<string>('BOT_REMINDER_QUEUE_PREFIX') ||
-        'kt:bot:reminders',
+  attach(scheduler: BotReminderScheduling): () => void {
+    if (this.scheduler) throw new Error('提醒调度适配器已经装配');
+    this.scheduler = scheduler;
+    return () => {
+      if (this.scheduler === scheduler) this.scheduler = undefined;
     };
   }
 
   /**
-   * 按提醒专用、插件队列、通用 Redis 的次序读取首个已配置值，不依赖插件调度代码。
-   * @param field - Redis 主机、端口、数据库或认证字段。
-   * @returns 第一项非空连接设置，全部缺失时返回空字符串。
+   * 将尚未确认的创建或取消意图交给应用装配层恢复，不在业务模块运行时钟。
+   * @param afterId - 上一批的提醒身份游标。
+   * @returns 最多一百条待恢复身份。
    */
-  private connectionValue(field: 'HOST' | 'PORT' | 'DB' | 'PASSWORD'): string {
-    for (const prefix of [
-      'BOT_REMINDER_REDIS_',
-      'PLUGIN_QUEUE_REDIS_',
-      'REDIS_',
-    ]) {
-      const value = this.config.get<string | number>(prefix + field);
-      if (value !== undefined && value !== null && String(value).trim())
-        return String(value).trim();
-    }
-    return '';
+  pending(afterId: string): Promise<string[]> {
+    return this.store.pending(afterId);
+  }
+
+  /**
+   * 以持久提醒身份幂等确认计划，取消先持久化意图，恢复时不会重新激活已取消提醒。
+   * @param id - 需要与调度适配器同步的提醒。
+   * @throws 未装配、调度失败或保存失败时保留待恢复意图并报告实际错误。
+   */
+  async synchronize(id: string): Promise<void> {
+    const scheduler = this.scheduler;
+    if (!scheduler) throw new Error('提醒调度尚未装配');
+    await this.store.withReminder(id, async (row, manager) => {
+      if (!row.syncPending) return;
+      try {
+        if (!row.scheduleId) {
+          const state = await scheduler.ensure({
+            id,
+            dueAt: row.data.dueAt,
+            repeat: row.data.repeat,
+          });
+          row.scheduleId = state.scheduleId;
+          await manager.save(row);
+        }
+        if (row.status === 'cancelled') await scheduler.close(row.scheduleId);
+        else if (row.status === 'pending') {
+          const state = await scheduler.read(row.scheduleId);
+          if (!state.enabled)
+            throw new Error('提醒计划未启用，请在调度计划中处理');
+          row.status = 'scheduled';
+        }
+        row.syncPending = false;
+        row.lastError = null;
+        await manager.save(row);
+      } catch (error) {
+        row.lastError = this.tools.getErrorMessage(error, '提醒调度确认失败');
+        await manager.save(row);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -128,7 +108,7 @@ export class BotReminderService
   }
 
   /**
-   * 在持久队列创建、列出或取消当前用户提醒，只有入队成功后才返回已安排状态。
+   * 保存、列出或取消当前用户的提醒意图，只有统一计划确认后才返回已安排状态。
    * @param message - 已授权的真实发起人及发送目标。
    * @param input - 提醒动作、正文、时间与可选的当前群成员平台标识。
    * @param sourcePluginKey - 宿主绑定的调用插件，不能由模型指定。
@@ -140,54 +120,60 @@ export class BotReminderService
     input: Record<string, unknown>,
     sourcePluginKey: string,
   ) {
-    if (!this.queue) throw new Error('提醒队列连接尚未配置');
     const owner = this.owner(message);
-    const schedulers = (await this.queue.getJobSchedulers(0, -1)).filter(
-      (item) => item.key.startsWith(owner + '-'),
-    );
-    const jobs = (
-      await this.queue.getJobs(
-        ['delayed', 'waiting', 'active', 'failed', 'completed'],
-        0,
-        999,
-      )
-    ).filter((job) => job.data.owner === owner);
     if (input.operation === 'list') {
+      const rows = await this.store.list(owner);
+      const daily = [];
+      const jobs = [];
+      for (const row of rows) {
+        let nextRunAt: string | null = null;
+        let status: string = row.status;
+        if (row.scheduleId && row.status === 'scheduled') {
+          if (!this.scheduler) status = 'unavailable';
+          else {
+            const state = await this.scheduler.read(row.scheduleId);
+            if (!state.enabled) status = 'disabled';
+            else nextRunAt = state.nextRunAt;
+          }
+        }
+        const item = {
+          id: row.id,
+          text: row.data.text,
+          variants: row.data.variants || [],
+          platformId: row.data.platformId,
+          dueAt: row.data.dueAt,
+          status,
+          error: row.lastError || '',
+        };
+        if (row.data.repeat && row.status !== 'cancelled')
+          daily.push({
+            ...item,
+            nextRunAt,
+            pattern: row.data.repeat,
+            timezone: 'Asia/Shanghai',
+          });
+        else jobs.push(item);
+      }
       return {
-        daily: schedulers.map((item) => ({
-          id: item.key,
-          nextRunAt: new Date(item.next).toISOString(),
-          pattern: item.pattern,
-          timezone: item.tz,
-          text: item.template?.data?.text,
-          variants: item.template?.data?.variants || [],
-          platformId: item.template?.data?.platformId,
-        })),
-        jobs: await Promise.all(
-          jobs.map(async (job) => ({
-            id: job.id,
-            text: job.data.text,
-            variants: job.data.variants || [],
-            platformId: job.data.platformId,
-            dueAt: job.data.dueAt,
-            status: await job.getState(),
-            error: job.failedReason || '',
-          })),
-        ),
+        daily,
+        jobs,
       };
     }
     if (input.operation === 'delete') {
       const id = String(input.id || '');
       if (!id.startsWith(owner + '-'))
         throw new Error('提醒不属于当前发起人与会话');
-      if (schedulers.some((item) => item.key === id))
-        return { cancelled: await this.queue.removeJobScheduler(id) };
-      const job = jobs.find((item) => item.id === id);
-      if (!job) throw new Error('提醒不存在');
-      await job.remove();
+      await this.store.withReminder(id, async (row, manager) => {
+        if (row.owner !== owner) throw new Error('提醒不属于当前发起人与会话');
+        row.status = 'cancelled';
+        row.syncPending = true;
+        await manager.save(row);
+      });
+      await this.synchronize(id);
       return { cancelled: true };
     }
     if (input.operation !== 'create') throw new Error('提醒动作无效');
+    if (!this.scheduler) throw new Error('提醒调度尚未装配');
     const text = String(input.text || '').trim();
     const dailyAt = String(input.dailyAt || '');
     const runAt = String(input.runAt || '');
@@ -204,12 +190,6 @@ export class BotReminderService
     }
     if (Boolean(dailyAt) === Boolean(runAt))
       throw new Error('一次性时间与每日时刻必须且只能提供一个');
-    if (
-      schedulers.length +
-        jobs.filter((job) => !job.data.repeat && !job.finishedOn).length >=
-      20
-    )
-      throw new Error('当前会话最多保存20个待执行提醒');
     let dueAt: Date;
     let repeat = '';
     if (dailyAt) {
@@ -231,7 +211,7 @@ export class BotReminderService
     }
     const id = owner + '-' + randomUUID();
     // 只保存未来投递所需目标，绝不复用已过期的被动回复凭据或原文附件。
-    const data: ReminderData = {
+    const data: BotReminderData = {
       owner,
       sourcePluginKey,
       text,
@@ -254,28 +234,16 @@ export class BotReminderService
         eventTime: new Date(),
       },
     };
-    const opts = {
-      attempts: 1,
-      removeOnComplete: { count: 200 },
-      removeOnFail: { count: 200 },
-    };
-    if (repeat)
-      await this.queue.upsertJobScheduler(
-        id,
-        { pattern: repeat, tz: 'Asia/Shanghai' },
-        { name: 'remind', data, opts },
-      );
-    else
-      await this.queue.add('remind', data, {
-        ...opts,
-        jobId: id,
-        delay: dueAt.getTime() - Date.now(),
-      });
+    await this.store.create(id, data);
+    await this.synchronize(id);
+    const scheduled = await this.store.withReminder(id, async (row) =>
+      this.scheduler!.read(row.scheduleId!),
+    );
     return {
       id,
       status: 'scheduled',
       platformId,
-      nextRunAt: dueAt.toISOString(),
+      nextRunAt: scheduled.nextRunAt,
       variants,
       timezone: 'Asia/Shanghai',
       delivery:
@@ -285,12 +253,16 @@ export class BotReminderService
 
   /**
    * 到期重新检查发起人和 Bot 绑定，再通过统一发送服务投递，平台拒绝时保留失败任务。
-   * @param job - Redis 持久队列中的提醒任务。
+   * @param data - Bot 自己保存的最小投递信息。
+   * @param occurredAt - 触发器已持久化的本次计划时间。
    * @returns 统一发送服务返回的投递结果。
    * @throws 权限、绑定或成员标识无效时拒绝发送；平台拒绝时保留其实际错误原因。
    */
-  async deliver(job: Job<ReminderData>): Promise<unknown> {
-    const message = job.data.message;
+  async deliver(
+    data: BotReminderData,
+    occurredAt = data.dueAt,
+  ): Promise<unknown> {
+    const message = data.message;
     if (
       (await this.permissions.isBlocked(message)) ||
       !(await this.permissions.isAllowed(message))
@@ -308,13 +280,10 @@ export class BotReminderService
     } else {
       pluginKeys = await this.accounts.getBoundEventPluginKeys(message.selfId);
     }
-    if (
-      !job.data.sourcePluginKey ||
-      !pluginKeys.includes(job.data.sourcePluginKey)
-    )
+    if (!data.sourcePluginKey || !pluginKeys.includes(data.sourcePluginKey))
       throw new Error('提醒来源插件绑定已撤销');
-    let text = this.occurrenceText(job);
-    const platformId = job.data.platformId;
+    let text = this.occurrenceText(data, occurredAt);
+    const platformId = data.platformId;
     if (platformId !== undefined) {
       if (
         message.messageType === 'private' ||
@@ -343,6 +312,40 @@ export class BotReminderService
   }
 
   /**
+   * 到期读取本领域状态并发送，取消意图先于发送检查，未知发送结果由执行模块阻止自动重试。
+   * @param id - 调度输入中的提醒身份。
+   * @param occurredAt - 已持久化的触发时刻，文案轮换不依赖本机当前日期。
+   * @param signal - 执行模块传入的取消或超时信号。
+   * @throws 取消、权限或发送失败时保留错误并让执行模块记录失败。
+   */
+  async execute(
+    id: string,
+    occurredAt: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await this.store.withReminder(id, async (row, manager) => {
+      if (row.status === 'cancelled' || signal.aborted)
+        throw new Error('提醒已取消');
+      if (
+        !row.data.repeat &&
+        (row.status === 'succeeded' || row.status === 'failed')
+      )
+        throw new Error('一次性提醒已执行，不能重复发送');
+      try {
+        await this.deliver(row.data, occurredAt);
+        if (!row.data.repeat) row.status = 'succeeded';
+        row.lastError = null;
+        await manager.save(row);
+      } catch (error) {
+        if (!row.data.repeat) row.status = 'failed';
+        row.lastError = this.tools.getErrorMessage(error, '提醒投递失败');
+        await manager.save(row);
+        throw error;
+      }
+    });
+  }
+
+  /**
    * 校验可轮换文案，逐项拒绝内嵌提及标签，成员身份仍由独立字段控制。
    * @param value - 创建提醒时提供的可选文案数组。
    * @returns 去重后的文案；未指定时为空数组并保留固定正文。
@@ -367,19 +370,16 @@ export class BotReminderService
 
   /**
    * 依据持久化计划时刻选择当次文案，同一天重试保持相同内容，不依赖进程内计数。
-   * @param job - 包含首次到期时间及本次计划时间的队列任务。
+   * @param data - 包含首次到期时间和轮换文案的业务记录。
+   * @param occurredAt - 本次已持久化的触发时间。
    * @returns 本次应投递的普通文本，未配置轮换时返回固定正文。
    */
-  private occurrenceText(job: Job<ReminderData>): string {
-    const variants = job.data.variants || [];
-    if (!variants.length) return job.data.text;
-    const first = Date.parse(job.data.dueAt);
-    const scheduled = Number(job.opts?.prevMillis);
-    if (
-      !job.data.repeat ||
-      !Number.isFinite(scheduled) ||
-      !Number.isFinite(first)
-    )
+  private occurrenceText(data: BotReminderData, occurredAt: string): string {
+    const variants = data.variants || [];
+    if (!variants.length) return data.text;
+    const first = Date.parse(data.dueAt);
+    const scheduled = Date.parse(occurredAt);
+    if (!data.repeat || !Number.isFinite(scheduled) || !Number.isFinite(first))
       return variants[0];
     const days = Math.max(0, Math.round((scheduled - first) / 86400000));
     return variants[days % variants.length];

@@ -516,7 +516,9 @@ pipeline {
             runCmd("""
               test -f dist/main.js
               test -f dist/apps/napcat-webui-gateway/main.js
+              test -f dist/commands/migrate-task-automation.js
               docker build -f dockerfile \
+                --build-arg RELEASE_ID=${shellQuote(env.IMAGE_BUILD_PAIR)} \
                 --label org.opencontainers.image.revision=${shellQuote(env.CHECKED_OUT_GIT_COMMIT)} \
                 --label kt.kwitsukasa.top/build-pair=${shellQuote(env.IMAGE_BUILD_PAIR)} \
                 -t ${env.DOCKER_IMAGE} .
@@ -535,7 +537,8 @@ pipeline {
             runCmd('', """
               if not exist dist\\main.js exit /b 1
               if not exist dist\\apps\\napcat-webui-gateway\\main.js exit /b 1
-              docker build -f dockerfile -t ${env.DOCKER_IMAGE} .
+              if not exist dist\\commands\\migrate-task-automation.js exit /b 1
+              docker build -f dockerfile --build-arg RELEASE_ID=${env.IMAGE_BUILD_PAIR} -t ${env.DOCKER_IMAGE} .
               docker build -f dockerfile.gateway -t ${env.GATEWAY_DOCKER_IMAGE} .
               if not "${env.DOCKER_IMAGE}"=="${env.DOCKER_IMAGE_LATEST}" docker tag ${env.DOCKER_IMAGE} ${env.DOCKER_IMAGE_LATEST}
               if not "${env.GATEWAY_DOCKER_IMAGE}"=="${env.GATEWAY_DOCKER_IMAGE_LATEST}" docker tag ${env.GATEWAY_DOCKER_IMAGE} ${env.GATEWAY_DOCKER_IMAGE_LATEST}

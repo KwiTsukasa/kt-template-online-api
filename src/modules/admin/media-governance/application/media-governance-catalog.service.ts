@@ -77,7 +77,6 @@ import {
   type MediaGovernanceTaskChangedData,
 } from './media-governance-event-stream.service';
 
-const RSS_POLL_TICK_MS = 60_000;
 const RSS_MAX_BYTES = 4 * 1024 * 1024;
 const RSS_RETRYABLE_ITEM_STATES = new Set(['discovered', 'failed', 'ignored']);
 const RSS_TORRENT_MAX_BYTES = 2 * 1024 * 1024;
@@ -464,7 +463,6 @@ export class MediaGovernanceCatalogService
     Promise<void>
   >();
   private readonly pollingSubscriptions = new Set<string>();
-  private rssTimer: null | NodeJS.Timeout = null;
   private unsubscribeTaskChanged: null | (() => void) = null;
 
   constructor(
@@ -479,10 +477,6 @@ export class MediaGovernanceCatalogService
       this.eventStream?.subscribeTaskChanged((event) => {
         this.handleTaskChanged(event);
       }) ?? null;
-    this.rssTimer = setInterval(() => {
-      void this.pollDueSubscriptions();
-    }, RSS_POLL_TICK_MS);
-    this.rssTimer.unref?.();
   }
 
   onApplicationBootstrap() {
@@ -495,8 +489,6 @@ export class MediaGovernanceCatalogService
   onModuleDestroy() {
     this.unsubscribeTaskChanged?.();
     this.unsubscribeTaskChanged = null;
-    if (this.rssTimer) clearInterval(this.rssTimer);
-    this.rssTimer = null;
   }
 
   /**
@@ -4109,7 +4101,7 @@ export class MediaGovernanceCatalogService
   /**
    * 查询到期订阅并串行触发，避免后台轮询争抢同一 Series 集范围。
    */
-  private async pollDueSubscriptions() {
+  async pollDueSubscriptions() {
     if (!this.dataSource.isInitialized) return;
     const repository = this.dataSource.getRepository(
       MediaGovernanceRssSubscriptionEntity,

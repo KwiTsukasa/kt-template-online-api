@@ -48,6 +48,11 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
     path: 'api/bot',
   },
   {
+    matcher: (path) => path.startsWith('/automation/'),
+    name: '自动化中心',
+    path: 'api/automation',
+  },
+  {
     matcher: (path) => path.startsWith('/plugin-platform/'),
     name: '插件平台',
     path: 'api/plugin-platform',

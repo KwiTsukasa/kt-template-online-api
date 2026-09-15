@@ -302,7 +302,6 @@ describe('MediaGovernanceService mechanical execution', () => {
     ).not.toEqual(
       expect.arrayContaining(['metadata.verify', 'metadata.repair']),
     );
-    service.onModuleDestroy();
   });
 
   it('serves real HTTP failures without closing a task, then accepts the exact mechanical file count', async () => {
@@ -436,7 +435,6 @@ describe('MediaGovernanceService mechanical execution', () => {
     expect(sink.enqueueTask).toHaveBeenCalledWith(
       expect.objectContaining({ id: task.id, stage: 'closed' }),
     );
-    service.onModuleDestroy();
   });
 
   it('keeps the governance task closed when scrape registration fails', async () => {
@@ -478,7 +476,6 @@ describe('MediaGovernanceService mechanical execution', () => {
     expect(task.stage).toBe('closed');
     expect(task.runState).toBe('succeeded');
     expect(task.gateReason).toBeNull();
-    service.onModuleDestroy();
   });
 
   it('migrates a legacy metadata boundary to mechanical acceptance only', async () => {
@@ -508,7 +505,6 @@ describe('MediaGovernanceService mechanical execution', () => {
       expect.objectContaining({ action: 'acceptance.verify' }),
     );
     expect(restored.units[0]!.evidenceSha256).toBeNull();
-    service.onModuleDestroy();
   });
 
   it('removes NAS scrape actions from the governance executor contract', () => {

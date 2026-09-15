@@ -1,110 +1,53 @@
-import { ConfigService } from '@nestjs/config';
 import { NapcatWatchdogService } from '@/modules/bot-adapter/napcat/application/login/napcat-watchdog.service';
 
-/**
- * 创建 测试断言对象或配置。
- * @param configValues - 测试列表；构造 Jest mock 返回值。
- * @param runOfflineWatchdog - runOfflineWatchdog 输入；生成 测试对象。
- */
-function buildService(
-  configValues: Record<string, string | undefined>,
-  runOfflineWatchdog: jest.Mock,
-) {
-  const configService = {
-    get: jest.fn((key: string) => configValues[key]),
-  } as unknown as ConfigService;
-  const accountService = { runOfflineWatchdog } as any;
-  return new NapcatWatchdogService(configService, accountService);
-}
-
-// 刷新微任务队列，让定时器回调里的 async tick（含 finally 复位 running）执行完。
-/**
- * 执行 测试断言流程。
- */
-async function flushMicrotasks() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
-describe('NapcatWatchdogService', () => {
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('periodically triggers the offline watchdog when enabled', async () => {
+describe('NapcatWatchdogService domain inspection', () => {
+  it('does not own a timer and runs only when its public capability is invoked', async () => {
     jest.useFakeTimers();
-    const runOfflineWatchdog = jest.fn().mockResolvedValue({ checked: 1 });
-    const service = buildService(
-      { NAPCAT_WATCHDOG_INTERVAL_MS: '30000' },
-      runOfflineWatchdog,
-    );
-
-    service.onModuleInit();
-    expect(runOfflineWatchdog).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(30000);
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).toHaveBeenCalledTimes(1);
-
-    jest.advanceTimersByTime(30000);
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).toHaveBeenCalledTimes(2);
-
-    service.onModuleDestroy();
-    jest.advanceTimersByTime(60000);
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).toHaveBeenCalledTimes(2);
+    try {
+      const handler = jest.fn().mockResolvedValue({ checked: 1 });
+      const service = new NapcatWatchdogService({
+        runOfflineWatchdog: handler,
+      } as any);
+      jest.advanceTimersByTime(300000);
+      expect(handler).not.toHaveBeenCalled();
+      await service.inspectOffline();
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
-  it('does not start a timer when disabled', async () => {
-    jest.useFakeTimers();
-    const runOfflineWatchdog = jest.fn().mockResolvedValue({ checked: 0 });
-    const service = buildService(
-      { NAPCAT_WATCHDOG_ENABLED: 'false' },
-      runOfflineWatchdog,
-    );
-
-    service.onModuleInit();
-    jest.advanceTimersByTime(600000);
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).not.toHaveBeenCalled();
-  });
-
-  it('clamps an unreasonably small interval to the safe default', () => {
-    const service = buildService(
-      { NAPCAT_WATCHDOG_INTERVAL_MS: '1000' },
-      jest.fn(),
-    ) as any;
-    expect(service.getIntervalMs()).toBe(120_000);
-  });
-
-  it('skips overlapping ticks while a previous run is still pending', async () => {
-    jest.useFakeTimers();
-    let resolvePending: (() => void) | undefined;
-    const runOfflineWatchdog = jest.fn(
+  it('skips overlapping calls and permits another inspection after completion', async () => {
+    let finish!: () => void;
+    const handler = jest.fn(
       () =>
-        new Promise<{ checked: number }>((resolve) => {
-          resolvePending = () => resolve({ checked: 1 });
+        new Promise<void>((resolve) => {
+          finish = resolve;
         }),
     );
-    const service = buildService(
-      { NAPCAT_WATCHDOG_INTERVAL_MS: '30000' },
-      runOfflineWatchdog,
-    );
+    const service = new NapcatWatchdogService({
+      runOfflineWatchdog: handler,
+    } as any);
+    const pending = service.inspectOffline();
+    await service.inspectOffline();
+    expect(handler).toHaveBeenCalledTimes(1);
+    finish();
+    await pending;
+    handler.mockResolvedValueOnce(undefined);
+    await service.inspectOffline();
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
 
-    service.onModuleInit();
-    jest.advanceTimersByTime(30000); // first tick starts, stays pending
-    await flushMicrotasks();
-    jest.advanceTimersByTime(30000); // second tick should be skipped
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).toHaveBeenCalledTimes(1);
-
-    resolvePending?.();
-    await flushMicrotasks();
-
-    jest.advanceTimersByTime(30000); // running reset, a new tick can run
-    await flushMicrotasks();
-    expect(runOfflineWatchdog).toHaveBeenCalledTimes(2);
-    service.onModuleDestroy();
+  it('returns domain failures to its caller and releases the running guard', async () => {
+    const handler = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('巡检失败'))
+      .mockResolvedValue(undefined);
+    const service = new NapcatWatchdogService({
+      runOfflineWatchdog: handler,
+    } as any);
+    await expect(service.inspectOffline()).rejects.toThrow('巡检失败');
+    await service.inspectOffline();
+    expect(handler).toHaveBeenCalledTimes(2);
   });
 });

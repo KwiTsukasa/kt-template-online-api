@@ -1,5 +1,6 @@
 import * as path from 'path';
-import { normalizePluginTaskCron } from '../../application/task/plugin-task-cron.validator';
+import { normalizePluginTaskCron } from './task-cron.policy';
+import { normalizeDataSchema } from '@/common/automation/data-schema';
 import {
   PLUGIN_ALLOWED_PERMISSIONS,
   PLUGIN_WORKER_TYPES,
@@ -397,6 +398,20 @@ const parseTasks = (
     const key = getString(task, 'key') || '';
     const timeoutMs = getNumber(task, 'timeoutMs');
     let defaultCron = getString(task, 'defaultCron') || '';
+    let inputSchema: PluginTaskManifest['inputSchema'];
+    let outputSchema: PluginTaskManifest['outputSchema'];
+    try {
+      if (task.inputSchema !== undefined)
+        inputSchema = normalizeDataSchema(task.inputSchema);
+      if (task.outputSchema !== undefined)
+        outputSchema = normalizeDataSchema(task.outputSchema);
+      if (task.idempotent !== undefined && typeof task.idempotent !== 'boolean')
+        throw new Error('幂等声明必须是布尔值');
+    } catch (error) {
+      let message = '任务输入输出契约无效';
+      if (error instanceof Error) message = error.message;
+      pushIssue(issues, 'INVALID_TASK_CONTRACT', pathPrefix, message);
+    }
 
     requireKey(key, `${pathPrefix}.key`, issues);
     if (seenKeys.has(key)) {
@@ -443,6 +458,9 @@ const parseTasks = (
 
     return {
       defaultCron,
+      inputSchema,
+      outputSchema,
+      idempotent: task.idempotent === true,
       description: getString(task, 'description'),
       enabled: task.enabled !== false,
       handlerName: getString(task, 'handlerName') || '',

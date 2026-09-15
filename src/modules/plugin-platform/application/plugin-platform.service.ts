@@ -19,9 +19,8 @@ import type {
   PluginRuntimeEvent as PluginWorkerRuntimeEvent,
   PluginWorkerRuntime,
 } from '../infrastructure/integration/runtime';
-import { PluginTaskManifestSynchronizer } from './task/plugin-task-manifest.synchronizer';
-import { PluginTaskSchedulerService } from './task/plugin-task-scheduler.service';
-import type { PluginTaskTriggerType } from './task/plugin-task.types';
+import { PluginTaskCapabilityRegistry } from './registry/plugin-task-capability.registry';
+import type { PluginTaskInvocation } from '../contract/plugin-task-capability.port';
 import { PluginArgumentParserService } from './argument/plugin-argument-parser.service';
 import { PluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
 import { PluginPackageSourceService } from '../infrastructure/integration/package/plugin-package-source.service';
@@ -102,6 +101,7 @@ type UpdateConfigBody = {
 
 type ActiveWorkerContext = {
   installationId: string;
+  versionId: string;
   manifest: PluginManifest;
   pluginId: string;
   pluginKey: string;
@@ -157,9 +157,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
     @Optional()
     private readonly packageSource?: PluginPackageSourceService,
     @Optional()
-    private readonly taskSynchronizer?: PluginTaskManifestSynchronizer,
-    @Optional()
-    private readonly taskScheduler?: PluginTaskSchedulerService,
+    private readonly taskCapabilities?: PluginTaskCapabilityRegistry,
   ) {}
 
   async onModuleInit() {
@@ -414,7 +412,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
       status: 'installed',
       versionId: version.id,
     });
-    await this.syncManifestTasksForInstallation(installation, manifest, false);
+    this.publishTaskCapabilities(installation, manifest, false);
     return installation;
   }
 
@@ -446,7 +444,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
   async disableInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     await this.stopWorkersForInstallation(installation);
-    await this.taskScheduler?.removeSchedulersForInstallation(installation.id);
+    this.taskCapabilities?.suspend(installation.id);
     await this.refreshActiveRegistries(installation, false);
     await this.updateInstallationRuntime(installation, 'disabled', 'stopped');
     await this.recordRuntimeEvent(installation, 'disable-finished');
@@ -511,7 +509,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
     }
 
     await this.refreshActiveRegistries(installation, false);
-    await this.taskScheduler?.removeSchedulersForInstallation(installation.id);
+    this.taskCapabilities?.suspend(installation.id);
     await this.updateInstallationRuntime(
       installation,
       'uninstalled',
@@ -719,24 +717,26 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
   }
 
   /**
-   * 根据`input`处理任务；从 `activeWorkerContexts.get` 读取任务。
-   * @param input - 用于任务的结构化输入，包含 `installationId`、`input`、`taskHandlerName`、`taskId` 字段。
-   * @returns 任务。
+   * 验证插件运行身份和清单处理器后调用当前隔离运行时，完成后收集运行事件。
+   * @param input - 插件安装、固定版本、任务声明及经调用方校验的执行输入。
+   * @returns 插件处理器返回的原始结果，输出契约由执行调用方校验。
+   * @throws 插件未启用、身份或版本不匹配、处理器未声明时拒绝执行。
    */
-  async executeTask(input: {
-    input: Record<string, unknown>;
-    installationId: string;
-    pluginId: string;
-    taskHandlerName: string;
-    taskId: string;
-    taskKey: string;
-    timeoutMs: number;
-    triggerType: PluginTaskTriggerType;
-  }) {
+  async executeTask(input: PluginTaskInvocation) {
     const workerContext = this.activeWorkerContexts.get(input.installationId);
     if (!workerContext) {
       throwVbenError('插件运行时未启用');
     }
+    if (workerContext.pluginId !== input.pluginId)
+      throwVbenError('插件任务所属身份不匹配');
+    if (input.versionId && workerContext.versionId !== input.versionId)
+      throwVbenError('插件任务固定版本当前不可用');
+    const task = workerContext.manifest.tasks.find(
+      (item) =>
+        item.key === input.taskKey &&
+        item.handlerName === input.taskHandlerName,
+    );
+    if (!task) throwVbenError('插件清单未声明该任务处理器');
     try {
       return await workerContext.worker.executeTask({
         input: input.input,
@@ -1398,6 +1398,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
     await this.stopExistingWorkersForManifest(manifest);
     const workerContext: ActiveWorkerContext = {
       installationId: installation.id,
+      versionId: version.id,
       manifest,
       pluginId: installation.pluginId,
       pluginKey: manifest.pluginKey,
@@ -1414,7 +1415,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
       manifest.pluginKey,
       this.buildRuntimeEventDefinitions(manifest),
     );
-    await this.syncManifestTasksForInstallation(installation, manifest, true);
+    this.publishTaskCapabilities(installation, manifest, true);
   }
 
   /**
@@ -1436,36 +1437,31 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
   }
 
   /**
-   * 通过 `isPersistablePluginId` 判断输入是否满足函数约束。
-   * @param installation - 用于清单Tasks安装记录的领域对象，包含 `pluginId`、`id` 字段。
-   * @param manifest - 用于清单Tasks安装记录的领域对象，包含 `tasks` 字段。
-   * @param scheduleEnabledTasks - 决定清单Tasks安装记录内容、边界或目标的 `scheduleEnabledTasks` 值。
-   * @returns 清单Tasks安装记录。
+   * 公布持久安装的任务能力和运行可用性，由外部集成决定是否建立执行配置。
+   * @param installation - 已保存的插件安装身份与包版本。
+   * @param manifest - 已验证的插件清单，空任务集合也必须公布以撤销旧能力。
+   * @param active - 当前安装是否已注册运行时。
    */
-  private async syncManifestTasksForInstallation(
+  private publishTaskCapabilities(
     installation: PluginInstallation,
     manifest: PluginManifest,
-    scheduleEnabledTasks: boolean,
-  ) {
-    if (!this.taskSynchronizer || !manifest.tasks.length) return [];
+    active: boolean,
+  ): void {
+    if (!this.taskCapabilities) return;
     if (
       !this.isPersistablePluginId(installation.pluginId) ||
       !this.isPersistablePluginId(installation.id)
     ) {
-      return [];
+      return;
     }
 
-    const tasks = await this.taskSynchronizer.syncManifestTasks({
+    this.taskCapabilities.publish({
       installationId: installation.id,
-      manifestTasks: manifest.tasks,
+      versionId: installation.versionId,
+      tasks: manifest.tasks,
+      active,
       pluginId: installation.pluginId,
     });
-    if (scheduleEnabledTasks && this.taskScheduler) {
-      for (const task of tasks) {
-        await this.taskScheduler.syncTaskScheduler(task);
-      }
-    }
-    return tasks;
   }
 
   /**
@@ -1492,6 +1488,7 @@ export class PluginPlatformService implements OnModuleInit, BotPluginProtocol {
    * @param installationId - 用于精确定位安装记录的标识。
    */
   private unregisterActiveWorker(installationId: string) {
+    this.taskCapabilities?.suspend(installationId);
     const workerContext = this.activeWorkerContexts.get(installationId);
     this.activeWorkers.delete(installationId);
     this.activeWorkerContexts.delete(installationId);

@@ -11,6 +11,8 @@ jest.mock(
   () => ({ BotAccountService: class {} }),
 );
 
+import { createHash } from 'node:crypto';
+import { toBotPluginMessageEvent } from '@/modules/bot-adapter/core/application/event/plugin-event.mapper';
 import { Test } from '@nestjs/testing';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -37,7 +39,14 @@ import {
 const manifest = JSON.parse(
   readFileSync('src/modules/plugins/persona-switch/plugin.json', 'utf8'),
 );
-const botContext = { bot: { selfId: 'qq-official:1020000001' } };
+const botContext = {
+  bot: { selfId: 'qq-official:1020000001' },
+  conversation: { key: 'a'.repeat(64), scope: 'group' },
+};
+const otherContext = {
+  ...botContext,
+  conversation: { key: 'b'.repeat(64), scope: 'group' },
+};
 const command = {
   aliases: '["persona","人格"]',
   code: 'persona_switch',
@@ -129,6 +138,8 @@ describe('persona state and native Hermes synchronization', () => {
   let server: Server;
   let base: string;
   let soul: string;
+  let projection: any;
+  let digest: string;
   let readsFail: boolean;
   let failAfterPut: boolean;
   let puts: number;
@@ -151,6 +162,8 @@ describe('persona state and native Hermes synchronization', () => {
 
   beforeEach(async () => {
     soul = '';
+    projection = null;
+    digest = '';
     readsFail = false;
     failAfterPut = false;
     puts = 0;
@@ -202,19 +215,27 @@ describe('persona state and native Hermes synchronization', () => {
         response.writeHead(401).end('{}');
         return;
       }
-      expect(request.url).toBe('/api/profiles/default/soul');
+      expect(request.url).toBe('/api/profiles/default/conversation-souls');
       if (request.method === 'PUT') {
         puts++;
-        soul = JSON.parse(body).content;
+        projection = JSON.parse(body);
+        digest = createHash('sha256').update(body).digest('hex');
+        const selected =
+          Object.values(projection.bindings)[0] || projection.fallback;
+        soul = projection.souls[String(selected)];
         if (failAfterPut) readsFail = true;
-        response.end('{"ok":true}');
+        response.end(
+          JSON.stringify({ ok: true, revision: projection.revision, digest }),
+        );
         return;
       }
       if (readsFail) {
         response.writeHead(503).end('{}');
         return;
       }
-      response.end(JSON.stringify({ content: soul, exists: true }));
+      response.end(
+        JSON.stringify({ revision: projection?.revision || 0, digest }),
+      );
     });
     await new Promise<void>((resolve) =>
       server.listen(0, '127.0.0.1', resolve),
@@ -247,8 +268,8 @@ describe('persona state and native Hermes synchronization', () => {
         version: 1,
         avatar: { hash: 'a'.repeat(64) },
       });
-      expect(state.current.name).toBe('默认');
-      expect(state.pending).toBeNull();
+      expect(state.versions[state.fallback].name).toBe('默认');
+      expect(state.bindings).toEqual({});
       expect(state.botProfile).toBeUndefined();
       const downloaded = calls.mock.calls
         .map(([, call]) => call)
@@ -283,7 +304,7 @@ describe('persona state and native Hermes synchronization', () => {
     ).toBe(false);
   });
 
-  it('binds selection to trusted context and ignores an app identity embedded in command arguments', async () => {
+  it('takes the conversation only from trusted host context and never creates a global profile job', async () => {
     const plugin = makePlugin();
     await plugin.operations[0].execute({
       raw: 's A\n正文',
@@ -291,22 +312,19 @@ describe('persona state and native Hermes synchronization', () => {
     });
     const input = {
       raw: 'c A',
-      botSelfId: 'qq-official:1020000002',
-      appId: '1020000002',
+      conversation: otherContext.conversation,
+      scope: 'b'.repeat(64),
     };
     expect((await plugin.operations[0].execute(input)).replyText).toContain(
-      '缺少目标官方 Bot 身份',
+      '缺少可信会话',
     );
     expect(puts).toBe(0);
     await plugin.operations[0].execute(input, botContext);
-    expect(
-      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
-    ).toBe(botContext.bot.selfId);
-    const secondContext = { bot: { selfId: 'qq-official:1020000002' } };
-    await plugin.operations[0].execute({ raw: 'c A' }, secondContext);
-    expect(
-      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
-    ).toBe(secondContext.bot.selfId);
+    const state = store.rows.get('persona-switch').configValue.value;
+    expect(Object.keys(state.bindings)).toEqual([botContext.conversation.key]);
+    expect(state.botProfile).toBeUndefined();
+    expect(projection.bindings[botContext.conversation.key]).toBeDefined();
+    expect(projection.bindings[otherContext.conversation.key]).toBeUndefined();
   });
 
   it('uses both command aliases through the real API HTTP controller and keeps drafts separate from SOUL', async () => {
@@ -374,10 +392,12 @@ describe('persona state and native Hermes synchronization', () => {
         ).replyText,
       ).toContain('已保存');
       expect(soul).toBe('');
-      expect(await execute('/人格 c 简洁')).toContain('共享人格已选择：简洁');
+      expect(await execute('/人格 c 简洁')).toContain(
+        '当前会话人格已选择：简洁',
+      );
       expect(soul).toBe('第一行\n第二行');
-      expect(await execute('/persona h')).toContain('Bot 昵称和头像已读回一致');
-      expect(await execute('/persona d 简洁')).toContain('正在使用');
+      expect(await execute('/persona h')).toContain('当前会话人格：简洁');
+      expect(await execute('/persona d 简洁')).toContain('仍被某个会话');
       expect(await execute('/persona 保存 错误 单行正文')).toContain(
         '缺少图片',
       );
@@ -387,87 +407,123 @@ describe('persona state and native Hermes synchronization', () => {
     }
   });
 
-  it('keeps an unconfirmed target after a successful PUT with failed verification, then recovers that target after restart', async () => {
+  it('recovers an unconfirmed selection after restart without blocking a different group', async () => {
     const plugin = makePlugin();
-    const execute = (raw) =>
+    const execute = (raw, context = botContext) =>
       plugin.operations[0].execute(
-        {
-          raw,
-          imageUrls: ['https://gchat.qpic.cn/first.png'],
-        },
-        botContext,
+        { raw, imageUrls: ['https://gchat.qpic.cn/first.png'] },
+        context,
       );
-    await execute('保存 A\n待确认正文');
-    await execute('保存 B\n第二个人格');
+    await execute('保存 A\n第一人格');
+    await execute('保存 B\n第二人格');
     failAfterPut = true;
     expect((await execute('切换 A')).replyText).toContain('未确认成功');
-    expect(soul).toBe('待确认正文');
     expect((await execute('h')).replyText).toContain('人格待同步：A');
+    let state = store.rows.get('persona-switch').configValue.value;
     expect(
-      store.rows.get('persona-switch').configValue.value.current.name,
+      state.versions[state.bindings[botContext.conversation.key].current].name,
     ).toBe('默认');
-    await execute('切换 B');
-    expect(puts).toBe(1);
-    const restarted = makePlugin();
-    await restarted.activate();
-    expect(puts).toBe(1);
-    store.rows.get('persona-switch').configValue.value.pending.retryAfter = 0;
-    expect(
-      store.rows.get('persona-switch').configValue.value.pending.botSelfId,
-    ).toBe(botContext.bot.selfId);
     readsFail = false;
     failAfterPut = false;
-    await restarted.tasks[0].execute();
+    expect((await execute('切换 B', otherContext)).replyText).toContain(
+      '已选择：B',
+    );
+    expect((await execute('h')).replyText).toContain('当前会话人格：A');
+    const restarted = makePlugin();
+    expect(await restarted.activate()).toEqual({ synchronized: true });
     expect(
-      (await restarted.operations[0].execute({ raw: 'h' })).replyText,
-    ).toContain('当前人格：A');
-    expect(puts).toBe(1);
+      (await restarted.operations[0].execute({ raw: 'h' }, otherContext))
+        .replyText,
+    ).toContain('当前会话人格：B');
     const count = requests;
-    expect(
-      store.rows.get('persona-switch').configValue.value.botProfile.botSelfId,
-    ).toBe(botContext.bot.selfId);
     await restarted.tasks[0].execute();
     expect(requests).toBe(count);
+    state = store.rows.get('persona-switch').configValue.value;
+    expect(state.soulRevision).toBe(state.publishedRevision);
   });
 
-  it('serializes concurrent choices through the shared API revision, including separate plugin instances', async () => {
+  it('merges concurrent switches across groups and keeps private chats independent', async () => {
     const first = makePlugin();
-    await first.operations[0].execute({
-      raw: '保存 A\n第一人格',
-      imageUrls: ['https://gchat.qpic.cn/first.png'],
-    });
-    await first.operations[0].execute({
-      raw: '保存 B\n第二人格',
-      imageUrls: ['https://gchat.qpic.cn/first.png'],
-    });
-    const second = makePlugin();
-    const results = await Promise.all([
+    for (const name of ['A', 'B'])
+      await first.operations[0].execute({
+        raw: '保存 ' + name + '\n正文' + name,
+        imageUrls: ['https://gchat.qpic.cn/first.png'],
+      });
+    await Promise.all([
       first.operations[0].execute({ raw: '切换 A' }, botContext),
-      second.operations[0].execute({ raw: '切换 B' }, botContext),
+      makePlugin().operations[0].execute({ raw: '切换 B' }, otherContext),
     ]);
+    await makePlugin().activate();
     expect(
-      results.filter((result) => result.replyText.startsWith('共享人格已选择'))
-        .length,
-    ).toBe(1);
-    expect(puts).toBe(1);
+      (await first.operations[0].execute({ raw: 'h' }, botContext)).replyText,
+    ).toContain('当前会话人格：A');
+    expect(
+      (await first.operations[0].execute({ raw: 'h' }, otherContext)).replyText,
+    ).toContain('当前会话人格：B');
+    const direct = { conversation: { key: 'c'.repeat(64), scope: 'direct' } };
+    const another = { conversation: { key: 'd'.repeat(64), scope: 'direct' } };
+    await first.operations[0].execute({ raw: '切换 B' }, direct);
+    expect(
+      (await first.operations[0].execute({ raw: 'h' }, another)).replyText,
+    ).toContain('当前会话人格：默认');
+    expect(
+      (await first.operations[0].execute({ raw: 'h' }, botContext)).replyText,
+    ).toContain('当前会话人格：A');
     const stored = store.rows.get('persona-switch').configValue.value;
-    expect(stored.pending).toBeNull();
-    expect(stored.current.content).toBe(soul);
+    expect(Object.keys(stored.versions)).toHaveLength(3);
+    expect(stored.publishedRevision).toBe(stored.soulRevision);
   });
 
-  it('restores API-owned selection on activation without changing the selected version or previous version', async () => {
-    const plugin = makePlugin();
-    await plugin.operations[0].execute({
-      raw: '保存 A\n稳定正文',
-      imageUrls: ['https://gchat.qpic.cn/first.png'],
+  it('migrates the previous shared selection into a preserved fallback without repeating old global jobs', async () => {
+    const selected = {
+      name: '旧人格',
+      content: '原文不改',
+      version: 7,
+      avatar: { hash: 'a'.repeat(64) },
+    };
+    await store.host().compareAndSwapPluginState({
+      expectedRevision: 0,
+      value: {
+        schemaVersion: 1,
+        profiles: [{ name: '默认', content: '', version: 0 }, selected],
+        current: selected,
+        previous: null,
+        pending: null,
+      },
     });
-    await plugin.operations[0].execute({ raw: '切换 A' }, botContext);
-    soul = '外部修改';
-    await makePlugin().activate();
-    expect(soul).toBe('稳定正文');
-    expect(
-      store.rows.get('persona-switch').configValue.value.previous.name,
-    ).toBe('默认');
+    const plugin = makePlugin();
+    expect(await plugin.activate()).toEqual({ synchronized: true });
+    expect(soul).toBe('原文不改');
+    for (const context of [botContext, otherContext])
+      expect(
+        (await plugin.operations[0].execute({ raw: 'h' }, context)).replyText,
+      ).toContain('当前会话人格：旧人格');
+    const stored = store.rows.get('persona-switch').configValue.value;
+    expect(stored.schemaVersion).toBe(2);
+    expect(stored.versions[stored.fallback]).toEqual(selected);
+    expect(stored.profiles).toContainEqual(selected);
+  });
+
+  it('uses one group key for all members but separates bot accounts, groups and private targets', () => {
+    const message = {
+      selfId: 'qq-official:1',
+      messageType: 'group',
+      targetId: 'group1',
+      userId: 'u1',
+      messageId: 'm',
+      messageText: '',
+      rawMessage: '',
+      rawEvent: {},
+      eventTime: new Date(),
+    } as any;
+    const key = (change) =>
+      toBotPluginMessageEvent({ ...message, ...change }).conversationKey;
+    expect(key({ userId: 'u2' })).toBe(key({}));
+    expect(key({ targetId: 'group2' })).not.toBe(key({}));
+    expect(key({ selfId: 'qq-official:2' })).not.toBe(key({}));
+    expect(key({ messageType: 'private', targetId: 'u1' })).not.toBe(
+      key({ messageType: 'private', targetId: 'u2' }),
+    );
   });
 
   it('isolates storage identity and permissions and rejects corrupt or oversized writes', async () => {
@@ -548,7 +604,7 @@ describe('persona state and native Hermes synchronization', () => {
       });
       const switched = await request({ input: { raw: 'c Worker' } });
       expect(switched).toMatchObject({
-        replyText: expect.stringContaining('共享人格已选择'),
+        replyText: expect.stringContaining('当前会话人格已选择'),
       });
       expect(soul).toBe('工作线程正文');
       expect(await request({ input: { raw: 'constructor' } })).toMatchObject({

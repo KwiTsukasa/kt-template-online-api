@@ -254,6 +254,7 @@ class HermesMessageApplication {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'X-Hermes-Session-Id': sessionKey,
+          'X-KT-Conversation-Key': event.conversationKey,
           'X-KT-Tool-Context': String(event.metadata?.toolContextId || ''),
           'Idempotency-Key': createHash('sha256')
             .update(JSON.stringify([sessionKey, event.eventId]))

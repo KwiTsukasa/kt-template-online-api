@@ -1,9 +1,9 @@
 {
   "pluginKey": "persona-switch",
-  "name": "共享人格切换",
-  "version": "1.1.2",
+  "name": "会话人格切换",
+  "version": "2.0.0",
   "minApiSdkVersion": "1.0.0",
-  "description": "图文保存共享人格，通过 NAS 浏览器与 Android 同步 Bot 名称和头像，保留原对话与共享记忆。",
+  "description": "共享人格目录，按不同群和不同私聊独立持久选择，保留对话与共享记忆。",
   "author": "KT",
   "entry": "src/index.ts",
   "permissions": [
@@ -33,7 +33,7 @@
   "operations": [
     {
       "key": "persona.manage",
-      "name": "管理共享人格",
+      "name": "管理会话人格",
       "handlerName": "managePersona",
       "aliases": ["人格", "persona"],
       "description": "/persona 或 /人格：s/保存（名称、正文分行并附图）、c/切换、d/删除、h/使用说明。",

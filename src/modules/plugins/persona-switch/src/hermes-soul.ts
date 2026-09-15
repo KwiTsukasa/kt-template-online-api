@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 type HttpResponse = {
   body: Uint8Array;
   statusCode: number;
@@ -8,16 +9,16 @@ export type RequestResponse = (
 ) => Promise<HttpResponse>;
 
 /**
- * 经原生 Dashboard 登录读写默认档案 SOUL，仅在管理操作中建立短期会话。
+ * 经原生 Dashboard 发布会话人格清单，仅在管理操作中发送正文并核对发布摘要。
  * @param config - 服务端 Dashboard 地址与认证配置。
  * @param request - 宿主提供的有界 HTTP 能力。
- * @param content - API 期望的人格正文。
+ * @param projection - API 期望的原生人格文件和会话映射。
  * @throws 配置、认证、写入或核验失败时保留待同步状态。
  */
 export async function synchronizeSoul(
   config: Record<string, string | undefined>,
   request: RequestResponse,
-  content: string,
+  projection: Record<string, unknown>,
 ): Promise<void> {
   const base = config.HERMES_DASHBOARD_BASE_URL;
   const username = config.HERMES_DASHBOARD_USERNAME;
@@ -83,14 +84,17 @@ export async function synchronizeSoul(
   });
   if (login.ok !== true || cookies.size === 0)
     throw new Error('Hermes Dashboard 登录失败。');
-  const path = '/api/profiles/default/soul';
-  const before = await call(path, 'GET');
-  if (typeof before.content !== 'string' || typeof before.exists !== 'boolean')
-    throw new Error('Hermes SOUL 响应无效。');
-  if (before.content === content && before.exists) return;
-  const result = await call(path, 'PUT', { content });
-  if (result.ok !== true) throw new Error('Hermes SOUL 写入未确认。');
+  const path = '/api/profiles/default/conversation-souls';
+  const payload = JSON.stringify(projection);
+  const digest = createHash('sha256').update(payload).digest('hex');
+  const result = await call(path, 'PUT', projection);
+  if (
+    result.ok !== true ||
+    result.digest !== digest ||
+    result.revision !== projection.revision
+  )
+    throw new Error('Hermes 会话人格写入未确认。');
   const after = await call(path, 'GET');
-  if (after.exists !== true || after.content !== content)
-    throw new Error('Hermes SOUL 读回不一致。');
+  if (after.digest !== digest || after.revision !== projection.revision)
+    throw new Error('Hermes 会话人格读回不一致。');
 }

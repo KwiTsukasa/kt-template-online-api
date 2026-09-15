@@ -1,19 +1,17 @@
-import { randomUUID } from 'node:crypto';
 import type {
   PluginStateSnapshot,
   PluginStateWrite,
 } from '@/modules/plugin-platform/contract/plugin-state';
 import { synchronizeSoul, type RequestResponse } from './hermes-soul';
 import { parsePersonaCommand, PERSONA_HELP } from './command';
-import {
-  callProfileExecutor,
-  readProfileResult,
-  isOfficialBotSelfId,
-} from './profile-client';
+import { callProfileExecutor } from './profile-client';
 import {
   readState,
   savePersona,
-  type Persona,
+  selectPersona,
+  confirmSelections,
+  compactVersions,
+  soulProjection,
   type PersonaState,
 } from './state';
 
@@ -145,146 +143,66 @@ class PersonaApplication {
   }
 
   /**
-   * 持久化唯一切换目标，读回 SOUL 后确认选择并登记 NAS 资料同步任务。
-   * @param revision - 准备竞争的 API 版本。
-   * @param state - 当前目录及最后确认状态。
-   * @param target - 本轮唯一允许同步的人格版本。
-   * @param botSelfId - 原命令绑定的官方账号，恢复时只能沿用已持久化的身份。
-   * @returns 已确认人格和后台资料任务的最新状态。
+   * 在版本竞争时重新读取并重放本次窄变更，避免不同群的选择相互覆盖。
+   * @param change - 只修改本轮目标的纯状态变换。
+   * @returns 已持久化状态及其宿主版本。
+   * @throws 非并发错误或连续竞争超限时保留既有状态并报告失败。
    */
-  private async synchronize(
-    revision: number,
-    state: PersonaState,
-    target: Persona,
-    botSelfId?: string,
-  ) {
-    const jobId = state.pending?.jobId ?? randomUUID();
-    const pending = {
-      ...state,
-      pending: {
-        target: structuredClone(target),
-        retryAfter: Date.now() + 60_000,
-        jobId,
-        botSelfId,
-      },
-    };
-    const acquired = await this.write(revision, pending);
-    await synchronizeSoul(
-      this.options.runtime.configSnapshot,
-      this.request(),
-      target.content,
-    );
-    let previous = state.previous;
-    if (JSON.stringify(state.current) !== JSON.stringify(target))
-      previous = structuredClone(state.current);
-    const next: PersonaState = {
-      ...state,
-      current: structuredClone(target),
-      previous,
-      pending: null,
-    };
-    if (target.avatar)
-      next.botProfile = {
-        id: jobId,
-        botSelfId,
-        target: structuredClone(target),
-        status: 'queued',
-        detail: '等待 NAS 同步 Bot 昵称和头像。',
-      };
-    const confirmed = await this.write(acquired, next);
-    return this.refreshProfile(confirmed, next);
+  private async update(change: (state: PersonaState) => PersonaState) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const snapshot = await this.read();
+      const state = change(snapshot.state);
+      try {
+        const revision = await this.write(snapshot.revision, state);
+        return { revision, state };
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes('版本冲突'))
+          throw error;
+      }
+    }
+    throw new Error('人格状态竞争繁忙，请重试。');
   }
 
   /**
-   * 使用持久操作身份提交或读取后台任务，重试不会建立另一份资料修改任务。
-   * @param revision - 本轮人格快照版本。
-   * @param state - 含待处理资料任务的状态。
-   * @returns 已读取最新结果或仍等待执行器恢复的状态。
+   * 发布 API 的完整期望映射并核对摘要；较新切换到达时重读，不用旧快照覆盖确认值。
+   * @returns 已读回确认的状态。
+   * @throws 网络、核验失败或持续并发更新时保留期望状态供后续恢复。
    */
-  private async refreshProfile(
-    revision: number,
-    state: PersonaState,
-  ): Promise<PersonaState> {
-    const job = state.botProfile;
-    if (
-      job &&
-      !job.botSelfId &&
-      ['queued', 'running', 'uncertain'].includes(job.status)
-    ) {
-      const next: PersonaState = {
-        ...state,
-        botProfile: {
-          ...job,
-          status: 'failed',
-          detail:
-            '旧资料任务缺少 Bot 身份，请从目标官方 Bot 重新发送切换命令。',
-        },
-      };
-      await this.write(revision, next);
-      return next;
-    }
-    if (
-      !job ||
-      (!['queued', 'running', 'uncertain'].includes(job.status) &&
-        !(job.status === 'applied' && !job.verifiedBy))
-    )
-      return state;
-    try {
-      let response: Record<string, unknown>;
-      if (job.status === 'queued')
-        response = await callProfileExecutor(
+  private async synchronize(): Promise<PersonaState> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { state } = await this.read();
+      try {
+        await synchronizeSoul(
           this.options.runtime.configSnapshot,
           this.request(),
-          '/v1/jobs',
-          {
-            id: job.id,
-            botSelfId: job.botSelfId,
-            name: job.target.name,
-            avatarHash: job.target.avatar?.hash,
-          },
+          soulProjection(state),
         );
-      else
-        response = await callProfileExecutor(
-          this.options.runtime.configSnapshot,
-          this.request(),
-          '/v1/jobs/' + job.id,
-        );
-      const result = readProfileResult(response, job.id, job.botSelfId);
-      const next = { ...state, botProfile: { ...job, ...result } };
-      await this.write(revision, next);
-      return next;
-    } catch {
-      return state;
+      } catch (error) {
+        const latest = await this.read();
+        if (latest.state.soulRevision > state.soulRevision) continue;
+        throw error;
+      }
+      const confirmed = await this.update((latest) => {
+        if (latest.soulRevision !== state.soulRevision) return latest;
+        return confirmSelections(latest);
+      });
+      if (confirmed.state.publishedRevision === confirmed.state.soulRevision)
+        return confirmed.state;
     }
+    throw new Error('人格映射仍在更新，请稍后查看当前会话。');
   }
 
   /**
-   * 恢复未完成切换和资料任务；启动时核对当前 SOUL，保留会话及共享记忆。
-   * @param startup - 是否同时核对最后确认的 SOUL。
-   * @returns 是否完成本轮恢复检查。
+   * 比对期望修订与已发布修订；启动时读回 NAS 清单，后续仅补交未确认的映射。
+   * @param startup - 是否核对已经发布过的清单。
+   * @returns 本轮是否完成持久状态的同步检查。
    */
   async restore(startup = false) {
     try {
       const { revision, state } = await this.read();
       if (revision === 0) return { synchronized: false };
-      if (state.pending) {
-        if (state.pending.retryAfter > Date.now())
-          return { synchronized: false };
-        await this.synchronize(
-          revision,
-          state,
-          state.pending.target,
-          state.pending.botSelfId,
-        );
-      } else {
-        if (startup)
-          await synchronizeSoul(
-            this.options.runtime.configSnapshot,
-            this.request(),
-            state.current.content,
-          );
-        await this.refreshProfile(revision, state);
-      }
+      if (startup || state.publishedRevision !== state.soulRevision)
+        await this.synchronize();
       return { synchronized: true };
     } catch {
       return { synchronized: false };
@@ -292,10 +210,28 @@ class PersonaApplication {
   }
 
   /**
-   * 按严格图文格式保存、切换或删除人格，返回说明及真实的独立同步状态。
-   * @param input - 宿主剥离命令名后保留换行的原文与图片附件。
-   * @param context - 与聊天参数分离的宿主执行上下文。
-   * @returns 经现有 Bot 回复队列发送的中文文本，不回显头像地址或人格正文。
+   * 从宿主独立上下文取得会话标识，正文和命令参数不能指定或冒充其他会话。
+   * @param context - 经过适配器归一化的命令执行上下文。
+   * @returns 当前群、频道或私聊的稳定摘要，缺失时返回空值。
+   */
+  private scope(context?: Record<string, unknown>): string | undefined {
+    const conversation = context?.conversation as
+      | { key?: unknown; scope?: unknown }
+      | undefined;
+    if (
+      typeof conversation?.key !== 'string' ||
+      !/^[a-f0-9]{64}$/u.test(conversation.key) ||
+      !['group', 'direct', 'channel'].includes(String(conversation.scope))
+    )
+      return undefined;
+    return conversation.key;
+  }
+
+  /**
+   * 管理共享目录并只切换命令所在会话的选择，展示该会话的确认值与待同步值。
+   * @param input - 保留换行的命令正文与第一张图片附件。
+   * @param context - 与用户输入隔离的真实会话上下文。
+   * @returns 经现有回复队列发送的命令结果。
    */
   async manage(
     input: Record<string, unknown>,
@@ -303,34 +239,30 @@ class PersonaApplication {
   ) {
     const command = parsePersonaCommand(input);
     if (!command) return { replyText: PERSONA_HELP };
+    const scope = this.scope(context);
     try {
-      const { revision, state } = await this.read();
+      const { state } = await this.read();
       if (command.action === 'help') {
-        const latest = await this.refreshProfile(revision, state);
         const names =
-          latest.profiles
+          state.profiles
             .filter((item) => item.avatar)
             .map((item) => item.name)
             .join('、') || '暂无';
-        let text =
-          PERSONA_HELP +
-          '\n\n已保存：' +
-          names +
-          '\n当前人格：' +
-          latest.current.name;
-        if (latest.pending)
-          text += '\n人格待同步：' + latest.pending.target.name;
-        if (latest.botProfile)
-          text += '\nBot 资料：' + latest.botProfile.detail;
+        let text = PERSONA_HELP + '\n\n已保存：' + names;
+        if (scope) {
+          const binding = state.bindings[scope];
+          text +=
+            '\n当前会话人格：' +
+            state.versions[binding?.current || state.fallback].name;
+          if (binding && binding.current !== binding.desired)
+            text += '\n人格待同步：' + state.versions[binding.desired].name;
+        } else text += '\n请在目标群或私聊中查看当前人格。';
         return { replyText: text };
       }
-      if (state.pending)
-        return { replyText: '上次人格切换尚待核验，请稍后查看 /persona h。' };
       if (command.action === 'save') {
         const avatar = await this.saveAvatar(command.imageUrl);
-        await this.write(
-          revision,
-          savePersona(state, command.name, command.content, avatar),
+        await this.update((latest) =>
+          savePersona(latest, command.name, command.content, avatar),
         );
         return {
           replyText:
@@ -338,7 +270,7 @@ class PersonaApplication {
             command.name +
             ' 的正文与头像。使用 /persona c ' +
             command.name +
-            ' 切换。',
+            ' 切换当前会话。',
         };
       }
       const target = state.profiles.find(
@@ -350,62 +282,65 @@ class PersonaApplication {
             '没有找到完整的人格：' + command.name + '。\n' + PERSONA_HELP,
         };
       if (command.action === 'delete') {
-        if (
-          state.current.name === target.name ||
-          (state.botProfile?.target.name === target.name &&
-            ['queued', 'running', 'uncertain'].includes(
-              state.botProfile.status,
-            ))
-        )
-          return {
-            replyText: '该人格正在使用或同步，请先切换到其他人格后再删除。',
-          };
-        const next = {
-          ...state,
-          profiles: state.profiles.filter((item) => item.name !== target.name),
-        };
-        if (next.previous?.name === target.name) next.previous = null;
-        await this.write(revision, next);
+        await this.update((latest) => {
+          const used = [
+            latest.fallback,
+            ...Object.values(latest.bindings).flatMap((binding) => [
+              binding.current,
+              binding.desired,
+            ]),
+          ];
+          if (used.some((id) => latest.versions[id].name === target.name))
+            throw new Error('该人格仍被某个会话使用或同步，暂不能删除。');
+          latest.profiles = latest.profiles.filter(
+            (item) => item.name !== target.name,
+          );
+          for (const binding of Object.values(latest.bindings)) {
+            if (
+              binding.previous &&
+              latest.versions[binding.previous].name === target.name
+            )
+              binding.previous = null;
+          }
+          return compactVersions(latest);
+        });
         return {
           replyText: '已删除人格：' + target.name + '。共享记忆与对话保留。',
         };
       }
-      if (
-        state.botProfile &&
-        ['queued', 'running', 'uncertain'].includes(state.botProfile.status)
-      ) {
-        const latest = await this.refreshProfile(revision, state);
+      if (!scope)
         return {
-          replyText:
-            '上次 Bot 资料同步：' +
-            latest.botProfile?.detail +
-            ' 请确认完成后再切换。',
+          replyText: '缺少可信会话身份，请在目标群或私聊中发送切换命令。',
         };
-      }
-      const bot = context?.bot as { selfId?: unknown } | undefined;
-      if (!isOfficialBotSelfId(bot?.selfId))
-        return {
-          replyText:
-            '缺少目标官方 Bot 身份，请直接向目标官方 Bot 发送切换命令。',
-        };
-      const next = await this.synchronize(revision, state, target, bot.selfId);
+      await this.update((latest) => {
+        const selected = latest.profiles.find(
+          (item) => item.name === target.name && item.avatar,
+        );
+        if (!selected) throw new Error('人格已被删除，请重新查看目录。');
+        return selectPersona(latest, scope, selected);
+      });
+      const next = await this.synchronize();
       return {
         replyText:
-          '共享人格已选择：' +
-          next.current.name +
-          '。对话和记忆保留。\nBot 资料：' +
-          (next.botProfile?.detail ?? '尚未提交') +
-          '\n/persona h 可查看结果。',
+          '当前会话人格已选择：' +
+          next.versions[next.bindings[scope].current].name +
+          '。仅本群或本私聊生效；对话和记忆保留，Bot 昵称和头像不变。',
       };
-    } catch {
+    } catch (error) {
       if (command.action === 'save')
         return {
           replyText:
             '保存未成功，请检查图文格式及图片能否读取后重发。\n' + PERSONA_HELP,
         };
+      if (
+        command.action === 'delete' &&
+        error instanceof Error &&
+        error.message.includes('仍被某个会话')
+      )
+        return { replyText: error.message };
       return {
         replyText:
-          '人格操作未确认成功，请用 /persona h 查看；系统会恢复原待同步目标。',
+          '人格操作未确认成功，请在当前会话用 /persona h 查看；系统会恢复待同步选择。',
       };
     }
   }

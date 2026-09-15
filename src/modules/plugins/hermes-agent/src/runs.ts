@@ -59,6 +59,7 @@ export class HermesRunApplication {
     const headers = {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'X-KT-Conversation-Key': event.conversationKey,
       'X-KT-Tool-Context': String(event.metadata.toolContextId || ''),
       'Idempotency-Key': idempotency,
     };

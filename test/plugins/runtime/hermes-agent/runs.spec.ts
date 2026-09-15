@@ -85,6 +85,9 @@ describe('Hermes durable native runs over HTTP', () => {
       },
     };
     const initial = await make().handle(event);
+    expect(requests[0].headers['x-kt-conversation-key']).toBe(
+      event.conversationKey,
+    );
     expect(initial.continuation?.state).toEqual({ runId });
     expect(requests[0].body.session_id).toBe(
       createHash('sha256')

@@ -1,0 +1,173 @@
+diff --git a/gateway/platforms/api_server.py b/gateway/platforms/api_server.py
+index d29980b..65892ba 100644
+--- a/gateway/platforms/api_server.py
++++ b/gateway/platforms/api_server.py
+@@ -51,6 +51,7 @@ from contextlib import contextmanager, nullcontext, suppress
+ from contextvars import ContextVar
+ 
+ _kt_tool_context = ContextVar("kt_tool_context", default="")
++_kt_conversation_key = ContextVar("kt_conversation_key", default="")
+ from functools import wraps
+ import logging
+ import os
+@@ -2192,6 +2193,10 @@ class APIServerAdapter(BasePlatformAdapter):
+             tool_context = request.headers.get("X-KT-Tool-Context", "")
+             if not re.fullmatch(r"[0-9a-f-]{36}", tool_context):
+                 tool_context = ""
++            conversation_key = request.headers.get("X-KT-Conversation-Key", "")
++            if conversation_key and not re.fullmatch(r"[a-f0-9]{64}", conversation_key):
++                return web.json_response({"error": "Invalid conversation key"}, status=400)
++            conversation_token = _kt_conversation_key.set(conversation_key)
+             tool_token = _kt_tool_context.set(tool_context)
+             token = _api_request_profile.set(profile)
+             try:
+@@ -2211,6 +2216,7 @@ class APIServerAdapter(BasePlatformAdapter):
+             finally:
+                 _api_request_profile.reset(token)
+                 _kt_tool_context.reset(tool_token)
++                _kt_conversation_key.reset(conversation_token)
+ 
+         return profile_prefix_middleware
+ 
+@@ -7310,6 +7316,7 @@ class APIServerAdapter(BasePlatformAdapter):
+         # inside _run() from this explicit value.
+         request_profile = _api_request_profile.get()
+         tool_context = _kt_tool_context.get()
++        conversation_key = _kt_conversation_key.get()
+         request_browser_control_principal = (
+             _api_request_browser_control_principal.get()
+         )
+@@ -7352,6 +7359,7 @@ class APIServerAdapter(BasePlatformAdapter):
+                         session_model=session_model,
+                         confirmed_runtime_lock=confirmed_runtime_lock,
+                     )
++                    agent._kt_conversation_key = conversation_key
+                     if agent_ref is not None:
+                         agent_ref[0] = agent
+                     if active_run_id:
+diff --git a/gateway/platforms/api_server_runs.py b/gateway/platforms/api_server_runs.py
+index 459d82b..c8dc91d 100644
+--- a/gateway/platforms/api_server_runs.py
++++ b/gateway/platforms/api_server_runs.py
+@@ -695,6 +695,7 @@ async def _handle_runs(
+     # profile scope). Capture now and re-enter inside the task/executor.
+     request_profile = _api_request_profile.get()
+     kt_tool_context = _api_server._kt_tool_context.get()
++    kt_conversation_key = _api_server._kt_conversation_key.get()
+     request_browser_control_principal = (
+         _api_request_browser_control_principal.get()
+     )
+@@ -735,6 +736,7 @@ async def _handle_runs(
+                     room_dispatch=room_dispatch,
+                     room_execution_policy=room_execution_policy,
+                 )
++            agent._kt_conversation_key = kt_conversation_key
+             self._active_run_agents[run_id] = agent
+ 
+             def _approval_notify(approval_data: Dict[str, Any]) -> None:
+diff --git a/agent/turn_context.py b/agent/turn_context.py
+index af3a3e9..bd1be09 100644
+--- a/agent/turn_context.py
++++ b/agent/turn_context.py
+@@ -870,10 +870,27 @@ def build_turn_context(
+         from agent.system_prompt import _agent_home as _kt_agent_home
+         from hermes_constants import get_hermes_home as _kt_get_home
+ 
+-        _kt_soul_path = _KtPath(_kt_agent_home(agent) or _kt_get_home()) / "SOUL.md"
++        _kt_soul_home = _KtPath(_kt_agent_home(agent) or _kt_get_home())
++        _kt_key = getattr(agent, "_kt_conversation_key", "")
++        _kt_expected = None
++        if _kt_key:
++            import json as _kt_json
++            import re as _kt_re
++            if not _kt_re.fullmatch(r"[a-f0-9]{64}", _kt_key):
++                raise ValueError("Invalid conversation key")
++            _kt_root = _kt_soul_home / ".kt-conversation-souls"
++            _kt_manifest = _kt_json.loads((_kt_root / "current.json").read_text(encoding="utf-8"))
++            _kt_expected = _kt_manifest["bindings"].get(_kt_key, _kt_manifest["fallback"])
++            if not _kt_re.fullmatch(r"[a-f0-9]{64}", _kt_expected):
++                raise ValueError("Invalid conversation SOUL reference")
++            _kt_soul_home = _kt_root / _kt_expected
++        agent._kt_soul_home = _kt_soul_home
++        _kt_soul_path = _kt_soul_home / "SOUL.md"
+         # 权限或文件读取异常直接阻止本轮，不静默使用旧人格。
+         _kt_soul_bytes = _kt_soul_path.read_bytes()
+         _kt_digest = _kt_hashlib.sha256(_kt_soul_bytes).hexdigest()
++        if _kt_expected and _kt_digest != _kt_expected:
++            raise ValueError("Conversation SOUL integrity mismatch")
+         _kt_stamp = "\n<!-- kt-soul-sha256:" + _kt_digest + " -->"
+         if not (agent._cached_system_prompt or "").endswith(_kt_stamp):
+             agent._invalidate_system_prompt()
+diff --git a/agent/system_prompt.py b/agent/system_prompt.py
+index 64c39c7..01351cc 100644
+--- a/agent/system_prompt.py
++++ b/agent/system_prompt.py
+@@ -477,7 +477,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None)
+         # Scope the SOUL.md read to the agent's OWN home (see _agent_home) —
+         # ambient resolution on a thread that lost the HERMES_HOME ContextVar
+         # reads the launch profile's SOUL.md instead (#50233).
+-        _soul_content = _r.load_soul_md(_ctx_len, home_override=_agent_home(agent))
++        _soul_content = _r.load_soul_md(_ctx_len, home_override=getattr(agent, "_kt_soul_home", None) or _agent_home(agent))
+         if _soul_content:
+             stable_parts.append(_soul_content)
+             _soul_loaded = True
+diff --git a/hermes_cli/web_routers/profiles.py b/hermes_cli/web_routers/profiles.py
+index c066951..aa0fc45 100644
+--- a/hermes_cli/web_routers/profiles.py
++++ b/hermes_cli/web_routers/profiles.py
+@@ -27,7 +27,7 @@ from collections import OrderedDict
+ from pathlib import Path  # noqa: F401
+ from typing import Any, Dict, List, Optional, Tuple  # noqa: F401
+ 
+-from fastapi import APIRouter, HTTPException, Query  # noqa: F401
++from fastapi import APIRouter, HTTPException, Query, Request  # noqa: F401
+ 
+ from hermes_cli.web_deps import late
+ from hermes_cli.web_models import (
+@@ -1049,6 +1049,46 @@ async def delete_profile_endpoint(name: str):
+     return {"ok": True, "path": str(path)}
+ 
+ 
++async def _kt_conversation_souls(name: str, payload=None):
++    """复用认证路由与档案定位，只将有界输入交给 Node 持久化执行器。"""
++    home = _resolve_profile_dir(name)
++    method = "read"
++    if payload is not None:
++        method = "write"
++    process = await asyncio.create_subprocess_exec(
++        "flock", "-w", "5", str(home / ".kt-conversation-souls.lock"),
++        "node", "/opt/kt-tools/conversation-souls.mjs", method, str(home),
++        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
++        stderr=asyncio.subprocess.PIPE,
++    )
++    try:
++        output, error = await asyncio.wait_for(process.communicate(payload), timeout=8)
++    except asyncio.TimeoutError:
++        process.kill()
++        await process.wait()
++        raise HTTPException(status_code=504, detail="Conversation SOUL publish timeout")
++    if process.returncode:
++        raise HTTPException(status_code=409, detail="Conversation SOUL validation or revision conflict")
++    return json.loads(output)
++
++
++@router.get("/api/profiles/{name}/conversation-souls")
++async def get_conversation_souls(name: str):
++    """返回原子发布清单的版本与摘要，不输出人格正文。"""
++    return await _kt_conversation_souls(name)
++
++
++@router.put("/api/profiles/{name}/conversation-souls")
++async def put_conversation_souls(name: str, request: Request):
++    """限制输入大小后提交 Node 执行器，选择状态仍由 API 管理。"""
++    payload = bytearray()
++    async for chunk in request.stream():
++        payload.extend(chunk)
++        if len(payload) > 48 * 1024:
++            raise HTTPException(status_code=413, detail="Conversation SOUL payload too large")
++    return await _kt_conversation_souls(name, bytes(payload))
++
++
+ @router.get("/api/profiles/{name}/soul")
+ async def get_profile_soul(name: str):
+     soul_path = _resolve_profile_dir(name) / "SOUL.md"

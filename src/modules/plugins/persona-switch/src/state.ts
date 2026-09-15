@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { isPersonaName } from './command';
 import {
   readProfileResult,
@@ -11,7 +12,7 @@ export type Persona = {
   version: number;
   avatar?: Avatar;
 };
-export type PersonaState = {
+type LegacyPersonaState = {
   schemaVersion: 1;
   profiles: Persona[];
   current: Persona;
@@ -25,13 +26,217 @@ export type PersonaState = {
   botProfile?: ProfileResult & { target: Persona };
 };
 
+export type PersonaState = {
+  schemaVersion: 2;
+  profiles: Persona[];
+  versions: Record<string, Persona>;
+  fallback: string;
+  bindings: Record<
+    string,
+    { current: string; desired: string; previous: string | null }
+  >;
+  soulRevision: number;
+  publishedRevision: number;
+};
+
+/**
+ * 将名称、版本、正文和头像摘要按固定顺序散列，避免不同人格快照共用存储键。
+ * @param persona - 已校验的人格版本与头像标识。
+ * @returns 该版本的稳定摘要。
+ */
+export function personaId(persona: Persona): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        persona.name,
+        persona.version,
+        persona.content,
+        persona.avatar?.hash || '',
+      ]),
+    )
+    .digest('hex');
+}
+
+/**
+ * 将旧共享选择迁移为默认值，并验证每个会话的版本引用，损坏状态不会被重置。
+ * @param value - API 私有存储中的旧版或新版快照。
+ * @returns 保留目录、正文与既有选择的独立状态副本。
+ * @throws 版本、会话键或引用损坏时拒绝继续写入。
+ */
+export function readState(value: unknown): PersonaState {
+  const raw = value as PersonaState | null;
+  if (!raw || Number(raw.schemaVersion) === 1) {
+    const legacy = readLegacyState(value);
+    const fallback = personaId(legacy.current);
+    return {
+      schemaVersion: 2,
+      profiles: legacy.profiles,
+      versions: { [fallback]: legacy.current },
+      fallback,
+      bindings: {},
+      soulRevision: 1,
+      publishedRevision: 0,
+    };
+  }
+  if (
+    raw.schemaVersion !== 2 ||
+    !Array.isArray(raw.profiles) ||
+    raw.profiles.length < 1 ||
+    raw.profiles.length > 30
+  )
+    throw new Error('人格目录结构损坏。');
+  if (
+    !raw.profiles.every(isPersona) ||
+    new Set(raw.profiles.map((item) => item.name)).size !==
+      raw.profiles.length ||
+    !raw.profiles.some(
+      (item) =>
+        item.name === '默认' && item.version === 0 && item.content === '',
+    )
+  )
+    throw new Error('人格目录版本或默认项损坏。');
+  if (
+    !raw.versions ||
+    Array.isArray(raw.versions) ||
+    !raw.bindings ||
+    Array.isArray(raw.bindings)
+  )
+    throw new Error('人格映射结构损坏。');
+  if (
+    Object.keys(raw.bindings).length > 256 ||
+    !Number.isSafeInteger(raw.soulRevision) ||
+    raw.soulRevision < 1
+  )
+    throw new Error('人格映射数量或修订异常。');
+  if (
+    !Number.isSafeInteger(raw.publishedRevision) ||
+    raw.publishedRevision < 0 ||
+    raw.publishedRevision > raw.soulRevision
+  )
+    throw new Error('会话人格状态损坏，未修改当前人格。');
+  const validReference = (key: unknown) =>
+    typeof key === 'string' &&
+    /^[a-f0-9]{64}$/u.test(key) &&
+    Object.hasOwn(raw.versions, key);
+  if (
+    !validReference(raw.fallback) ||
+    Object.entries(raw.versions).some(
+      ([key, item]) => !isPersona(item) || personaId(item) !== key,
+    )
+  )
+    throw new Error('人格版本引用损坏。');
+  for (const [key, binding] of Object.entries(raw.bindings)) {
+    if (
+      !/^[a-f0-9]{64}$/u.test(key) ||
+      !binding ||
+      !validReference(binding.current) ||
+      !validReference(binding.desired)
+    )
+      throw new Error('会话人格引用损坏。');
+    if (binding.previous !== null && !validReference(binding.previous))
+      throw new Error('会话上一人格引用损坏。');
+  }
+  return structuredClone(raw);
+}
+
+/**
+ * 仅更新指定会话的期望版本，旧版本继续作为确认值，其他会话不变。
+ * @param state - API 最后读取的状态。
+ * @param scope - 宿主提供的可信会话摘要。
+ * @param target - 本轮明确选择的人格版本。
+ * @returns 待发布到 Hermes 的新版状态。
+ * @throws 会话键非法、目录已满或版本溢出时拒绝更新。
+ */
+export function selectPersona(
+  state: PersonaState,
+  scope: string,
+  target: Persona,
+): PersonaState {
+  if (!/^[a-f0-9]{64}$/u.test(scope) || !isPersona(target))
+    throw new Error('会话人格目标无效。');
+  const next = structuredClone(state);
+  if (!next.bindings[scope] && Object.keys(next.bindings).length >= 256)
+    throw new Error('人格会话数量已达上限。');
+  const id = personaId(target);
+  next.versions[id] = structuredClone(target);
+  const binding = next.bindings[scope] || {
+    current: next.fallback,
+    desired: next.fallback,
+    previous: null,
+  };
+  if (binding.desired !== id || !next.bindings[scope]) next.soulRevision++;
+  if (!Number.isSafeInteger(next.soulRevision))
+    throw new Error('人格同步版本超出范围。');
+  binding.desired = id;
+  next.bindings[scope] = binding;
+  return compactVersions(next);
+}
+
+/**
+ * 核验完成后确认同一发布版本内的选择，保留各会话自己的上一版本。
+ * @param state - 尚未被新切换替换的已发布状态。
+ * @returns 确认值与期望值一致的状态。
+ */
+export function confirmSelections(state: PersonaState): PersonaState {
+  const next = structuredClone(state);
+  for (const binding of Object.values(next.bindings)) {
+    if (binding.current !== binding.desired) binding.previous = binding.current;
+    binding.current = binding.desired;
+  }
+  next.publishedRevision = next.soulRevision;
+  return compactVersions(next);
+}
+
+/**
+ * 移除不再被默认值或任何会话引用的旧快照，避免正文随会话数量重复增长。
+ * @param state - 可原地整理的已复制状态。
+ * @returns 仅包含仍被引用版本的状态。
+ */
+export function compactVersions(state: PersonaState): PersonaState {
+  const used = new Set([state.fallback]);
+  for (const binding of Object.values(state.bindings)) {
+    used.add(binding.current);
+    used.add(binding.desired);
+    if (binding.previous) used.add(binding.previous);
+  }
+  for (const key of Object.keys(state.versions))
+    if (!used.has(key)) delete state.versions[key];
+  return state;
+}
+
+/**
+ * 投影为 Hermes 的原生人格文件清单，正文按摘要复用且不进入普通聊天请求。
+ * @param state - API 权威目录及期望选择。
+ * @returns 带单调版本、默认正文和会话映射的发布载荷。
+ */
+export function soulProjection(state: PersonaState) {
+  const souls: Record<string, string> = {};
+  const include = (id: string) => {
+    const content = state.versions[id].content;
+    const hash = createHash('sha256').update(content).digest('hex');
+    souls[hash] = content;
+    return hash;
+  };
+  const fallback = include(state.fallback);
+  const bindings: Record<string, string> = {};
+  for (const scope of Object.keys(state.bindings).sort())
+    bindings[scope] = include(state.bindings[scope].desired);
+  return {
+    schemaVersion: 1,
+    revision: state.soulRevision,
+    fallback,
+    bindings,
+    souls,
+  };
+}
+
 /**
  * 校验目录和同步记录；仅首次使用生成空默认人格，不覆盖损坏数据。
  * @param value - 宿主读取的原始状态；空值代表首次使用。
  * @returns 可独立修改的有效状态副本。
  * @throws 目录或同步记录异常时拒绝操作。
  */
-export function readState(value: unknown): PersonaState {
+function readLegacyState(value: unknown): LegacyPersonaState {
   if (value === null) {
     const initial = { name: '默认', content: '', version: 0 };
     return {
@@ -42,7 +247,7 @@ export function readState(value: unknown): PersonaState {
       pending: null,
     };
   }
-  const state = value as PersonaState;
+  const state = value as LegacyPersonaState;
   if (
     !state ||
     state.schemaVersion !== 1 ||

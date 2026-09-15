@@ -50,11 +50,9 @@ describe('Hermes Agent message integration', () => {
     render.mockResolvedValueOnce([
       { base64: 'png-bytes', text: answer, height: 4000 },
     ]);
-    const request = jest
-      .fn()
-      .mockResolvedValue({
-        choices: [{ finish_reason: 'stop', message: { content: answer } }],
-      });
+    const request = jest.fn().mockResolvedValue({
+      choices: [{ finish_reason: 'stop', message: { content: answer } }],
+    });
     const before = Date.now();
     const result = await makePlugin(request).handleEvent('message', event);
     expect(result.replies).toEqual([
@@ -538,6 +536,7 @@ describe('Hermes Agent message integration', () => {
     expect(new Set(keys).size).toBe(4);
     const input = request.mock.calls[0][0];
     expect(input.headers['X-Hermes-Session-Key']).toBeUndefined();
+    expect(input.headers['X-KT-Conversation-Key']).toBe(event.conversationKey);
     expect(input.headers['Idempotency-Key']).not.toBe(
       request.mock.calls[1][0].headers['Idempotency-Key'],
     );

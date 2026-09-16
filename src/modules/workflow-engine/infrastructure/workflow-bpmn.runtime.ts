@@ -210,10 +210,26 @@ export async function advanceWorkflowBpmn(
     extensions: { kt: (activity: any) => {
       if (['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask'].includes(activity.type)) activity.behaviour.Service = HostStep;
       const group = entryGroups.get(activity.id);
-      if (!selectedStart || group?.scopeId !== selectedStart.processId || group.entryId === selectedStart.entryId) return;
       return {
-        activate: () => activity.broker.subscribeOnce('event', 'activity.enter', () => activity.getApi().discard(), { consumerTag: '_kt-message-start', priority: 1000 }),
-        deactivate: () => activity.broker.cancel('_kt-message-start'),
+        activate: () => {
+          // 完成消息先于循环条件和出口求值；activity.end 已晚于后继令牌传播。
+          activity.broker.subscribeTmp('execution', 'execute.completed', (_event, message) => {
+            const content = message.content;
+            const output = content.output;
+            if (output === undefined) return;
+            if (activity.type === 'bpmn:UserTask' && output?.value) outputs[activity.id] = output.value;
+            if (output?.workflowMessage && output.values) outputs[activity.id] = output.values;
+            if (content.isRootScope && activity.behaviour.loopCharacteristics) outputs[activity.id] = { ...outputs[activity.id], items: output };
+            activity.environment.assignVariables({ outputs });
+          }, { consumerTag: '_kt-activity-output', priority: 1000, noAck: true });
+          if (selectedStart && group?.scopeId === selectedStart.processId && group.entryId !== selectedStart.entryId) {
+            activity.broker.subscribeOnce('event', 'activity.enter', () => activity.getApi().discard(), { consumerTag: '_kt-message-start', priority: 1000 });
+          }
+        },
+        deactivate: () => {
+          activity.broker.cancel('_kt-activity-output');
+          activity.broker.cancel('_kt-message-start');
+        },
       };
     } },
   });
@@ -286,22 +302,11 @@ export async function advanceWorkflowBpmn(
           parentExecutionIds: activityScopes.get(content.executionId) ?? [],
         });
       }
-      if (content.type === 'bpmn:UserTask' && event === 'activity.end' && content.output?.value) {
-        outputs[content.id] = content.output.value;
-        for (const execution of engine.execution.definitions) execution.environment.assignVariables({ outputs });
-      }
-      if (event === 'activity.end' && content.output?.workflowMessage && content.output.values) {
-        outputs[content.id] = content.output.values;
-        for (const execution of engine.execution.definitions) execution.environment.assignVariables({ outputs });
-      }
       if (content.type === 'bpmn:UserTask' && event === 'activity.discard') {
         jobs.delete(content.executionId);
         cancelled.add(content.executionId);
       }
       if (!['activity.enter', 'activity.wait', 'activity.end', 'activity.discard', 'activity.error', 'activity.catch', 'process.terminate', 'flow.take'].includes(event)) return;
-      if (event === 'activity.end' && content.output !== undefined && model.elements[content.id]?.loopCharacteristics) {
-        outputs[content.id] = { ...outputs[content.id], items: content.output };
-      }
       transitions.push({ event, elementId: content.id, executionId: content.executionId ?? '', type: content.type });
       if (event === 'process.terminate') {
         for (const job of jobs.values()) {

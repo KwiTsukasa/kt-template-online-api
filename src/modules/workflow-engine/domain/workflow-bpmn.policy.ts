@@ -10,6 +10,7 @@ import {
   type WorkflowBpmnModel,
 } from '../contract/workflow-bpmn.types';
 import { dehydrateWorkflowBpmn, hydrateWorkflowBpmn } from './workflow-bpmn-model';
+import { validateBpmnCorrelations } from './workflow-bpmn-correlation';
 
 /**
  * 从内部结构化模型恢复完整 BPMN 元模型，不生成 XML。
@@ -88,7 +89,7 @@ export function readWorkflowBpmnExtension<T>(element: WorkflowBpmnElement, type:
  * @returns 可定位到标准元素标识的校验问题。
  */
 export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssue[] {
-  const issues: WorkflowBpmnIssue[] = [];
+  const issues: WorkflowBpmnIssue[] = validateBpmnCorrelations(model);
   const elements = Object.values(model.elements);
   const flows = elements.filter((element) => element.$type === 'bpmn:SequenceFlow');
   if (!model.processes.some((process) => process.isExecutable)) issues.push({ code: 'process', message: '至少需要一个可执行流程' });

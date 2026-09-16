@@ -43,6 +43,7 @@ export class WorkflowBpmnExecutionService {
         message.status = 'discarded';
         message.deliveredAt = new Date().toISOString();
         delete message.values;
+        delete message.correlation;
       }
       for (const activity of activities) activity.cancelRequested = true;
       await this.stopActivities(run, activities, manager);
@@ -62,6 +63,7 @@ export class WorkflowBpmnExecutionService {
         return { executionId: activity.executionId, output: activity.state.outputValues };
       });
       const messages = structuredClone(run.bpmnState?.messages ?? []);
+      const correlations = structuredClone(run.bpmnState?.correlations ?? {});
       const pendingMessages = messages.filter((message) => message.status === 'pending');
       const advanced = await advanceWorkflowBpmn(model, run.bpmnState?.checkpoint ?? null, { input: run.inputValues }, completions, pendingMessages.map((message) => ({
         id: message.nodeId, executionId: message.executionId, workflowMessage: true, values: message.values ?? {},
@@ -70,11 +72,14 @@ export class WorkflowBpmnExecutionService {
       for (const message of pendingMessages) {
         message.status = 'delivered';
         if (advanced.unconsumedSignalIds.includes(message.executionId)) message.status = 'discarded';
+        if (message.status === 'delivered' && message.correlation) correlations[message.correlation.processExecutionId] = message.correlation.keys;
         message.deliveredAt = new Date().toISOString();
         delete message.values;
+        delete message.correlation;
       }
       run.bpmnState = {
         messages,
+        correlations,
         checkpoint: advanced.checkpoint,
         status: advanced.status,
         error: advanced.error,

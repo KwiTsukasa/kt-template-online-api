@@ -7,6 +7,7 @@ import type { WorkflowMessageDelivery, WorkflowMessageReceipt } from '../contrac
 import { parseWorkflowBpmn } from '../domain/workflow-bpmn.policy';
 import { WorkflowRun } from '../infrastructure/persistence/workflow-run.entities';
 import { WorkflowDefinitionService } from './workflow-definition.service';
+import { correlateBpmnMessage } from '../domain/workflow-bpmn-correlation';
 
 @Injectable()
 export class WorkflowMessageService {
@@ -63,8 +64,20 @@ export class WorkflowMessageService {
         else if (['bpmn:StartEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:BoundaryEvent'].includes(element?.$type) && message?.$type === 'bpmn:MessageEventDefinition') declaredMessageId = message.messageRef?.id ?? null;
         else throw new BadRequestException('目标活动不是消息捕获事件或接收任务');
         if (delivery.messageId !== declaredMessageId) throw new BadRequestException('消息类型与当前等待声明不一致');
+        const processExecutionId = waiting.processExecutionId;
+        let correlation: import('../contract/workflow-message.types').WorkflowMessageRecord['correlation'];
+        let previousKeys = run.bpmnState.correlations?.[processExecutionId] ?? {};
+        for (const pending of messages) {
+          if (pending.status === 'pending' && pending.correlation && pending.correlation.processExecutionId === processExecutionId) previousKeys = { ...previousKeys, ...pending.correlation.keys };
+        }
+        const keys = validateDefinitionInput(() => correlateBpmnMessage(model, delivery.nodeId, delivery.messageId, values,
+          { input: run.inputValues, outputs: run.bpmnState.outputs }, previousKeys));
+        if (Object.keys(keys).length) {
+          if (!processExecutionId) throw new ConflictException('消息等待缺少流程作用域身份，请等待工作流恢复后重试');
+          correlation = { processExecutionId, keys };
+        }
         const receipt: WorkflowMessageReceipt = { deliveryId: delivery.deliveryId, nodeId: delivery.nodeId, executionId: delivery.executionId, status: 'pending', receivedAt: new Date().toISOString(), deliveredAt: null };
-        run.bpmnState.messages = [...messages, { ...receipt, hash, values }];
+        run.bpmnState.messages = [...messages, { ...receipt, hash, values, correlation }];
         await manager.update(WorkflowRun, { id: run.id }, { bpmnState: run.bpmnState, nextWakeAt: new Date() });
         return receipt;
       });

@@ -12,6 +12,7 @@ import { readWorkflowBpmnExtension } from '../domain/workflow-bpmn.policy';
 import { WorkflowMultiInstance, WorkflowStandardLoop } from './workflow-bpmn-loop';
 import { WorkflowInclusiveGateway } from './workflow-bpmn-inclusive';
 import { WorkflowEventBasedGateway } from './workflow-bpmn-event-gateway';
+import { bpmnMessageProcess } from '../domain/workflow-bpmn-correlation';
 
 export interface WorkflowBpmnCheckpoint {
   modelSha256: string;
@@ -19,6 +20,7 @@ export interface WorkflowBpmnCheckpoint {
   activityScopes: Record<string, string[]>;
   outputs: Record<string, Record<string, unknown>>;
   entrySelections?: Record<string, string>;
+  activityParents?: Record<string, Record<string, string>>;
 }
 
 export interface WorkflowBpmnJob {
@@ -51,6 +53,7 @@ export interface WorkflowBpmnActiveActivity {
   name: string;
   type: string;
   eventDefinitionIndex?: number;
+  processExecutionId?: string;
 }
 
 /**
@@ -73,6 +76,7 @@ export async function advanceWorkflowBpmn(
   const modelSha256 = createHash('sha256').update(JSON.stringify(model.definition.model)).digest('hex');
   if (checkpoint && checkpoint.modelSha256 !== modelSha256) throw new Error('BPMN 恢复快照与发布版本不一致');
   const entrySelections = { ...checkpoint?.entrySelections };
+  const activityParents = new Map(Object.entries(checkpoint?.activityParents ?? {}));
   const entryGroups = new Map<string, { entryId: string; scopeId: string }>();
   const elements = Object.values(model.elements);
   for (const element of elements) {
@@ -165,8 +169,18 @@ export async function advanceWorkflowBpmn(
       catch (error) { callback(error as Error); }
     },
   });
+  // 黑盒参与者的外部消息由工作流消息端口接收、发送任务派发；令牌引擎只连接模型内实际存在的流程。
+  // 上游序列化器假定所有参与者都有 processRef，直接传入合法黑盒泳池会在启动前崩溃。
+  const executionRoot = Object.create(model.root);
+  executionRoot.rootElements = (model.root.rootElements ?? []).filter((element) => element.$type !== 'bpmn:CorrelationProperty').map((element) => {
+    if (element.$type !== 'bpmn:Collaboration') return element;
+    const collaboration = Object.create(element);
+    collaboration.messageFlows = (element.messageFlows ?? []).filter((flow) =>
+      ![flow.sourceRef, flow.targetRef].some((endpoint) => endpoint?.$type === 'bpmn:Participant' && !endpoint.processRef));
+    return collaboration;
+  });
   const engine = new Engine({
-    moddleContext: { rootElement: model.root, elementsById: model.elements, references: model.references, warnings: [] } as any,
+    moddleContext: { rootElement: executionRoot, elementsById: model.elements, references: model.references, warnings: [] } as any,
     moddleOptions: { kt: KT_BPMN_MODDLE },
     elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
     variables,
@@ -230,6 +244,7 @@ export async function advanceWorkflowBpmn(
       }
       if (event.startsWith('activity.') && content.executionId) {
         activityScopes.set(content.executionId, [content.parent, ...(content.parent?.path ?? [])].filter((parent) => parent?.executionId).map((parent) => parent.executionId));
+        activityParents.set(content.executionId, Object.fromEntries([content.parent, ...(content.parent?.path ?? [])].filter((parent) => parent?.executionId).map((parent) => [parent.id, parent.executionId])));
       }
       if (event === 'activity.end' && model.elements[content.id]?.$type !== 'bpmn:EventBasedGateway') {
         const group = entryGroups.get(content.id);
@@ -322,13 +337,16 @@ export async function advanceWorkflowBpmn(
       const executionId = activity.content.executionId;
       const active: WorkflowBpmnActiveActivity = { nodeId: activity.id, executionId, name: model.elements[activity.id]?.name ?? activity.id, type: activity.content.type };
       if (activity.content.isDefinitionScope) active.eventDefinitionIndex = activity.content.index;
+      const process = bpmnMessageProcess(model.elements[activity.id]);
+      const parents = activityParents.get(executionId) ?? activityParents.get(activity.content.parent?.executionId);
+      if (process && parents?.[process.id]) active.processExecutionId = parents[process.id];
       activeActivities.push(active);
     }
     let status: 'failed' | 'succeeded' | 'waiting' = 'waiting';
     if (failure) status = 'failed';
     else if (ended) status = 'succeeded';
     return {
-      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs, entrySelections },
+      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs, entrySelections, activityParents: Object.fromEntries(activityParents) },
       jobs: [...jobs.values()],
       cancelledExecutionIds: [...cancelled],
       unconsumedCompletionIds: [...completed.keys()],

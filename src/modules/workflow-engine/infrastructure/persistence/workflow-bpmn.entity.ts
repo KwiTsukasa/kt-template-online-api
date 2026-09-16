@@ -4,6 +4,7 @@ import type { WorkflowNodeRun } from './workflow-run.entities';
 
 export interface WorkflowBpmnRunState {
   messages?: import('../../contract/workflow-message.types').WorkflowMessageRecord[];
+  correlations?: Record<string, import('../../contract/workflow-message.types').BpmnCorrelationValues>;
   activeActivities?: import('../workflow-bpmn.runtime').WorkflowBpmnActiveActivity[];
   checkpoint: WorkflowBpmnCheckpoint;
   status: 'waiting' | 'succeeded' | 'failed';

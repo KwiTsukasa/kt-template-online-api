@@ -1,3 +1,5 @@
+export type BpmnCorrelationValues = Record<string, Record<string, unknown>>;
+
 export interface WorkflowMessageDelivery {
   deliveryId: string;
   nodeId: string;
@@ -19,4 +21,5 @@ export interface WorkflowMessageReceipt {
 export interface WorkflowMessageRecord extends WorkflowMessageReceipt {
   hash: string;
   values?: Record<string, unknown>;
+  correlation?: { processExecutionId: string; keys: BpmnCorrelationValues };
 }

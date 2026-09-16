@@ -105,6 +105,7 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
         if (source.$type === 'bpmn:EndEvent' || target.$type === 'bpmn:StartEvent' || target.$type === 'bpmn:BoundaryEvent') report('flow-direction', '开始、结束或边界事件的连线方向不合法');
         if (!source.$instanceOf('bpmn:FlowNode') || !target.$instanceOf('bpmn:FlowNode')) report('flow-kind', '顺序流只能连接活动、事件或网关');
         if (source.isForCompensation || target.isForCompensation) report('compensation-flow', '补偿活动不能连接顺序流');
+        if (source.triggeredByEvent || target.triggeredByEvent) report('event-subprocess-flow', '事件子流程由事件触发，不能连接外部顺序流');
         if (source.$type === 'bpmn:ParallelGateway' && element.conditionExpression) report('parallel-condition', '并行网关不能使用条件顺序流');
         if (element.conditionExpression && source.default !== element && source.$type !== 'bpmn:ComplexGateway') {
           try {
@@ -158,11 +159,21 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
     }
     if (element.$type === 'bpmn:BoundaryEvent') {
       if (!element.attachedToRef?.$instanceOf('bpmn:Activity') || element.attachedToRef.$parent !== element.$parent) report('boundary-scope', '边界事件必须附着在同一作用域的活动上');
+      if (element.attachedToRef?.triggeredByEvent) report('event-subprocess-boundary', '事件子流程不能附着边界事件');
       if (!element.eventDefinitions?.length) report('boundary-definition', '边界事件必须声明事件类型');
       if (element.cancelActivity === false && element.eventDefinitions?.some((event: WorkflowBpmnElement) => ['bpmn:ErrorEventDefinition', 'bpmn:CancelEventDefinition'].includes(event.$type))) report('boundary-interrupt', '错误和事务取消边界事件必须中断活动');
       if (element.eventDefinitions?.some((event: WorkflowBpmnElement) => event.$type === 'bpmn:CompensateEventDefinition')) {
         const association = Object.values(model.elements).find((item) => item.$type === 'bpmn:Association' && item.sourceRef === element);
         if (!association?.targetRef?.isForCompensation || association.targetRef.$parent !== element.$parent) report('compensation-handler', '补偿边界事件必须通过关联连接同作用域的补偿活动');
+      }
+    }
+    if (element.$type === 'bpmn:SubProcess' && element.triggeredByEvent) {
+      const starts = (element.flowElements ?? []).filter((child: WorkflowBpmnElement) => child.$type === 'bpmn:StartEvent');
+      if (starts.length !== 1) report('event-subprocess-start', '事件子流程必须包含且只能包含一个开始事件');
+      for (const start of starts) {
+        const definitions = [...(start.eventDefinitions ?? []), ...(start.eventDefinitionRef ?? [])];
+        if (!definitions.length) report('event-subprocess-trigger', '事件子流程的开始事件必须声明触发类型');
+        if (start.isInterrupting === false && definitions.some((event: WorkflowBpmnElement) => event.$type === 'bpmn:ErrorEventDefinition')) report('event-subprocess-error', '错误开始事件必须中断所在作用域');
       }
     }
     if (element.$type === 'bpmn:CancelEventDefinition') {

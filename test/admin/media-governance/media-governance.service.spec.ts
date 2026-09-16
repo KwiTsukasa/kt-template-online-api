@@ -31,7 +31,7 @@ describe('MediaGovernanceService', () => {
     expect(task).toMatchObject({
       gateReason: null,
       mediaType: 'tv',
-      persistenceMode: 'process-simulator',
+      persistenceMode: 'database',
       revision: 1,
       runState: 'draft',
       stage: 'intake',

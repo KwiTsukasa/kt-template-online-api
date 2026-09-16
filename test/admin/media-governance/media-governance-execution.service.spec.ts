@@ -313,11 +313,10 @@ describe('MediaGovernanceService mechanical execution', () => {
     await app.listen(0, '127.0.0.1');
     try {
       const task = await createRunningGovernanceTask(service);
-      const unavailable = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post(`/media-governance/tasks/${task.id}/governance/start`)
         .send({ expectedRevision: task.revision })
-        .expect(409);
-      expect(unavailable.body.message).toContain('只能由绑定工作流');
+        .expect(404);
       const envelope = await completeGovernance(service, reserveEnvelope, task);
       const body = {
         acceptance: {

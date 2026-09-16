@@ -38,6 +38,7 @@ describe('MediaGovernanceCatalogController', () => {
   const authGuard: CanActivate = {
     canActivate(context: ExecutionContext) {
       context.switchToHttp().getRequest().adminUser = {
+        id: '123',
         roles: [{ isDeleted: false, roleCode: 'super', status: 1 }],
       };
       return true;
@@ -200,6 +201,7 @@ describe('MediaGovernanceCatalogController', () => {
       'media-series-jjk',
       'media-work-jjk-tv',
       { seasonNumbers: [2] },
+      '123',
     );
   });
 
@@ -279,6 +281,7 @@ describe('MediaGovernanceCatalogController', () => {
       'media-work-bleach',
       2,
       expect.objectContaining({ items: expect.arrayContaining([]) }),
+      '123',
     );
     await request(apiUrl)
       .post(

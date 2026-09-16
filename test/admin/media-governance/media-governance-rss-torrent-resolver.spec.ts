@@ -290,6 +290,8 @@ describe('media governance rss torrent resolver', () => {
         providerId: '457326',
       }),
       [TORRENT_FIXTURE],
+      'system:media-rss',
+      [{ id: 'media-rss-item-27', subscriptionId: 'media-rss-subscription-xiangke' }],
     );
   });
 

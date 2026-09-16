@@ -1,4 +1,5 @@
 import { get as httpGet } from 'node:http';
+import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import type {
   CanActivate,
   ExecutionContext,
@@ -37,7 +38,7 @@ describe('MediaGovernanceController', () => {
         AdminSuperGuard,
         MediaGovernanceEventStreamService,
         MediaGovernancePermissionGuard,
-        MediaGovernanceService,
+        { provide: MediaGovernanceService, useFactory: createMediaWorkflowFixture, inject: [MediaGovernanceEventStreamService] },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -57,6 +58,11 @@ describe('MediaGovernanceController', () => {
     await app?.close();
   });
 
+  /**
+   * 在已装配入流回调的领域替身中创建存量 Task，供读取与资料接口验证。
+   * @param input - 测试的 Task 领域字段。
+   * @returns 与控制器读取响应一致的数据容器。
+   */
   async function createLegacyTask(
     input: Parameters<MediaGovernanceService['create']>[0],
   ) {
@@ -184,32 +190,13 @@ describe('MediaGovernanceController', () => {
       .expect(404);
   });
 
-  it('routes canonical identity rebase through real HTTP revision validation', async () => {
-    const taskId = 'media-task-http-identity-rebase';
-    const rebaseSpy = jest
-      .spyOn(service, 'startCanonicalIdentityRebase')
-      .mockResolvedValueOnce({
-        activeRunId: 'media-run-http-identity-rebase',
-        id: taskId,
-        revision: 22,
-        runState: 'queued',
-        stage: 'governance',
-      } as never);
-
-    const response = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/governance/identity-rebase`)
+  it('does not expose an independent canonical identity rebase executor', async () => {
+    const rebaseSpy = jest.spyOn(service, 'startCanonicalIdentityRebase');
+    await request(apiUrl)
+      .post('/media-governance/tasks/media-task-http-identity-rebase/governance/identity-rebase')
       .send({ expectedRevision: 21 })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-
-    expect(response.body.data).toMatchObject({
-      activeRunId: 'media-run-http-identity-rebase',
-      id: taskId,
-      revision: 22,
-      runState: 'queued',
-      stage: 'governance',
-    });
-    expect(rebaseSpy).toHaveBeenCalledWith(taskId, { expectedRevision: 21 });
+      .expect(404);
+    expect(rebaseSpy).not.toHaveBeenCalled();
     rebaseSpy.mockRestore();
   });
 
@@ -317,7 +304,7 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
-  it('replaces and deletes a failed intake source over real HTTP', async () => {
+  it('does not clean failed sources outside the workflow', async () => {
     const created = await createLegacyTask({
       mediaType: 'tv',
       seasonNumbers: ['S01'],
@@ -341,35 +328,12 @@ describe('MediaGovernanceController', () => {
     failedTask.runState = 'blocked';
     failedTask.gateReason = 'NAS 执行失败：magnet_metadata_unavailable';
 
-    const removed = await request(apiUrl)
-      .post(
-        `/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`,
-      )
-      .send({ expectedRevision: 2 })
-      .expect(201);
-    expect(removed.body.data).toMatchObject({
-      revision: 3,
-      runState: 'draft',
-      sources: [],
-    });
-
+    const before = structuredClone(service.detail(taskId));
     await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/sources/magnet`)
-      .send({
-        contentKind: 'embedded_subtitle_media',
-        expectedRevision: 3,
-        magnetUri:
-          'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
-        sourceRole: 'primary_media',
-      })
-      .expect(201);
-    await request(apiUrl)
-      .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 4 })
-      .expect(200);
-    await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
+      .post(`/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`)
+      .send({ expectedRevision: 2 }).expect(404);
+    expect(service.detail(taskId)).toEqual(before);
   });
-
   it('accepts a magnet source and returns only a sanitized projection', async () => {
     const created = await createLegacyTask({
       mediaType: 'movie',
@@ -397,7 +361,7 @@ describe('MediaGovernanceController', () => {
     expect(JSON.stringify(source.body)).not.toContain('private.invalid');
   });
 
-  it('removes metadata actions and keeps mechanical acceptance revision-gated', async () => {
+  it('does not expose metadata or independent acceptance actions', async () => {
     const created = await createLegacyTask({
       mediaType: 'movie',
       titleHint: '分档与验收接口测试',
@@ -411,7 +375,7 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/acceptance/verify`)
       .send({ expectedRevision: 1 })
-      .expect(409);
+      .expect(404);
   });
 
   it('accepts one multipart TV season and safely parses a torrent fixture', async () => {
@@ -466,69 +430,16 @@ describe('MediaGovernanceController', () => {
       });
   });
 
-  it('runs the HTTP Demo through download and mechanical governance closure', async () => {
+  it('rejects all retired execution routes without changing task state', async () => {
     const created = await createLegacyTask({
-      mediaType: 'tv',
-      seasonNumbers: ['S01'],
-      titleHint: '完整 HTTP Demo',
+      mediaType: 'tv', seasonNumbers: ['S01'], titleHint: '工作流执行边界',
     });
-    const taskId = created.body.data.id as string;
-    const source = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/sources/magnet`)
-      .send({
-        contentKind: 'embedded_subtitle_media',
-        expectedRevision: 1,
-        magnetUri:
-          'magnet:?xt=urn:btih:89abcdef0123456789abcdef0123456789abcdef',
-        seasonNumbers: ['S01'],
-        sourceRole: 'primary_media',
-      })
-      .expect(201);
-    const sourceId = source.body.data.id as string;
-
-    await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/sources/${sourceId}/inspect`)
-      .send({ expectedRevision: 2 })
-      .expect(201);
-    await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/sources/${sourceId}/selection`)
-      .send({
-        expectedRevision: 3,
-        fileMappings: [
-          {
-            episodeNumber: 1,
-            fileRole: 'video',
-            index: 0,
-            unitId: created.body.data.units[0].id,
-          },
-        ],
-        selectedFileIndices: [0],
-      })
-      .expect(200);
-    await request(apiUrl)
-      .post(
-        `/media-governance/tasks/${taskId}/sources/${sourceId}/probe-runtime`,
-      )
-      .send({ expectedRevision: 4 })
-      .expect(201);
-    await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/downloads/start`)
-      .send({ expectedRevision: 5 })
-      .expect(201);
-    await new Promise((resolve) => setTimeout(resolve, 650));
-
-    await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/governance/start`)
-      .send({ expectedRevision: 6 })
-      .expect(201);
-    await new Promise((resolve) => setTimeout(resolve, 650));
-
-    const closedTask = service.detail(taskId);
-    expect(closedTask).toMatchObject({
-      closedMode: 'mechanical',
-      revision: 7,
-      runState: 'succeeded',
-      stage: 'closed',
-    });
+    const taskId = created.body.data.id;
+    const before = structuredClone(service.detail(taskId));
+    for (const suffix of ['sources/media-source-test/inspect', 'sources/media-source-test/probe-runtime', 'downloads/start', 'governance/start', 'acceptance/verify']) {
+      await request(apiUrl).post(`/media-governance/tasks/${taskId}/${suffix}`)
+        .send({ expectedRevision: before.revision }).expect(404);
+    }
+    expect(service.detail(taskId)).toEqual(before);
   });
 });

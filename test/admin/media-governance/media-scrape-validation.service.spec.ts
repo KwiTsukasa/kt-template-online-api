@@ -1,4 +1,4 @@
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { MediaScrapeValidationService } from '../../../src/modules/admin/media-scrape-validation/application/media-scrape-validation.service';
 import type { MediaScrapeValidationEntity } from '../../../src/modules/admin/media-scrape-validation/infrastructure/persistence/media-scrape-validation.entity';
 
@@ -64,7 +64,7 @@ describe('MediaScrapeValidationService', () => {
 
   it('creates one pending validation from a mechanically closed task', async () => {
     const { rows, service, taskRepository } = fixture();
-    const governance = new MediaGovernanceService();
+    const governance = createMediaWorkflowFixture();
     const task = await governance.create({
       mediaType: 'movie',
       providerRef: { provider: 'tmdb', providerId: '1390384' },
@@ -92,7 +92,7 @@ describe('MediaScrapeValidationService', () => {
 
   it('claims and completes an issue result without writing governance tasks', async () => {
     const { rows, service, taskRepository } = fixture();
-    const governance = new MediaGovernanceService();
+    const governance = createMediaWorkflowFixture();
     const task = await governance.create({
       mediaType: 'tv',
       seasonNumbers: ['S01'],
@@ -132,7 +132,7 @@ describe('MediaScrapeValidationService', () => {
 
   it('requeues a completed validation by its own revision only', async () => {
     const { service } = fixture();
-    const governance = new MediaGovernanceService();
+    const governance = createMediaWorkflowFixture();
     const task = await governance.create({
       mediaType: 'movie',
       titleHint: '独立重试版本测试',

@@ -375,5 +375,112 @@ test('包容汇合仅一个分支激活时正常通过，混合网关继续按�
 test('过期的消息实例信号不能唤醒同名活动', async () => {
   const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="wait"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/>' + flow('s', 'wait') + flow('wait', 'e'));
   const result = await advanceWorkflowBpmn(model, null, {});
-  await assert.rejects(() => advanceWorkflowBpmn(model, result.checkpoint, {}, [], [{ id: 'wait', executionId: 'another-instance' }]), /当前等待的活动实例/);
+  const restored = await advanceWorkflowBpmn(model, result.checkpoint, {}, [], [{ id: 'wait', executionId: 'another-instance' }]);
+  assert.equal(restored.status, 'waiting');
+  assert.deepEqual(restored.unconsumedSignalIds, ['another-instance']);
+  assert.equal(restored.activeActivities[0].executionId, result.activeActivities[0].executionId);
+});
+
+test('事件网关发布检查拒绝条件连线、非法目标和破坏事件竞争的拓扑', async (t) => {
+  const message = '<bpmn:intermediateCatchEvent id="a"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>';
+  const receive = '<bpmn:receiveTask id="a"/>';
+  const timer = '<bpmn:intermediateCatchEvent id="b"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1S</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>';
+  const messageB = '<bpmn:intermediateCatchEvent id="b"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>';
+  const cases = [
+    ['至少两个出口', message, timer, '', flow('g', 'a'), '', 'event-gateway-outgoing'],
+    ['出口不得带条件', message, timer, '', flow('g', 'a', { value: true }) + flow('g', 'b'), '', 'event-gateway-condition'],
+    ['不得直接连接业务任务', step('a'), timer, '', flow('g', 'a') + flow('g', 'b'), '', 'event-gateway-target'],
+    ['消息捕获与接收任务不得混用', receive, messageB, '', flow('g', 'a') + flow('g', 'b'), '', 'event-gateway-mixed-message'],
+    ['接收任务不能带边界事件', receive, timer, '', flow('g', 'a') + flow('g', 'b'), '<bpmn:boundaryEvent id="attached" attachedToRef="a"><bpmn:signalEventDefinition/></bpmn:boundaryEvent>', 'event-gateway-boundary'],
+    ['捕获事件不能另接入口', message, timer, '', flow('g', 'a') + flow('g', 'b'), flow('s', 'a'), 'event-gateway-incoming'],
+    ['实例化网关不得有入口', message, timer, 'instantiate="true"', flow('g', 'a') + flow('g', 'b'), '', 'event-gateway-instantiate'],
+    ['并行事件网关必须实例化', message, timer, 'eventGatewayType="Parallel"', flow('g', 'a') + flow('g', 'b'), '', 'event-gateway-parallel'],
+    ['链接事件不能参与竞争', '<bpmn:intermediateCatchEvent id="a"><bpmn:linkEventDefinition name="jump"/></bpmn:intermediateCatchEvent>', timer, '', flow('g', 'a') + flow('g', 'b'), '', 'event-gateway-trigger'],
+  ];
+  for (const [name, a, b, attributes, outgoing, extra, code] of cases) {
+    await t.test(name, async () => {
+      const model = await diagram('<bpmn:startEvent id="s"/><bpmn:eventBasedGateway id="g" ' + attributes + '/>' + a + b + '<bpmn:endEvent id="e"/>' + flow('s', 'g') + outgoing + flow('a', 'e') + flow('b', 'e') + extra);
+      assert.ok(validateWorkflowBpmn(model).some(issue => issue.code === code), name);
+    });
+  }
+  const valid = await diagram('<bpmn:startEvent id="s"/><bpmn:eventBasedGateway id="g"/>' + receive + timer + '<bpmn:endEvent id="e"/>' + flow('s', 'g') + flow('g', 'a') + flow('g', 'b') + flow('a', 'e') + flow('b', 'e'));
+  assert.deepEqual(validateWorkflowBpmn(valid), []);
+});
+
+test('已持久化的竞争消息按顺序消费，失败分支回执废弃且正文只进入获胜节点', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:eventBasedGateway id="race"/><bpmn:intermediateCatchEvent id="a"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:intermediateCatchEvent id="b"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>' + step('after_a') + step('after_b') + '<bpmn:endEvent id="e"/>' + flow('s', 'race') + flow('race', 'a') + flow('race', 'b') + flow('a', 'after_a') + flow('b', 'after_b') + flow('after_a', 'e') + flow('after_b', 'e'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  const a = result.activeActivities.find(item => item.nodeId === 'a');
+  const b = result.activeActivities.find(item => item.nodeId === 'b');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [
+    { id: 'b', executionId: b.executionId, workflowMessage: true, values: { accepted: true } },
+    { id: 'a', executionId: a.executionId, workflowMessage: true, values: { accepted: false } },
+  ]);
+  assert.deepEqual(result.unconsumedSignalIds, [a.executionId]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after_b']);
+  assert.deepEqual(result.jobs[0].variables.outputs.b, { accepted: true });
+  assert.equal(result.checkpoint.outputs.a, undefined);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('消息端口持久回执在服务重建和流程终态后仍幂等，冲突内容不改写原意图', async () => {
+  const { WorkflowMessageService } = require('../../../src/modules/workflow-engine/application/workflow-message.service');
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="wait"><bpmn:messageEventDefinition messageRef="Reply"/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/>' + flow('s', 'wait') + flow('wait', 'e'), '<bpmn:message id="Reply"/>');
+  const run = { id: '123', workflowId: '45', workflowVersion: 2, status: 'waiting', cancelRequested: false, errorMessage: null, deadlineAt: new Date(Date.now() + 60000), bpmnState: { activeActivities: [{ nodeId: 'wait', executionId: 'wait_1' }], messages: [] } };
+  let writes = 0;
+  let releases = 0;
+  let locked = false;
+  const manager = { findOne: async () => structuredClone(run), update: async (_entity, _where, value) => { writes++; Object.assign(run, structuredClone(value)); } };
+  const database = { createQueryRunner: () => ({ connect: async () => {}, release: async () => { releases++; }, query: async (sql) => [{ acquired: Number(!locked || !sql.includes('GET_LOCK')) }], manager: { transaction: async (work) => work(manager) } }) };
+  const definitions = { resolve: async (reference) => { assert.deepEqual(reference, { id: '45', version: 2 }); return model.definition; } };
+  const delivery = { deliveryId: 'reply-1', senderId: 'business-module', nodeId: 'wait', executionId: 'wait_1', messageId: 'Reply', values: { b: 2, a: { ready: true } } };
+  const first = await new WorkflowMessageService(database, definitions).receive('123', delivery);
+  const restored = new WorkflowMessageService(database, definitions);
+  assert.deepEqual(await restored.receive('123', { ...delivery, values: { a: { ready: true }, b: 2 } }), first);
+  assert.equal(writes, 1);
+  await assert.rejects(() => restored.receive('123', { ...delivery, values: { b: 3 } }), error => error.getStatus() === 409);
+  run.status = 'succeeded';
+  run.bpmnState.messages[0].status = 'delivered';
+  delete run.bpmnState.messages[0].values;
+  const repeated = await restored.receive('123', delivery);
+  assert.equal(repeated.status, 'delivered');
+  assert.equal(Object.hasOwn(repeated, 'values'), false);
+  assert.equal(Object.hasOwn(repeated, 'hash'), false);
+  await assert.rejects(() => restored.receive('123', { ...delivery, deliveryId: 'reply-2' }), error => error.getStatus() === 409);
+  locked = true;
+  await assert.rejects(() => restored.receive('123', delivery), error => error.getStatus() === 409);
+  assert.equal(writes, 1);
+  assert.equal(releases, 6);
+});
+
+test('消息端口拒绝非 JSON、过深和超长正文，校验失败不申请流程锁', async () => {
+  const { WorkflowMessageService } = require('../../../src/modules/workflow-engine/application/workflow-message.service');
+  const service = new WorkflowMessageService({ createQueryRunner: () => { throw new Error('must not acquire lock'); } }, {});
+  const delivery = { deliveryId: 'reply-1', senderId: 'business-module', nodeId: 'wait', executionId: 'wait_1', messageId: null, values: {} };
+  let deep = {};
+  for (let index = 0; index < 18; index++) deep = { nested: deep };
+  for (const values of [[], { value: Infinity }, { value: undefined }, { value: new Date() }, JSON.parse('{"__proto__":{"bad":true}}'), deep, { text: 'a'.repeat(65536) }]) {
+    await assert.rejects(() => service.receive('123', { ...delivery, values }), error => error.getStatus?.() === 400);
+  }
+});
+
+test('并行多重消息保留各自事件索引，不能用一种消息完成另一种等待', async () => {
+  const { WorkflowMessageService } = require('../../../src/modules/workflow-engine/application/workflow-message.service');
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="wait" parallelMultiple="true"><bpmn:messageEventDefinition messageRef="A"/><bpmn:messageEventDefinition messageRef="B"/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/>' + flow('s', 'wait') + flow('wait', 'e'), '<bpmn:message id="A"/><bpmn:message id="B"/>');
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.activeActivities.map(item => item.eventDefinitionIndex).sort(), [0, 1]);
+  const second = result.activeActivities.find(item => item.eventDefinitionIndex === 1);
+  const run = { id: '123', workflowId: '45', workflowVersion: 1, status: 'waiting', deadlineAt: new Date(Date.now() + 60000), bpmnState: { activeActivities: result.activeActivities, messages: [] } };
+  const manager = { findOne: async () => structuredClone(run), update: async (_entity, _where, values) => Object.assign(run, values) };
+  const database = { createQueryRunner: () => ({ connect: async () => {}, release: async () => {}, query: async () => [{ acquired: 1 }], manager: { transaction: async (work) => work(manager) } }) };
+  const service = new WorkflowMessageService(database, { resolve: async () => model.definition });
+  const delivery = { deliveryId: 'reply-b', senderId: 'business', nodeId: 'wait', executionId: second.executionId, messageId: 'B', values: {} };
+  await assert.rejects(() => service.receive('123', { ...delivery, messageId: 'A' }), error => error.getStatus() === 400);
+  await service.receive('123', delivery);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'wait', executionId: second.executionId }]);
+  assert.equal(result.status, 'waiting');
+  assert.deepEqual(result.activeActivities.map(item => item.eventDefinitionIndex), [0]);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'wait', executionId: result.activeActivities[0].executionId }]);
+  assert.equal(result.status, 'succeeded');
 });

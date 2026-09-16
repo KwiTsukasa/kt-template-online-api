@@ -1,5 +1,7 @@
 import { TASK_EXECUTION, type TaskExecutionPort } from '@/modules/task-execution/contract/task-execution.port';
 import { WorkflowHumanTaskService } from './workflow-human-task.service';
+import { WorkflowMessageService } from './workflow-message.service';
+import type { WorkflowMessageDelivery } from '../contract/workflow-message.types';
 import {
   BadRequestException,
   ConflictException,
@@ -54,7 +56,20 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     @Optional() private readonly bpmn?: WorkflowBpmnExecutionService,
     @Optional() private readonly human?: WorkflowHumanTaskService,
     @Optional() @Inject(TASK_EXECUTION) private readonly tasks?: TaskExecutionPort,
+    @Optional() private readonly messages?: WorkflowMessageService,
   ) {}
+
+  /**
+   * 保存业务鉴权后的投递意图并返回幂等回执，接收请求不会执行后继步骤。
+   * @param runId - 业务已经确认归属的流程实例。
+   * @param delivery - 带稳定投递键的当前等待消息。
+   * @returns 已保存的幂等接收回执。
+   * @throws 消息服务未装配或消息不符合当前等待契约时拒绝接收。
+   */
+  async receiveMessage(runId: string, delivery: WorkflowMessageDelivery) {
+    if (!this.messages) throw new Error('工作流消息模块尚未装配');
+    return this.messages.receive(runId, delivery);
+  }
 
   /**
    * 在业务已确认的运行范围内读取当前人工待办。

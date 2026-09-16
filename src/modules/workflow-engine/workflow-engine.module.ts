@@ -1,5 +1,6 @@
 import { WORKFLOW_DEFINITIONS } from './contract/workflow-provision.port';
 import { WorkflowHumanTaskService } from './application/workflow-human-task.service';
+import { WorkflowMessageService } from './application/workflow-message.service';
 import {
   Module,
   type DynamicModule,
@@ -82,6 +83,7 @@ export class WorkflowEngineModule {
         WorkflowExecutionService,
         WorkflowBpmnExecutionService,
         WorkflowHumanTaskService,
+        WorkflowMessageService,
         WorkflowExecutionWorker,
         WorkflowRunFeedService,
         { provide: WORKFLOW_RUN_FEED, useExisting: WorkflowRunFeedService },

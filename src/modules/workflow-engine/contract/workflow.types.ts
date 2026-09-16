@@ -101,6 +101,7 @@ export type WorkflowValidation = {
 };
 export const WORKFLOW_EXECUTION = Symbol('WORKFLOW_EXECUTION');
 export interface WorkflowExecutionPort {
+  receiveMessage: (runId: string, delivery: import('./workflow-message.types').WorkflowMessageDelivery) => Promise<import('./workflow-message.types').WorkflowMessageReceipt>;
   humanTasks: (runId: string) => Promise<WorkflowHumanTaskView[]>;
   completeHumanTask: (runId: string, executionId: string, actorId: string, values: unknown) => Promise<WorkflowRunView>;
   presentation: (reference: PublishedReference) => Promise<{ definition: WorkflowDocument; form: FormDefinition | null }>;

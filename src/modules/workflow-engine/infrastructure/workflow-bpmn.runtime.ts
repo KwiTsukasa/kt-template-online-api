@@ -48,6 +48,7 @@ export interface WorkflowBpmnActiveActivity {
   executionId: string;
   name: string;
   type: string;
+  eventDefinitionIndex?: number;
 }
 
 /**
@@ -57,8 +58,8 @@ export interface WorkflowBpmnActiveActivity {
  * @param variables - 首次执行的业务输入与变量，恢复时使用快照。
  * @param completions - 已由工作流核验的准确活动实例结果。
  * @param signals - 已通过业务权限检查的人工或消息活动实例信号。
- * @returns 下一份快照、待执行实例、取消实例与本次状态事件；返回前清除所有临时计时器。
- * @throws 快照不匹配、目标实例失效、重复提交结果、扩展配置不合法或同步推进超限时拒绝推进。
+ * @returns 下一份快照、待执行和取消实例、未消费信号与状态事件；返回前清除临时计时器。
+ * @throws 快照不匹配、重复提交结果、扩展配置不合法或同步推进超限时拒绝推进。
  */
 export async function advanceWorkflowBpmn(
   model: WorkflowBpmnModel,
@@ -75,6 +76,7 @@ export async function advanceWorkflowBpmn(
   const cancelled = new Set<string>();
   const deliveries: Array<() => void> = [];
   const transitions: WorkflowBpmnTransition[] = [];
+  const unconsumedSignalIds: string[] = [];
   const activityScopes = new Map<string, string[]>(Object.entries(checkpoint?.activityScopes ?? {}));
   const outputs = structuredClone(checkpoint?.outputs ?? {});
   let failure: Error | null = null;
@@ -173,15 +175,18 @@ export async function advanceWorkflowBpmn(
     const pending = [...engine.execution.getPostponed()] as any[];
     const activities: any[] = [];
     const visited = new Set<string>();
+    const parentExecutions = new Set<string>();
     while (pending.length) {
       const activity = pending.shift();
       if (visited.has(activity.content.executionId)) continue;
       visited.add(activity.content.executionId);
+      if (activity.content.parent?.executionId) parentExecutions.add(activity.content.parent.executionId);
+      pending.push(...(activity.getExecuting?.() ?? []));
       const children = activity.getPostponed?.() ?? [];
       if (children.length) pending.push(...children);
       else activities.push(activity);
     }
-    return activities;
+    return activities.filter((activity) => !parentExecutions.has(activity.content.executionId));
   };
   engine.on('error', (error) => { failure = error; });
   engine.on('end', () => { ended = true; });
@@ -211,6 +216,10 @@ export async function advanceWorkflowBpmn(
       }
       if (content.type === 'bpmn:UserTask' && event === 'activity.end' && content.output?.value) {
         outputs[content.id] = content.output.value;
+        for (const execution of engine.execution.definitions) execution.environment.assignVariables({ outputs });
+      }
+      if (event === 'activity.end' && content.output?.workflowMessage && content.output.values) {
+        outputs[content.id] = content.output.values;
         for (const execution of engine.execution.definitions) execution.environment.assignVariables({ outputs });
       }
       if (content.type === 'bpmn:UserTask' && event === 'activity.discard') {
@@ -244,16 +253,20 @@ export async function advanceWorkflowBpmn(
       if (deliveries.length > 10000) throw new Error('BPMN 单次结果交付超过安全上限');
       deliver();
     }
-    if (completions.length) {
-      for (const activity of pendingActivities()) {
-        const definitions = model.elements[activity.id]?.eventDefinitions ?? [];
-        if (definitions.some((definition: any) => definition.$type === 'bpmn:ConditionalEventDefinition')) activity.signal({});
-      }
-    }
     for (const signal of signals) {
       const activity = pendingActivities().find((item) => item.id === signal.id && item.content.executionId === signal.executionId);
-      if (!activity) throw new Error('BPMN 信号目标不是当前等待的活动实例');
+      if (!activity) {
+        unconsumedSignalIds.push(signal.executionId);
+        continue;
+      }
       activity.signal(signal);
+    }
+    if (completions.length || signals.length) {
+      for (const activity of pendingActivities()) {
+        const element = model.elements[activity.id];
+        const definitions = [...(element?.eventDefinitions ?? []), ...(element?.eventDefinitionRef ?? [])];
+        if (definitions.some((definition: any) => definition.$type === 'bpmn:ConditionalEventDefinition')) activity.signal({});
+      }
     }
     await new Promise<void>((resolve) => setImmediate(resolve));
     const nextWakeAt = timers.executing.reduce<number | null>((earliest, timer) => {
@@ -265,7 +278,9 @@ export async function advanceWorkflowBpmn(
     const activeActivities: WorkflowBpmnActiveActivity[] = [];
     for (const activity of pendingActivities()) {
       const executionId = activity.content.executionId;
-      activeActivities.push({ nodeId: activity.id, executionId, name: model.elements[activity.id]?.name ?? activity.id, type: activity.content.type });
+      const active: WorkflowBpmnActiveActivity = { nodeId: activity.id, executionId, name: model.elements[activity.id]?.name ?? activity.id, type: activity.content.type };
+      if (activity.content.isDefinitionScope) active.eventDefinitionIndex = activity.content.index;
+      activeActivities.push(active);
     }
     let status: 'failed' | 'succeeded' | 'waiting' = 'waiting';
     if (failure) status = 'failed';
@@ -275,6 +290,7 @@ export async function advanceWorkflowBpmn(
       jobs: [...jobs.values()],
       cancelledExecutionIds: [...cancelled],
       unconsumedCompletionIds: [...completed.keys()],
+      unconsumedSignalIds,
       transitions,
       activeActivities,
       nextWakeAt,

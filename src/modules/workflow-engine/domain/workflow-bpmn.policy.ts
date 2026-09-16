@@ -89,6 +89,8 @@ export function readWorkflowBpmnExtension<T>(element: WorkflowBpmnElement, type:
  */
 export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssue[] {
   const issues: WorkflowBpmnIssue[] = [];
+  const elements = Object.values(model.elements);
+  const flows = elements.filter((element) => element.$type === 'bpmn:SequenceFlow');
   if (!model.processes.some((process) => process.isExecutable)) issues.push({ code: 'process', message: '至少需要一个可执行流程' });
   for (const element of Object.values(model.elements)) {
     const report = (code: string, message: string) => issues.push({ code, nodeId: element.id, message });
@@ -107,6 +109,32 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
       const sourcePool = bpmnParticipant(model, element.sourceRef), targetPool = bpmnParticipant(model, element.targetRef);
       if (!sourcePool || !targetPool || sourcePool === targetPool) report('message-scope', '消息流必须连接不同参与者');
       if (!isMessageEndpoint(element.sourceRef, false) || !isMessageEndpoint(element.targetRef, true)) report('message-kind', '消息流只能连接参与者、活动或方向正确的消息事件');
+    }
+    if (element.$type === 'bpmn:EventBasedGateway') {
+      const outgoing = flows.filter((flow) => flow.sourceRef === element);
+      if (outgoing.length < 2) report('event-gateway-outgoing', '事件网关至少需要两个出口');
+      if (outgoing.some((flow) => flow.conditionExpression)) report('event-gateway-condition', '事件网关出口不能配置规则条件');
+      if (element.instantiate && flows.some((flow) => flow.targetRef === element)) report('event-gateway-instantiate', '用于创建实例的事件网关不能有入口连线');
+      if (element.eventGatewayType === 'Parallel' && !element.instantiate) report('event-gateway-parallel', '并行事件网关只能用于创建流程实例');
+      const targets = outgoing.map((flow) => flow.targetRef).filter(Boolean) as WorkflowBpmnElement[];
+      let receivesMessage = false;
+      let catchesMessage = false;
+      for (const target of targets) {
+        if (flows.some((flow) => flow.targetRef === target && flow.sourceRef !== element)) report('event-gateway-incoming', '事件网关的目标不能有其他入口连线');
+        if (target.$type === 'bpmn:ReceiveTask') {
+          receivesMessage = true;
+          if (elements.some((event) => event.$type === 'bpmn:BoundaryEvent' && event.attachedToRef === target)) report('event-gateway-boundary', '事件网关后的接收任务不能附着边界事件');
+          continue;
+        }
+        if (target.$type !== 'bpmn:IntermediateCatchEvent') {
+          report('event-gateway-target', '事件网关只能连接中间捕获事件或接收任务');
+          continue;
+        }
+        const definitions: WorkflowBpmnElement[] = [...(target.eventDefinitions ?? []), ...(target.eventDefinitionRef ?? [])];
+        if (!definitions.length || definitions.some((event) => !['bpmn:MessageEventDefinition', 'bpmn:SignalEventDefinition', 'bpmn:TimerEventDefinition', 'bpmn:ConditionalEventDefinition'].includes(event.$type))) report('event-gateway-trigger', '事件网关只接受消息、信号、定时和条件捕获事件');
+        if (definitions.some((event) => event.$type === 'bpmn:MessageEventDefinition')) catchesMessage = true;
+      }
+      if (receivesMessage && catchesMessage) report('event-gateway-mixed-message', '同一事件网关不能混用消息捕获事件和接收任务');
     }
     if (element.$type === 'bpmn:Lane') {
       let scope = element.$parent;

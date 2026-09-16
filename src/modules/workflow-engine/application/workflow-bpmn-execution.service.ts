@@ -38,6 +38,12 @@ export class WorkflowBpmnExecutionService {
     const expired = Date.now() >= new Date(run.deadlineAt).getTime();
     if (expired && !run.errorMessage) run.errorMessage = '流程总期限已结束';
     if (run.cancelRequested || run.errorMessage) {
+      for (const message of run.bpmnState?.messages ?? []) {
+        if (message.status !== 'pending') continue;
+        message.status = 'discarded';
+        message.deliveredAt = new Date().toISOString();
+        delete message.values;
+      }
       for (const activity of activities) activity.cancelRequested = true;
       await this.stopActivities(run, activities, manager);
       const active = activities.some((activity) => activity.state.status === 'waiting');
@@ -55,9 +61,20 @@ export class WorkflowBpmnExecutionService {
         if (activity.state.status === 'failed') return { executionId: activity.executionId, error: { code: 'WORKFLOW_STEP_FAILED', message: activity.state.errorMessage ?? '工作流步骤失败' } };
         return { executionId: activity.executionId, output: activity.state.outputValues };
       });
-      const advanced = await advanceWorkflowBpmn(model, run.bpmnState?.checkpoint ?? null, { input: run.inputValues }, completions);
+      const messages = structuredClone(run.bpmnState?.messages ?? []);
+      const pendingMessages = messages.filter((message) => message.status === 'pending');
+      const advanced = await advanceWorkflowBpmn(model, run.bpmnState?.checkpoint ?? null, { input: run.inputValues }, completions, pendingMessages.map((message) => ({
+        id: message.nodeId, executionId: message.executionId, workflowMessage: true, values: message.values ?? {},
+      })));
       if (advanced.unconsumedCompletionIds.length) throw new Error('BPMN 快照无法消费已保存的活动结果');
+      for (const message of pendingMessages) {
+        message.status = 'delivered';
+        if (advanced.unconsumedSignalIds.includes(message.executionId)) message.status = 'discarded';
+        message.deliveredAt = new Date().toISOString();
+        delete message.values;
+      }
       run.bpmnState = {
+        messages,
         checkpoint: advanced.checkpoint,
         status: advanced.status,
         error: advanced.error,

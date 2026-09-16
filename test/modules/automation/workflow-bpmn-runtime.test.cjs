@@ -275,3 +275,105 @@ test('同一用户任务的多个活动实例不能被一次人工提交同时�
   result=await advanceWorkflowBpmn(model,result.checkpoint,{},result.jobs.map(job=>({executionId:job.executionId,output:{confirmed:true}})));
   assert.equal(result.status,'succeeded');assert.equal(result.unconsumedCompletionIds.length,0);
 });
+
+test('包容网关恢复后只等待本次激活的分支，未选分支不阻塞汇合', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:inclusiveGateway id="split"/>' + step('a') + step('b') + step('c') + '<bpmn:inclusiveGateway id="join"/>' + step('after') + '<bpmn:endEvent id="e"/>' + flow('s', 'split') + flow('split', 'a', { path: 'input.a' }) + flow('split', 'b', { path: 'input.b' }) + flow('split', 'c', { path: 'input.c' }) + flow('a', 'join') + flow('b', 'join') + flow('c', 'join') + flow('join', 'after') + flow('after', 'e'));
+  let result = await advanceWorkflowBpmn(model, null, { input: { a: true, b: true, c: false } });
+  assert.deepEqual(result.jobs.map(job => job.elementId).sort(), ['a', 'b']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs.find(job => job.elementId === 'a').executionId, output: {} }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['b']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after']);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('事件网关恢复后首个消息继续对应分支并撤销另一条等待', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:eventBasedGateway id="race"/><bpmn:intermediateCatchEvent id="catch_a"><bpmn:messageEventDefinition messageRef="Message_a"/></bpmn:intermediateCatchEvent><bpmn:intermediateCatchEvent id="catch_b"><bpmn:messageEventDefinition messageRef="Message_b"/></bpmn:intermediateCatchEvent>' + step('a') + step('b') + '<bpmn:endEvent id="e"/>' + flow('s', 'race') + flow('race', 'catch_a') + flow('race', 'catch_b') + flow('catch_a', 'a') + flow('catch_b', 'b') + flow('a', 'e') + flow('b', 'e'), '<bpmn:message id="Message_a"/><bpmn:message id="Message_b"/>');
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.activeActivities.filter(item => item.nodeId.startsWith('catch_')).map(item => item.nodeId).sort(), ['catch_a', 'catch_b']);
+  const waiting = result.activeActivities.find(item => item.nodeId === 'catch_b');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'catch_b', executionId: waiting.executionId }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['b']);
+  assert.equal(result.activeActivities.some(item => item.nodeId === 'catch_a'), false);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('调用活动恢复被调用流程后回到父流程且不会重复执行子活动', async () => {
+  const child = '<bpmn:process id="Child"><bpmn:startEvent id="cs"/>' + step('inside_call') + '<bpmn:endEvent id="ce"/>' + flow('cs', 'inside_call') + flow('inside_call', 'ce') + '</bpmn:process>';
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:callActivity id="call" calledElement="Child"/>' + step('after_call') + '<bpmn:endEvent id="e"/>' + flow('s', 'call') + flow('call', 'after_call') + flow('after_call', 'e'), child);
+  assert.deepEqual(validateWorkflowBpmn(model), []);
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['inside_call']);
+  const executionId = result.jobs[0].executionId;
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {});
+  assert.equal(result.jobs[0].executionId, executionId);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId, output: { value: 42 } }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after_call']);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('信号广播在恢复后唤醒所有订阅分支并只执行一次后续活动', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:parallelGateway id="split"/><bpmn:intermediateCatchEvent id="catch_a"><bpmn:signalEventDefinition signalRef="Signal_ready"/></bpmn:intermediateCatchEvent><bpmn:intermediateCatchEvent id="catch_b"><bpmn:signalEventDefinition signalRef="Signal_ready"/></bpmn:intermediateCatchEvent>' + step('trigger') + '<bpmn:intermediateThrowEvent id="broadcast"><bpmn:signalEventDefinition signalRef="Signal_ready"/></bpmn:intermediateThrowEvent>' + step('a') + step('b') + '<bpmn:endEvent id="e"/>' + flow('s', 'split') + flow('split', 'catch_a') + flow('split', 'catch_b') + flow('split', 'trigger') + flow('trigger', 'broadcast') + flow('broadcast', 'e') + flow('catch_a', 'a') + flow('catch_b', 'b') + flow('a', 'e') + flow('b', 'e'), '<bpmn:signal id="Signal_ready"/>');
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['trigger']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId).sort(), ['a', 'b']);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, result.jobs.map(job => ({ executionId: job.executionId, output: {} })));
+  assert.equal(result.status, 'succeeded');
+});
+
+test('条件事件按声明的表达式等待，恢复后条件满足才继续', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="condition"><bpmn:conditionalEventDefinition><bpmn:condition xsi:type="bpmn:tFormalExpression" language="' + KT_BPMN_EXPRESSION + '"><![CDATA[{"path":"content.message.ready"}]]></bpmn:condition></bpmn:conditionalEventDefinition></bpmn:intermediateCatchEvent>' + step('after_condition') + '<bpmn:endEvent id="e"/>' + flow('s', 'condition') + flow('condition', 'after_condition') + flow('after_condition', 'e'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.equal(result.status, 'waiting');
+  assert.deepEqual(result.jobs, []);
+  assert.deepEqual(result.activeActivities.map(item => item.nodeId), ['condition']);
+  const waiting = result.activeActivities[0];
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'condition', executionId: waiting.executionId, ready: false }]);
+  assert.equal(result.jobs.length, 0);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'condition', executionId: waiting.executionId, ready: true }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after_condition']);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('同层链接事件跳转到对应捕获事件并在后续活动恢复', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateThrowEvent id="jump"><bpmn:linkEventDefinition name="continue"/></bpmn:intermediateThrowEvent><bpmn:intermediateCatchEvent id="landing"><bpmn:linkEventDefinition name="continue"/></bpmn:intermediateCatchEvent>' + step('after_link') + '<bpmn:endEvent id="e"/>' + flow('s', 'jump') + flow('landing', 'after_link') + flow('after_link', 'e'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after_link']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('业务结果变更自动重新计算等待中的条件事件，不要求人工发送信号', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:parallelGateway id="split"/><bpmn:intermediateCatchEvent id="condition"><bpmn:conditionalEventDefinition><bpmn:condition xsi:type="bpmn:tFormalExpression" language="' + KT_BPMN_EXPRESSION + '"><![CDATA[{"path":"outputs.change.ready"}]]></bpmn:condition></bpmn:conditionalEventDefinition></bpmn:intermediateCatchEvent>' + step('change') + step('after_condition') + '<bpmn:endEvent id="e"/>' + flow('s', 'split') + flow('split', 'condition') + flow('split', 'change') + flow('condition', 'after_condition') + flow('change', 'e') + flow('after_condition', 'e'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['change']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: { ready: true } }]);
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['after_condition']);
+  result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('包容汇合仅一个分支激活时正常通过，混合网关继续按条件分流', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:inclusiveGateway id="split"/>' + step('a') + step('b') + '<bpmn:inclusiveGateway id="mixed" default="f_mixed_fallback"/>' + step('chosen') + step('fallback') + '<bpmn:endEvent id="e"/>' + flow('s', 'split') + flow('split', 'a', { path: 'input.a' }) + flow('split', 'b', { path: 'input.b' }) + flow('a', 'mixed') + flow('b', 'mixed') + flow('mixed', 'chosen', { path: 'input.choose' }) + flow('mixed', 'fallback') + flow('chosen', 'e') + flow('fallback', 'e'));
+  for (const choose of [true, false]) {
+    let result = await advanceWorkflowBpmn(model, null, { input: { a: true, b: false, choose } });
+    assert.deepEqual(result.jobs.map(job => job.elementId), ['a']);
+    result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+    let expected = 'fallback';
+    if (choose) expected = 'chosen';
+    assert.deepEqual(result.jobs.map(job => job.elementId), [expected]);
+    result = await advanceWorkflowBpmn(model, result.checkpoint, {}, [{ executionId: result.jobs[0].executionId, output: {} }]);
+    assert.equal(result.status, 'succeeded');
+  }
+});
+
+test('过期的消息实例信号不能唤醒同名活动', async () => {
+  const model = await diagram('<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="wait"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/>' + flow('s', 'wait') + flow('wait', 'e'));
+  const result = await advanceWorkflowBpmn(model, null, {});
+  await assert.rejects(() => advanceWorkflowBpmn(model, result.checkpoint, {}, [], [{ id: 'wait', executionId: 'another-instance' }]), /当前等待的活动实例/);
+});

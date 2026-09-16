@@ -10,6 +10,7 @@ import {
 import { evaluateBpmnExpression, type BpmnExpression } from '../domain/workflow-bpmn-expression';
 import { readWorkflowBpmnExtension } from '../domain/workflow-bpmn.policy';
 import { WorkflowMultiInstance, WorkflowStandardLoop } from './workflow-bpmn-loop';
+import { WorkflowInclusiveGateway } from './workflow-bpmn-inclusive';
 
 export interface WorkflowBpmnCheckpoint {
   modelSha256: string;
@@ -50,14 +51,14 @@ export interface WorkflowBpmnActiveActivity {
 }
 
 /**
- * 只推进 BPMN 令牌至持久边界；服务任务转为待执行记录，真实脚本仍由工作流步骤执行层派发。
+ * 根据已核验的活动结果推进令牌，遇到业务任务或等待事件时保存快照，并返回待派发和待取消的实例。
  * @param model - 已校验并固定发布版本的 BPMN 模型。
  * @param checkpoint - 同一结构化模型 上次持久化的完整引擎快照，首次为空。
  * @param variables - 首次执行的业务输入与变量，恢复时使用快照。
  * @param completions - 已由工作流核验的准确活动实例结果。
  * @param signals - 已通过业务权限检查的人工或消息活动实例信号。
  * @returns 下一份快照、待执行实例、取消实例与本次状态事件；返回前清除所有临时计时器。
- * @throws 快照不属于当前结构化模型、扩展配置不合法或同步推进超限时拒绝推进。
+ * @throws 快照不匹配、目标实例失效、重复提交结果、扩展配置不合法或同步推进超限时拒绝推进。
  */
 export async function advanceWorkflowBpmn(
   model: WorkflowBpmnModel,
@@ -140,28 +141,48 @@ export async function advanceWorkflowBpmn(
       });
     },
   };
+  const expressionScript = (body: string) => ({
+    execute: (scope: any, callback: (error: Error | null, value?: unknown) => void) => {
+      try { callback(null, expressions.resolveExpression(body, scope)); }
+      catch (error) { callback(error as Error); }
+    },
+  });
   const engine = new Engine({
     moddleContext: { rootElement: model.root, elementsById: model.elements, references: model.references, warnings: [] } as any,
     moddleOptions: { kt: KT_BPMN_MODDLE },
-    elements: { ScriptTask: ServiceTask, ManualTask: Task, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
+    elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
     variables,
     expressions,
     timers,
     settings: { enableDummyService: false },
     scripts: {
-      register: () => undefined,
+      register: (owner: any) => {
+        if (owner.behaviour?.scriptFormat !== KT_BPMN_EXPRESSION) return undefined;
+        return expressionScript(owner.behaviour.script);
+      },
       getScript: (language: string, owner: any) => {
         if (language !== KT_BPMN_EXPRESSION) return undefined;
-        return { execute: (scope: any, callback: (error: Error | null, value?: unknown) => void) => {
-          try { callback(null, expressions.resolveExpression(owner.behaviour.conditionExpression.body, scope)); }
-          catch (error) { callback(error as Error); }
-        } };
+        return expressionScript(owner.behaviour.conditionExpression.body);
       },
     },
     extensions: { kt: (activity: any) => {
       if (['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask'].includes(activity.type)) activity.behaviour.Service = HostStep;
     } },
   });
+  const pendingActivities = () => {
+    const pending = [...engine.execution.getPostponed()] as any[];
+    const activities: any[] = [];
+    const visited = new Set<string>();
+    while (pending.length) {
+      const activity = pending.shift();
+      if (visited.has(activity.content.executionId)) continue;
+      visited.add(activity.content.executionId);
+      const children = activity.getPostponed?.() ?? [];
+      if (children.length) pending.push(...children);
+      else activities.push(activity);
+    }
+    return activities;
+  };
   engine.on('error', (error) => { failure = error; });
   engine.on('end', () => { ended = true; });
   // 引擎对外事件补齐了流程实例父链；任务内部消息仅含静态父元素，不能用于作用域撤销。
@@ -223,7 +244,17 @@ export async function advanceWorkflowBpmn(
       if (deliveries.length > 10000) throw new Error('BPMN 单次结果交付超过安全上限');
       deliver();
     }
-    for (const signal of signals) engine.execution.signal(signal);
+    if (completions.length) {
+      for (const activity of pendingActivities()) {
+        const definitions = model.elements[activity.id]?.eventDefinitions ?? [];
+        if (definitions.some((definition: any) => definition.$type === 'bpmn:ConditionalEventDefinition')) activity.signal({});
+      }
+    }
+    for (const signal of signals) {
+      const activity = pendingActivities().find((item) => item.id === signal.id && item.content.executionId === signal.executionId);
+      if (!activity) throw new Error('BPMN 信号目标不是当前等待的活动实例');
+      activity.signal(signal);
+    }
     await new Promise<void>((resolve) => setImmediate(resolve));
     const nextWakeAt = timers.executing.reduce<number | null>((earliest, timer) => {
       const due = new Date(timer.owner?.expireAt ?? timer.expireAt).getTime();
@@ -232,16 +263,9 @@ export async function advanceWorkflowBpmn(
     }, null);
     const state = await engine.getState();
     const activeActivities: WorkflowBpmnActiveActivity[] = [];
-    const pending = [...engine.execution.getPostponed()] as any[];
-    const visited = new Set<string>();
-    while (pending.length) {
-      const activity = pending.shift();
+    for (const activity of pendingActivities()) {
       const executionId = activity.content.executionId;
-      if (visited.has(executionId)) continue;
-      visited.add(executionId);
-      const children = activity.getPostponed?.() ?? [];
-      if (children.length) { pending.push(...children); continue; }
-      activeActivities.push({ nodeId: activity.id, executionId, name: model.elements[activity.id]?.name ?? activity.id, type: activity.type });
+      activeActivities.push({ nodeId: activity.id, executionId, name: model.elements[activity.id]?.name ?? activity.id, type: activity.content.type });
     }
     let status: 'failed' | 'succeeded' | 'waiting' = 'waiting';
     if (failure) status = 'failed';

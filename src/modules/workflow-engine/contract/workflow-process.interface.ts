@@ -6,6 +6,7 @@ import type {
   WorkflowScriptResult,
 } from './workflow-script.types';
 import type { WorkflowRunView } from './workflow-run.types';
+import type { WorkflowBusinessMessage } from './workflow-message.types';
 
 export type WorkflowProcessReference = { key: string; version: number };
 export type WorkflowBusinessIdentity = {
@@ -44,6 +45,11 @@ export type WorkflowBusinessBindingView = {
 };
 export const WORKFLOW_BUSINESSES = Symbol('WORKFLOW_BUSINESSES');
 export interface WorkflowBusinessPort {
+  receiveMessage: (
+    processRef: WorkflowProcessReference,
+    context: WorkflowLaunchContext,
+    message: WorkflowBusinessMessage,
+  ) => Promise<{ runId: string }>;
   assertIdle: (processRef: WorkflowProcessReference, scopeId: string, subjectId: string, manager: EntityManager) => Promise<void>;
   latest: (
     processRef: WorkflowProcessReference,

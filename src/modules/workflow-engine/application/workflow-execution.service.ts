@@ -1,7 +1,9 @@
 import { TASK_EXECUTION, type TaskExecutionPort } from '@/modules/task-execution/contract/task-execution.port';
 import { WorkflowHumanTaskService } from './workflow-human-task.service';
 import { WorkflowMessageService } from './workflow-message.service';
-import type { WorkflowMessageDelivery } from '../contract/workflow-message.types';
+import type { WorkflowMessageDelivery, WorkflowMessageIngress } from '../contract/workflow-message.types';
+import { parseWorkflowBpmn } from '../domain/workflow-bpmn.policy';
+import { prepareBpmnMessageStart } from '../domain/workflow-message.policy';
 import {
   BadRequestException,
   ConflictException,
@@ -69,6 +71,18 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   async receiveMessage(runId: string, delivery: WorkflowMessageDelivery) {
     if (!this.messages) throw new Error('工作流消息模块尚未装配');
     return this.messages.receive(runId, delivery);
+  }
+
+  /**
+   * 将业务对象已核验的消息交给消息服务，在流程锁内按关联键选择等待节点。
+   * @param runId - 业务锁选出的活动流程。
+   * @param message - 由业务服务密封的投递内容。
+   * @returns 保存完成的消息回执。
+   * @throws 消息服务尚未装配时拒绝接收。
+   */
+  async receiveBusinessMessage(runId: string, message: WorkflowMessageIngress) {
+    if (!this.messages) throw new Error('工作流消息模块尚未装配');
+    return this.messages.receiveBusiness(runId, message);
   }
 
   /**
@@ -175,6 +189,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @param subjectKey - 用于同一业务对象并发约束的摘要。
    * @param formValues - 工作流已按固定版本校验的原始表单快照。
    * @param transaction - 新业务对象尚未提交的事务，用于原子保存对象和运行。
+   * @param initialMessage - 可选的首条业务消息，与运行及等待快照原子保存。
    * @returns 该业务请求唯一的持久工作流身份。
    */
   async startBusiness(
@@ -185,6 +200,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     subjectKey: string,
     formValues: Record<string, unknown> | null = null,
     transaction?: EntityManager,
+    initialMessage?: WorkflowMessageIngress,
   ) {
     return this.create(
       reference,
@@ -194,6 +210,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       business,
       subjectKey,
       transaction,
+      initialMessage,
     );
   }
 
@@ -206,6 +223,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @param business - 业务发起时密封的上下文，历史技术流程为空。
    * @param subjectKey - 业务对象的并发约束摘要。
    * @param transaction - 可选的业务创建事务；未传时由工作流自行开启事务。
+   * @param initialMessage - 可选的消息启动意图，不在持久化前执行业务步骤。
    * @returns 稳定运行身份。
    * @throws 请求键对应不同输入或发布依赖失效时拒绝创建。
    */
@@ -217,6 +235,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     business: WorkflowBusinessContext | null = null,
     subjectKey: string | null = null,
     transaction?: EntityManager,
+    initialMessage?: WorkflowMessageIngress,
   ) {
     const definition = await this.resolve(reference);
     const contract = await workflowContract(definition);
@@ -253,6 +272,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       formEntries,
     ];
     if (business) requestParts.push(business);
+    if (initialMessage) requestParts.push(initialMessage.ingressKey, initialMessage.ingressHash);
     const requestHash = createHash('sha256')
       .update(JSON.stringify(requestParts))
       .digest('hex');
@@ -286,6 +306,11 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       nextWakeAt: new Date(),
       finishedAt: null,
     });
+    if (initialMessage) {
+      const model = await parseWorkflowBpmn(definition);
+      try { run.bpmnState = await prepareBpmnMessageStart(model, inputValues, initialMessage); }
+      catch (error) { throw new BadRequestException((error as Error).message); }
+    }
     try {
       const persist = async (manager: EntityManager) => {
         await manager.insert(WorkflowRun, run);
@@ -478,7 +503,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   }
 
   /**
-   * 在同一工作流队列中执行单个内置动作，持续以父流程与活动令牌判断取消。
+   * 根据父流程及活动令牌的存活状态执行或停止内置动作，结束后唤醒父流程以消费结果。
    * @param actionRunId - 已绑定到标准活动的动作运行身份。
    * @throws 内置动作模块未装配时拒绝派发。
    */
@@ -497,7 +522,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   }
 
   /**
-   * 持有流程独占连接后恢复标准活动令牌；旧自定义图只记录退役错误，不再派发动作。
+   * 在流程独占连接内恢复标准活动令牌，拒绝旧自定义图继续派发动作，避免退役执行路径重新运行。
    * @param runId - 待恢复的流程身份。
    * @throws 数据库状态无法确认时交由队列保留失败并等待恢复。
    */

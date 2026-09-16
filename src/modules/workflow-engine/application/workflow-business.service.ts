@@ -22,6 +22,8 @@ import { WorkflowRun } from '../infrastructure/persistence/workflow-run.entities
 import { WorkflowRevision } from '../infrastructure/persistence/workflow.entities';
 import { WorkflowExecutionService } from './workflow-execution.service';
 import { WorkflowProcessRegistry } from './workflow-process.registry';
+import type { WorkflowBusinessMessage, WorkflowMessageIngress } from '../contract/workflow-message.types';
+import { businessMessageIngress } from '../domain/workflow-message.policy';
 
 @Injectable()
 export class WorkflowBusinessService implements WorkflowBusinessPort {
@@ -120,6 +122,33 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
     context: WorkflowLaunchContext,
     executionKey: string,
   ): Promise<{ runId: string }> {
+    return this.enter(processRef, context, executionKey);
+  }
+
+  /**
+   * 根据业务统一绑定和消息关联键返回原实例，首次消息与等待快照原子保存，避免重试创建重复流程。
+   * @param processRef - 模块固定声明的业务接口，禁止来自页面选择。
+   * @param context - 权限边界确认的业务对象、操作者及准备输入。
+   * @param message - 业务事件的稳定投递标识、类型与正文。
+   * @returns 新建或已匹配流程的身份，重复消息始终返回原实例。
+   * @throws 外部事务尚未提交时拒绝跨实例投递，避免释放业务锁后出现不可见回执。
+   */
+  async receiveMessage(processRef: WorkflowProcessReference, context: WorkflowLaunchContext, message: WorkflowBusinessMessage): Promise<{ runId: string }> {
+    if (context.transaction) throw new BadRequestException('业务消息请在对象事务提交后投递');
+    const ingress = validateDefinitionInput(() => businessMessageIngress(message, [processRef.key, context.scopeId, context.subjectId]));
+    return this.enter(processRef, context, `message:${ingress.ingressKey}`, ingress);
+  }
+
+  /**
+   * 在同一业务对象锁内核验请求与绑定，避免消息首发和常规发起同时创建未结束实例。
+   * @param processRef - 模块固定接口。
+   * @param context - 已鉴权的业务身份与提交内容。
+   * @param executionKey - 本次业务操作的稳定请求键。
+   * @param message - 自动消息入口的密封投递，可省略以常规发起。
+   * @returns 本次操作对应的唯一流程身份。
+   * @throws 幂等键冲突、绑定失效、业务身份漂移或活动实例归属不符时拒绝进入。
+   */
+  private async enter(processRef: WorkflowProcessReference, context: WorkflowLaunchContext, executionKey: string, message?: WorkflowMessageIngress): Promise<{ runId: string }> {
     this.checkScope(processRef, context.scopeId);
     const subjectValid = Boolean(context.subjectId) && context.subjectId.length <= 96;
     const actorValid = Boolean(context.actorId) && context.actorId.length <= 96;
@@ -150,17 +179,37 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
     ]);
     const connection = this.database.createQueryRunner();
     const lock = `kt:business:${subjectKey.slice(0, 48)}`;
+    let lockWaitSeconds = 0;
+    if (message) lockWaitSeconds = 3;
     let acquired = false;
     try {
       await connection.connect();
       acquired =
         Number(
           (
-            await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [lock])
+            await connection.query('SELECT GET_LOCK(?, ?) AS acquired', [lock, lockWaitSeconds])
           )[0]?.acquired,
         ) === 1;
       if (!acquired)
         throw new ConflictException('同一业务对象正在发起流程，请稍后重试');
+      if (message) {
+        const accepted = await connection.manager.getRepository(WorkflowRun).createQueryBuilder('run')
+          .where('run.businessSubjectKey = :subjectKey', { subjectKey })
+          .andWhere("JSON_CONTAINS(run.bpmn_state, :receipt, '$.messages')", { receipt: JSON.stringify({ ingressKey: message.ingressKey }) })
+          .getOne();
+        if (accepted) {
+          const receipt = accepted.bpmnState.messages.find((item) => item.ingressKey === message.ingressKey);
+          if (receipt.ingressHash !== message.ingressHash) throw new ConflictException('业务消息投递键已经用于不同内容');
+          return { runId: accepted.id };
+        }
+        const active = await connection.manager.findOneBy(WorkflowRun, { businessSubjectKey: subjectKey, status: In(['pending', 'running', 'waiting']) });
+        if (active) {
+          if (active.businessContext?.processRef.key !== processRef.key || active.businessContext.processRef.version !== processRef.version)
+            throw new ConflictException('同一业务对象正在执行其他业务接口的流程');
+          await this.execution.receiveBusinessMessage(active.id, message);
+          return { runId: active.id };
+        }
+      }
       const existing = await connection.manager.findOneBy(WorkflowRun, {
         executionKey: createHash('sha256').update(requestKey).digest('hex'),
       });
@@ -218,6 +267,7 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
         subjectKey,
         submission.formValues,
         context.transaction,
+        message,
       );
     } finally {
       try {

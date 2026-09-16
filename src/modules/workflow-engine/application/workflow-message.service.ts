@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { definitionRecord } from '@/common/automation/definition.types';
 import { validateDefinitionInput } from '@/common/automation/definition.repository';
-import type { WorkflowMessageDelivery, WorkflowMessageReceipt } from '../contract/workflow-message.types';
+import type { WorkflowMessageDelivery, WorkflowMessageIngress, WorkflowMessageReceipt } from '../contract/workflow-message.types';
 import { parseWorkflowBpmn } from '../domain/workflow-bpmn.policy';
 import { WorkflowRun } from '../infrastructure/persistence/workflow-run.entities';
 import { WorkflowDefinitionService } from './workflow-definition.service';
-import { correlateBpmnMessage } from '../domain/workflow-bpmn-correlation';
+import { declaredBpmnMessage, messageCorrelation, normalizeMessageValue } from '../domain/workflow-message.policy';
 
 @Injectable()
 export class WorkflowMessageService {
@@ -21,15 +21,46 @@ export class WorkflowMessageService {
    * @throws 消息格式不合法、实例过期、目标不是消息等待或同一投递键内容冲突时拒绝接收。
    */
   async receive(runId: string, delivery: WorkflowMessageDelivery): Promise<WorkflowMessageReceipt> {
+    const { deliveryId, nodeId, executionId, messageId, senderId, values } = delivery;
+    return this.accept(runId, { deliveryId, nodeId, executionId, messageId, senderId, values });
+  }
+
+  /**
+   * 在工作流锁内按标准关联键查找唯一等待节点，业务模块无需提供节点或执行标识。
+   * @param runId - 业务锁已经核验归属的活动实例。
+   * @param message - 业务入口生成的规范化消息及幂等摘要。
+   * @returns 已持久保存的消息回执。
+   */
+  async receiveBusiness(runId: string, message: WorkflowMessageIngress): Promise<WorkflowMessageReceipt> {
+    return this.accept(runId, message);
+  }
+
+  /**
+   * 在同一个锁和事务中检查幂等回执、匹配等待并保存消息，避免查找与推进之间的竞争。
+   * @param runId - 已核验归属的实例。
+   * @param incoming - 精确节点投递或由业务服务密封的自动投递。
+   * @returns 不含消息正文的持久回执。
+   * @throws 重复内容冲突、关联不唯一或实例不再接收消息时拒绝写入。
+   */
+  private async accept(runId: string, incoming: WorkflowMessageDelivery | WorkflowMessageIngress): Promise<WorkflowMessageReceipt> {
+    let ingress: WorkflowMessageIngress | undefined;
+    let delivery: WorkflowMessageDelivery;
+    if ('ingressKey' in incoming) {
+      ingress = incoming;
+      delivery = { ...incoming, nodeId: '', executionId: '' };
+    } else delivery = incoming;
     const envelope = validateDefinitionInput(() => definitionRecord(delivery));
-    for (const key of ['deliveryId', 'nodeId', 'executionId', 'senderId']) {
+    const identityKeys = ['deliveryId', 'senderId'];
+    if (!ingress) identityKeys.push('nodeId', 'executionId');
+    for (const key of identityKeys) {
       if (typeof envelope[key] !== 'string' || !envelope[key].trim() || envelope[key].length > 191) throw new BadRequestException('消息投递身份不能为空或超过 191 个字符');
     }
     if (delivery.messageId !== null && (typeof delivery.messageId !== 'string' || !delivery.messageId || delivery.messageId.length > 191)) throw new BadRequestException('消息类型标识无效');
     const values = validateDefinitionInput(() => normalizeMessageValue(definitionRecord(delivery.values))) as Record<string, unknown>;
     const serialized = JSON.stringify({ nodeId: delivery.nodeId, executionId: delivery.executionId, messageId: delivery.messageId, senderId: delivery.senderId, values });
     if (Buffer.byteLength(serialized) > 64 * 1024) throw new BadRequestException('单条工作流消息不能超过 64 KiB');
-    const hash = createHash('sha256').update(serialized).digest('hex');
+    let hash = createHash('sha256').update(serialized).digest('hex');
+    if (ingress) hash = ingress.ingressHash;
     const connection = this.database.createQueryRunner();
     const lock = `kt:workflow:${runId}`;
     let acquired = false;
@@ -41,7 +72,10 @@ export class WorkflowMessageService {
         const run = await manager.findOne(WorkflowRun, { where: { id: runId }, lock: { mode: 'pessimistic_write' } });
         if (!run) throw new NotFoundException('工作流实例不存在');
         const messages = run.bpmnState?.messages ?? [];
-        const previous = messages.find((item) => item.deliveryId === delivery.deliveryId);
+        const previous = messages.find((item) => {
+          if (ingress) return item.ingressKey === ingress.ingressKey;
+          return item.deliveryId === delivery.deliveryId && !item.ingressKey;
+        });
         if (previous) {
           if (previous.hash !== hash) throw new ConflictException('同一投递标识已经接收了不同消息');
           return {
@@ -50,34 +84,26 @@ export class WorkflowMessageService {
           };
         }
         if (!run.bpmnState || run.cancelRequested || run.errorMessage || !['pending', 'running', 'waiting'].includes(run.status) || new Date(run.deadlineAt).getTime() <= Date.now()) throw new ConflictException('工作流实例已经停止接收消息');
+        const model = await parseWorkflowBpmn(await this.definitions.resolve({ id: run.workflowId, version: run.workflowVersion }));
+        if (ingress) {
+          const matches = (run.bpmnState.activeActivities ?? []).filter((item) => {
+            if (declaredBpmnMessage(model, item) !== delivery.messageId) return false;
+            try { messageCorrelation(model, run.bpmnState, item, { messageId: delivery.messageId, values }, run.inputValues, true); return true; }
+            catch { return false; }
+          });
+          if (matches.length !== 1) throw new ConflictException('业务消息没有唯一且关联匹配的活动等待');
+          delivery = { ...delivery, nodeId: matches[0].nodeId, executionId: matches[0].executionId };
+        }
         const waiting = run.bpmnState.activeActivities?.find((item) => item.nodeId === delivery.nodeId && item.executionId === delivery.executionId);
         if (!waiting) throw new ConflictException('消息等待实例已经失效');
         if (messages.length >= 4096 || messages.filter((item) => item.status === 'pending').length >= 128) throw new ConflictException('当前流程的消息回执或等待队列达到上限');
         if (messages.some((item) => item.executionId === delivery.executionId && item.status === 'pending')) throw new ConflictException('该活动实例已经接收消息');
-        const model = await parseWorkflowBpmn(await this.definitions.resolve({ id: run.workflowId, version: run.workflowVersion }));
-        const element = model.elements[delivery.nodeId];
-        const definitions = [...(element?.eventDefinitions ?? []), ...(element?.eventDefinitionRef ?? [])];
-        let message = definitions[waiting.eventDefinitionIndex ?? 0];
-        if (definitions.length > 1 && waiting.eventDefinitionIndex === undefined) message = undefined;
-        let declaredMessageId: string | null = null;
-        if (element?.$type === 'bpmn:ReceiveTask') declaredMessageId = element.messageRef?.id ?? null;
-        else if (['bpmn:StartEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:BoundaryEvent'].includes(element?.$type) && message?.$type === 'bpmn:MessageEventDefinition') declaredMessageId = message.messageRef?.id ?? null;
-        else throw new BadRequestException('目标活动不是消息捕获事件或接收任务');
+        const declaredMessageId = declaredBpmnMessage(model, waiting);
+        if (declaredMessageId === undefined) throw new BadRequestException('目标活动不是消息捕获事件或接收任务');
         if (delivery.messageId !== declaredMessageId) throw new BadRequestException('消息类型与当前等待声明不一致');
-        const processExecutionId = waiting.processExecutionId;
-        let correlation: import('../contract/workflow-message.types').WorkflowMessageRecord['correlation'];
-        let previousKeys = run.bpmnState.correlations?.[processExecutionId] ?? {};
-        for (const pending of messages) {
-          if (pending.status === 'pending' && pending.correlation && pending.correlation.processExecutionId === processExecutionId) previousKeys = { ...previousKeys, ...pending.correlation.keys };
-        }
-        const keys = validateDefinitionInput(() => correlateBpmnMessage(model, delivery.nodeId, delivery.messageId, values,
-          { input: run.inputValues, outputs: run.bpmnState.outputs }, previousKeys));
-        if (Object.keys(keys).length) {
-          if (!processExecutionId) throw new ConflictException('消息等待缺少流程作用域身份，请等待工作流恢复后重试');
-          correlation = { processExecutionId, keys };
-        }
+        const correlation = validateDefinitionInput(() => messageCorrelation(model, run.bpmnState, waiting, { messageId: delivery.messageId, values }, run.inputValues, Boolean(ingress)));
         const receipt: WorkflowMessageReceipt = { deliveryId: delivery.deliveryId, nodeId: delivery.nodeId, executionId: delivery.executionId, status: 'pending', receivedAt: new Date().toISOString(), deliveredAt: null };
-        run.bpmnState.messages = [...messages, { ...receipt, hash, values, correlation }];
+        run.bpmnState.messages = [...messages, { ...receipt, hash, values, correlation, ingressKey: ingress?.ingressKey, ingressHash: ingress?.ingressHash }];
         await manager.update(WorkflowRun, { id: run.id }, { bpmnState: run.bpmnState, nextWakeAt: new Date() });
         return receipt;
       });
@@ -86,25 +112,4 @@ export class WorkflowMessageService {
       finally { await connection.release(); }
     }
   }
-}
-
-/**
- * 固定消息字段排序并拒绝原型、非 JSON 数值及过深对象，使重试内容的幂等比较不受键顺序影响。
- * @param value - 待保存的消息字段或嵌套值。
- * @param depth - 当前嵌套深度，用于限制递归。
- * @returns 可稳定序列化的 JSON 值。
- * @throws 不支持的类型、危险属性或超过十六层嵌套时拒绝消息。
- */
-function normalizeMessageValue(value: unknown, depth = 0): unknown {
-  if (depth > 16) throw new Error('消息字段不能超过十六层嵌套');
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (Array.isArray(value)) return value.map((item) => normalizeMessageValue(item, depth + 1));
-  const record = definitionRecord(value);
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(record).sort()) {
-    if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('消息字段不允许原型属性');
-    result[key] = normalizeMessageValue(record[key], depth + 1);
-  }
-  return result;
 }

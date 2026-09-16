@@ -21,6 +21,7 @@ export interface WorkflowBpmnCheckpoint {
   outputs: Record<string, Record<string, unknown>>;
   entrySelections?: Record<string, string>;
   activityParents?: Record<string, Record<string, string>>;
+  messageStart?: { processId: string; entryId: string };
 }
 
 export interface WorkflowBpmnJob {
@@ -63,6 +64,7 @@ export interface WorkflowBpmnActiveActivity {
  * @param variables - 首次执行的业务输入与变量，恢复时使用快照。
  * @param completions - 已由工作流核验的准确活动实例结果。
  * @param signals - 已通过业务权限检查的人工或消息活动实例信号。
+ * @param messageStart - 首条消息已经匹配的顶层启动组，恢复时使用快照中的选择。
  * @returns 下一份快照、待执行和取消实例、未消费信号与状态事件；返回前清除临时计时器。
  * @throws 快照不匹配、重复提交结果、扩展配置不合法或同步推进超限时拒绝推进。
  */
@@ -72,9 +74,11 @@ export async function advanceWorkflowBpmn(
   variables: Record<string, unknown>,
   completions: WorkflowBpmnCompletion[] = [],
   signals: Array<{ executionId: string; id: string; [key: string]: unknown }> = [],
+  messageStart?: { processId: string; entryId: string },
 ) {
   const modelSha256 = createHash('sha256').update(JSON.stringify(model.definition.model)).digest('hex');
   if (checkpoint && checkpoint.modelSha256 !== modelSha256) throw new Error('BPMN 恢复快照与发布版本不一致');
+  const selectedStart = checkpoint?.messageStart ?? messageStart;
   const entrySelections = { ...checkpoint?.entrySelections };
   const activityParents = new Map(Object.entries(checkpoint?.activityParents ?? {}));
   const entryGroups = new Map<string, { entryId: string; scopeId: string }>();
@@ -173,6 +177,11 @@ export async function advanceWorkflowBpmn(
   // 上游序列化器假定所有参与者都有 processRef，直接传入合法黑盒泳池会在启动前崩溃。
   const executionRoot = Object.create(model.root);
   executionRoot.rootElements = (model.root.rootElements ?? []).filter((element) => element.$type !== 'bpmn:CorrelationProperty').map((element) => {
+    if (selectedStart && element.$type === 'bpmn:Process' && element.id !== selectedStart.processId) {
+      const process = Object.create(element);
+      process.isExecutable = false;
+      return process;
+    }
     if (element.$type !== 'bpmn:Collaboration') return element;
     const collaboration = Object.create(element);
     collaboration.messageFlows = (element.messageFlows ?? []).filter((flow) =>
@@ -199,6 +208,12 @@ export async function advanceWorkflowBpmn(
     },
     extensions: { kt: (activity: any) => {
       if (['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask'].includes(activity.type)) activity.behaviour.Service = HostStep;
+      const group = entryGroups.get(activity.id);
+      if (!selectedStart || group?.scopeId !== selectedStart.processId || group.entryId === selectedStart.entryId) return;
+      return {
+        activate: () => activity.broker.subscribeOnce('event', 'activity.enter', () => activity.getApi().discard(), { consumerTag: '_kt-message-start', priority: 1000 }),
+        deactivate: () => activity.broker.cancel('_kt-message-start'),
+      };
     } },
   });
   const pendingActivities = () => {
@@ -346,7 +361,7 @@ export async function advanceWorkflowBpmn(
     if (failure) status = 'failed';
     else if (ended) status = 'succeeded';
     return {
-      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs, entrySelections, activityParents: Object.fromEntries(activityParents) },
+      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs, entrySelections, activityParents: Object.fromEntries(activityParents), messageStart: selectedStart },
       jobs: [...jobs.values()],
       cancelledExecutionIds: [...cancelled],
       unconsumedCompletionIds: [...completed.keys()],

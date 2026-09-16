@@ -29,7 +29,7 @@ ENV npm_config_index_binary_host_mirror=https://registry.npmmirror.com/-/binary/
 COPY package.json pnpm-lock.yaml ./
 
 RUN apt-get update -o Acquire::Retries=5 \
-  && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk openssh-client \
+  && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk openssh-client python3 \
   && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
@@ -44,6 +44,8 @@ RUN npm install -g pnpm@9.15.9 --registry=https://registry.npmmirror.com \
 ARG RELEASE_ID=local-unversioned
 ENV RELEASE_ID=${RELEASE_ID}
 COPY dist ./dist
+COPY scripts/workflow ./scripts/workflow
+COPY sql/automation-workflow-business-v2.sql sql/automation-workflow-loop-v3.sql sql/automation-workflow-bpmn-v4.sql sql/media-workflow-permissions-v1.sql ./sql/
 COPY sql/automation-definitions-v1.sql sql/automation-execution-v1.sql sql/automation-schedules-v1.sql sql/automation-menus-v1.sql sql/bot-reminders-v2.sql ./sql/
 COPY sql/bot-adapter-protocol-v1.sql sql/bot-adapter-menu-v1.sql sql/bot-adapter-protocol-v1-verify.sql sql/natmap-port-command-v1.sql sql/natmap-port-command-v1-verify.sql sql/persona-switch-command-v1.sql sql/persona-switch-command-v1-verify.sql sql/bot-permission-user-sets-v1.sql sql/bot-permission-user-sets-v1-verify.sql sql/media-governance-series-work-v1.sql sql/media-governance-series-work-v1-verify.sql sql/media-governance-rss-context-v2.sql sql/media-governance-rss-context-v2-verify.sql sql/media-governance-series-delete-v1.sql sql/media-governance-series-delete-v1-verify.sql sql/media-governance-mechanical-scrape-split.sql sql/media-governance-mechanical-scrape-split-verify.sql ./sql/
 

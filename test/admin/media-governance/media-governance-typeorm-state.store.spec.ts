@@ -1,3 +1,4 @@
+import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import type { DeepPartial } from 'typeorm';
 import {
   MediaGovernanceDescriptorRevisionEntity,
@@ -8,7 +9,6 @@ import {
   MediaGovernanceTaskEntity,
   MediaGovernanceUnitEntity,
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 import {
   MediaGovernanceTaskEpisodeBindingEntity,
   MediaGovernanceWorkEntity,
@@ -181,7 +181,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       outbox as never,
     );
     await store.loadTasks();
-    const service = new MediaGovernanceService();
+    const service = createMediaWorkflowFixture();
     const task = await service.create({
       mediaType: 'tv',
       seasonNumbers: ['S01'],
@@ -218,11 +218,13 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       seasonNumbers: ['S01'],
       sourceRole: 'supplemental_subtitle',
     });
+    await store.saveTask(task);
+    task.revision += 1;
     const envelope = buildMediaGovernanceExecutionEnvelope({
       action: 'source.download',
       expiresAt: '2099-08-11T12:10:00.000Z',
       inputSnapshotSha256: task.inputSnapshotSha256,
-      replayKey: `${task.id}-source-inspect-r${task.revision}`,
+      replayKey: `workflow:1001:source-download`,
       runId: `media-run-${'a'.repeat(40)}`,
       sources: [
         {
@@ -256,17 +258,14 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     });
     task.activeRunId = envelope.runId;
     await store.reserveRunDispatch(task, envelope);
-    await expect(store.pendingRunDispatches()).resolves.toEqual([envelope]);
-    expect(outbox.lastFindOptions).toMatchObject({
-      take: 32,
-      where: {
-        attempts: { _type: 'lessThan', _value: 5 },
-      },
+    expect(outbox.rows.get(envelope.runId)).toMatchObject({
+      executionId: envelope.replayKey, attempts: 0,
     });
-    await store.acknowledgeRunDispatch(envelope.runId, 'jenkins-queue-1001');
+    await expect(store.acknowledgeRunDispatch(envelope.runId, 'jenkins-queue-1001')).rejects.toThrow('identity-mismatch');
+    await store.acknowledgeRunDispatch(envelope.runId, envelope.replayKey);
     expect(outbox.rows.get(envelope.runId)).toMatchObject({
       attempts: 1,
-      executionId: 'jenkins-queue-1001',
+      executionId: envelope.replayKey,
     });
     await expect(
       store.consumeDescriptorGrant({
@@ -303,12 +302,18 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       }),
     ).rejects.toThrow('duplicate');
 
+    task.activeRunId = null;
+    task.revision += 1;
+    task.runState = 'blocked';
+    await expect(store.stopWorkflowRun(task, envelope.runId, envelope.replayKey, 'cancelled')).resolves.toBe(true);
+    await expect(store.stopWorkflowRun(task, envelope.runId, envelope.replayKey, 'cancelled')).resolves.toBe(false);
+    task.revision += 1;
     source.descriptorTombstonedAt = '2026-08-11T12:20:00.000Z';
     const cleanupEnvelope = buildMediaGovernanceExecutionEnvelope({
       action: 'source.cleanup',
       expiresAt: '2099-08-11T12:30:00.000Z',
       inputSnapshotSha256: task.inputSnapshotSha256,
-      replayKey: `${task.id}:source.cleanup:r${task.revision}`,
+      replayKey: 'workflow:1001:source-cleanup',
       runId: `media-run-${'c'.repeat(40)}`,
       sources: [
         {
@@ -370,6 +375,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       workItemId: 'media-063',
     };
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    task.revision += 1;
     const planEnvelope = buildMediaGovernanceExecutionEnvelope({
       action: 'governance.execute',
       expiresAt: '2099-08-11T12:10:00.000Z',
@@ -380,7 +386,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
         schemaVersion: '1.2.0',
         strategy: 'embedded',
       },
-      replayKey: `${task.id}:governance:r${task.revision}`,
+      replayKey: 'workflow:1001:governance',
       runId: `media-run-${'b'.repeat(40)}`,
       taskId: task.id,
       taskRevision: task.revision,
@@ -390,7 +396,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     await store.reserveRunDispatch(task, planEnvelope);
     await store.acknowledgeRunDispatch(
       planEnvelope.runId,
-      'jenkins-queue-plan-1001',
+      planEnvelope.replayKey,
     );
     const planGrant = {
       planGrantId: planEnvelope.plan.planGrantId,
@@ -423,6 +429,15 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       }),
     ).rejects.toThrow('identity-mismatch');
     expect(tasks.rows.has(task.id)).toBe(true);
+
+    await expect(store.deleteTask({
+      expectedRevision: task.revision,
+      expectedWorkItemId: 'media-063',
+      taskId: task.id,
+      beforeDelete: async () => { throw new Error('workflow-active'); },
+    })).rejects.toThrow('workflow-active');
+    expect(tasks.rows.has(task.id)).toBe(true);
+    expect([...sources.rows.values()].some((row) => row.taskId === task.id)).toBe(true);
 
     await expect(
       store.deleteTask({

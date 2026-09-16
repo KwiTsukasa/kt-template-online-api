@@ -8,6 +8,9 @@ export const AUTOMATION_SQL_FILES = [
   'automation-execution-v1.sql',
   'automation-schedules-v1.sql',
   'bot-reminders-v2.sql',
+  'automation-workflow-business-v2.sql',
+  'automation-workflow-loop-v3.sql',
+  'automation-workflow-bpmn-v4.sql',
 ] as const;
 const DRAFT_TABLES = new Set([
   'automation_task',
@@ -160,7 +163,7 @@ async function verifyTable(
 }
 
 /**
- * 创建独立模块的二十三张表，并为已有预览草稿补来源身份；所有建表均核对实际结构。
+ * 创建自动化与标准工作流所需表，并幂等补齐已有表的字段和索引；每项均核对实际结构。
  * @param connection - 已持迁移锁的明确目标连接。
  * @param sqlRoot - 当前发布包内版本化 SQL 目录。
  * @returns 本次验证通过的表名列表。
@@ -174,6 +177,14 @@ export async function ensureAutomationSchema(
   for (const file of AUTOMATION_SQL_FILES) {
     const source = readFileSync(join(sqlRoot, file), 'utf8');
     for (const statement of parseMysqlScript(source)) {
+      const alter =
+        /^\s*(?:--[^\n]*\n\s*)*ALTER TABLE\s+(automation_workflow_run|automation_workflow_node_run)\s+([\s\S]+)$/i.exec(
+          statement,
+        );
+      if (alter) {
+        await extendWorkflowTable(connection, alter[1], alter[2]);
+        continue;
+      }
       const match =
         /^\s*(?:--[^\n]*\n\s*)*CREATE TABLE IF NOT EXISTS\s+`?([A-Za-z0-9_]+)`?\s*\(([\s\S]+)\)\s*ENGINE=/i.exec(
           statement,
@@ -194,9 +205,43 @@ export async function ensureAutomationSchema(
       tables.push(table);
     }
   }
-  if (tables.length !== 24 || new Set(tables).size !== 24)
+  if (tables.length !== 28 || new Set(tables).size !== 28)
     throw new Error('自动化模块表数不符合发布契约');
   return tables;
+}
+
+/**
+ * 仅执行版本化工作流增量中的新增字段和索引，重跑跳过已存在项但拒绝结构漂移。
+ * @param connection - 当前目标库的迁移连接。
+ * @param table - 已通过白名单限定的流程或节点运行表。
+ * @param additions - SQL 声明的顶层新增字段与索引列表。
+ * @throws 非新增语句、字段或索引契约冲突时停止迁移。
+ */
+async function extendWorkflowTable(
+  connection: Connection,
+  table: string,
+  additions: string,
+): Promise<void> {
+  for (const addition of splitDefinitions(additions)) {
+    const column = /^ADD COLUMN\s+([A-Za-z0-9_]+)\s+([\s\S]+)$/i.exec(addition);
+    if (column) {
+      if (!(await readAutomationColumns(connection, table)).has(column[1]))
+        await connection.query(`ALTER TABLE \`${table}\` ${addition}`);
+      await verifyTable(connection, table, `${column[1]} ${column[2]}`);
+      continue;
+    }
+    const index = /^ADD INDEX\s+([A-Za-z0-9_]+)\s*(\([A-Za-z0-9_, ]+\))$/i.exec(
+      addition,
+    );
+    if (!index) throw new Error(`工作流增量只允许新增字段或索引：${table}`);
+    const [existing] = await connection.query<RowDataPacket[]>(
+      'SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?',
+      [table, index[1]],
+    );
+    if (!existing.length)
+      await connection.query(`ALTER TABLE \`${table}\` ${addition}`);
+    await verifyTable(connection, table, `KEY ${index[1]} ${index[2]}`);
+  }
 }
 
 /**

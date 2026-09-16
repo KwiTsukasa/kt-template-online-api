@@ -164,7 +164,7 @@ export class ScheduleDispatchService {
   }
 
   /**
-   * 检查启停、重叠与固定准入规则，再用稳定请求身份向任务或工作流发起运行。
+   * 检查启停、重叠与固定准入规则，再以稳定请求身份发起系统工作流，禁止独立动作和业务流程旁路。
    * @param manager - 持有计划锁的连接。
    * @param state - 本轮稳定的计划控制状态。
    * @param row - 已可靠收取但尚未关联目标运行的事件。
@@ -223,44 +223,16 @@ export class ScheduleDispatchService {
       }
       const target = row.definition.target;
       if (!target) throw new BadRequestException('已发布计划缺少执行目标');
-      if (row.status === 'pending' && target.type === 'task') {
-        if (!this.definitions.tasks)
-          throw new BadRequestException('原子任务模块未装配');
-        const capability = await this.definitions.tasks.resolve(
-          target.reference,
-        );
-        if (!capability.available) {
-          await this.finish(manager, row, 'skipped', '执行能力暂不可用');
-          return;
-        }
-      }
+      if (target.type !== 'workflow') throw new BadRequestException('旧计划直接执行动作的路径已停用，请发布工作流计划');
       const input = bindScheduleValues(row.definition.input, occurrence);
       const executionKey = `schedule-${row.scheduleId}-${row.occurrenceId}`;
       if (row.status === 'pending') {
         row.status = 'starting';
         await manager.save(row);
       }
-      let runId: string;
-      if (target.type === 'task') {
-        if (!this.definitions.tasks)
-          throw new BadRequestException('原子任务模块未装配');
-        const run = await this.definitions.tasks.start({
-          taskRef: target.reference,
-          executionKey,
-          input,
-          deadlineAt: row.deadlineAt.getTime(),
-        });
-        runId = run.runId;
-      } else {
-        if (!this.definitions.workflows)
-          throw new BadRequestException('工作流模块未装配');
-        const run = await this.definitions.workflows.start(
-          target.reference,
-          input,
-          executionKey,
-        );
-        runId = run.runId;
-      }
+      if (!this.definitions.workflows) throw new BadRequestException('工作流模块未装配');
+      const run = await this.definitions.workflows.start(target.reference, input, executionKey);
+      const runId = run.runId;
       row.targetRunId = runId;
       row.status = 'running';
       row.errorMessage = null;

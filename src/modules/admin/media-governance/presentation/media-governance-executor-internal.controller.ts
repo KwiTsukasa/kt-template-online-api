@@ -16,6 +16,7 @@ import {
 } from '@/modules/admin/media-governance/contract/media-governance.dto';
 import { MediaGovernanceExecutorInternalGuard } from './media-governance-executor-internal.guard';
 import { MediaGovernanceService } from '@/modules/admin/media-governance/application/media-governance.service';
+import { MediaWorkflowEnvelopeDto } from '../contract/media-workflow.dto';
 
 @Controller('internal/media-governance/executor')
 @UseGuards(MediaGovernanceExecutorInternalGuard)
@@ -28,6 +29,18 @@ import { MediaGovernanceService } from '@/modules/admin/media-governance/applica
 )
 export class MediaGovernanceExecutorInternalController {
   constructor(private readonly service: MediaGovernanceService) {}
+
+  /**
+   * 为工作流一次性脚本读取对应密封信封，私有授权不进入公开的节点输入输出。
+   * @param body - 媒体运行、原工作流步骤与密封摘要。
+   * @param response - 当前内部响应，用于关闭缓存。
+   * @returns 通过当前业务身份核对的执行信封。
+   */
+  @Post('workflow/envelope')
+  async envelope(@Body() body: MediaWorkflowEnvelopeDto, @Res({ passthrough: true }) response: Response) {
+    response.set('Cache-Control', 'no-store');
+    return this.service.workflowEnvelope(body);
+  }
 
   /**
    * 返回执行器回调、描述符兑换和固定零写边界的健康状态。

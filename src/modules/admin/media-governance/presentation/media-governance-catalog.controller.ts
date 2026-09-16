@@ -1,3 +1,4 @@
+import type { AdminUser } from '@/modules/admin/identity/user/admin-user.entity';
 import {
   Body,
   Controller,
@@ -17,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { vbenPage, vbenSuccess } from '@/common';
+import { CurrentAdminUser, vbenPage, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import {
   MediaGovernanceEpisodePageQueryDto,
@@ -186,6 +187,7 @@ export class MediaGovernanceCatalogController {
    * @param workId - Task 所属 Work 标识。
    * @param body - TV Work 的已有季号选择。
    * @param response - 当前 HTTP 响应。
+   * @param user - JWT 守卫确定的创建人。
    * @returns 新建执行 Task。
    */
   @Post(':seriesId/works/:workId/tasks')
@@ -196,10 +198,11 @@ export class MediaGovernanceCatalogController {
     @Param('workId') workId: string,
     @Body() body: MediaGovernanceWorkTaskCreateDto,
     @Res({ passthrough: true }) response: Response,
+    @CurrentAdminUser() user: AdminUser,
   ) {
     this.noStore(response);
     return vbenSuccess(
-      await this.catalog.createWorkTask(seriesId, workId, body),
+      await this.catalog.createWorkTask(seriesId, workId, body, String(user.id)),
     );
   }
 
@@ -283,6 +286,7 @@ export class MediaGovernanceCatalogController {
    * @param seasonNumber - canonical 季号。
    * @param body - 统一分类和最多十六条按集磁链。
    * @param response - 当前 HTTP 响应。
+   * @param user - JWT 守卫确定的创建人。
    * @returns 新建 Task、来源和集绑定。
    */
   @Post(':seriesId/works/:workId/seasons/:seasonNumber/magnet-batch')
@@ -294,6 +298,7 @@ export class MediaGovernanceCatalogController {
     @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
     @Body() body: MediaGovernanceMagnetBatchCreateDto,
     @Res({ passthrough: true }) response: Response,
+    @CurrentAdminUser() user: AdminUser,
   ) {
     this.noStore(response);
     return vbenSuccess(
@@ -302,6 +307,7 @@ export class MediaGovernanceCatalogController {
         workId,
         seasonNumber,
         body,
+        String(user.id),
       ),
     );
   }

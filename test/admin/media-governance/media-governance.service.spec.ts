@@ -1,7 +1,7 @@
+import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { HttpException } from '@nestjs/common';
 import {
   MediaGovernanceService,
-  type MediaGovernanceTask,
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 import { parseTorrentDescriptor } from '../../../src/modules/admin/media-governance/domain/media-torrent-descriptor';
 
@@ -13,7 +13,7 @@ describe('MediaGovernanceService', () => {
   let service: MediaGovernanceService;
 
   beforeEach(() => {
-    service = new MediaGovernanceService();
+    service = createMediaWorkflowFixture();
   });
 
   it('creates one TV task with independent S00 and normal-season units', async () => {
@@ -109,7 +109,7 @@ describe('MediaGovernanceService', () => {
     expect(task.identityPreview.seasonLabel).toBe('电影单元（不使用 S00）');
   });
 
-  it('automatically starts the first pending RSS source inspection', async () => {
+  it('does not start pending RSS source inspection outside the workflow', async () => {
     const task = await service.create({
       mediaType: 'tv',
       operationKind: 'rss-intake-auto',
@@ -124,22 +124,14 @@ describe('MediaGovernanceService', () => {
       seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
-    const inspectSource = jest
-      .spyOn(service, 'inspectSource')
-      .mockResolvedValue(source);
-    const internal = service as unknown as {
-      continueRssIntakePipeline: (
-        task: MediaGovernanceTask,
-      ) => Promise<boolean>;
-    };
-
-    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
-    expect(inspectSource).toHaveBeenCalledWith(task.id, source.id, {
-      expectedRevision: task.revision,
-    });
+    const inspectSource = jest.spyOn(service, 'inspectSource');
+    await service.onModuleInit();
+    expect(inspectSource).not.toHaveBeenCalled();
+    expect(task.activeRunId).toBeNull();
+    expect(source.manifestState).toBe('pending-inspection');
   });
 
-  it('maps an inspected RSS source before probing and downloading it', async () => {
+  it('maps an inspected RSS source without starting probes or downloads', async () => {
     const task = await service.create({
       mediaType: 'tv',
       operationKind: 'rss-intake-auto',
@@ -179,16 +171,8 @@ describe('MediaGovernanceService', () => {
     source.selectedFileIndices = [0, 1, 2];
     source.selectedBytes = 500_502_000;
     source.sourceHealth = 'unchecked';
-    const probeRuntimeSource = jest
-      .spyOn(service, 'probeRuntimeSource')
-      .mockResolvedValue(source);
-    const internal = service as unknown as {
-      continueRssIntakePipeline: (
-        task: MediaGovernanceTask,
-      ) => Promise<boolean>;
-    };
-
-    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    const probeRuntimeSource = jest.spyOn(service, 'probeRuntimeSource');
+    await service.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' });
     expect(source.selectedFileMappings).toEqual([
       expect.objectContaining({
         episodeNumber: 27,
@@ -202,19 +186,8 @@ describe('MediaGovernanceService', () => {
         language: 'zh-CN',
       }),
     ]);
-    expect(probeRuntimeSource).toHaveBeenCalledWith(task.id, source.id, {
-      expectedRevision: task.revision,
-    });
-
-    probeRuntimeSource.mockRestore();
-    source.sourceHealth = 'viable';
-    const startDownload = jest
-      .spyOn(service, 'startDownload')
-      .mockResolvedValue(task);
-    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
-    expect(startDownload).toHaveBeenCalledWith(task.id, {
-      expectedRevision: task.revision,
-    });
+    expect(probeRuntimeSource).not.toHaveBeenCalled();
+    expect(task.activeRunId).toBeNull();
   });
 
   it('recovers an RSS task only after every source proves embedded subtitles', async () => {
@@ -264,23 +237,9 @@ describe('MediaGovernanceService', () => {
     task.units[0].expectedEpisodeNumbers = [45];
     task.runState = 'blocked';
     task.gateReason = 'RSS 来源无法安全自动映射文件';
-    const inspectSource = jest
-      .spyOn(service, 'inspectSource')
-      .mockResolvedValue(second);
-    const internal = service as unknown as {
-      continueRssIntakePipeline: (
-        task: MediaGovernanceTask,
-      ) => Promise<boolean>;
-    };
-
-    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
-    expect(inspectSource).toHaveBeenCalledWith(task.id, second.id, {
-      expectedRevision: task.revision,
-    });
-    expect(task).toMatchObject({ gateReason: null, runState: 'succeeded' });
+    service.normalizeExplicitEmbeddedRssSources(task);
     expect(first.contentKind).toBe('bundled_sidecar_media');
-
-    inspectSource.mockRestore();
+    expect(task.gateReason).toBe('RSS 来源无法安全自动映射文件');
     second.manifestState = 'inspected';
     second.manifest = [
       {
@@ -290,11 +249,10 @@ describe('MediaGovernanceService', () => {
         sizeBytes: 726_872_896,
       },
     ];
-    const probeRuntimeSource = jest
-      .spyOn(service, 'probeRuntimeSource')
-      .mockResolvedValue(first);
+    const probeRuntimeSource = jest.spyOn(service, 'probeRuntimeSource');
 
-    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    service.normalizeExplicitEmbeddedRssSources(task);
+    await service.applyAutomaticSourceSelection(task, { sourceId: first.id, subtitleLanguage: 'zh-CN' });
     expect(task.governanceProfile).toBe('embedded');
     expect(task.sources.map((source) => source.contentKind)).toEqual([
       'embedded_subtitle_media',
@@ -305,9 +263,7 @@ describe('MediaGovernanceService', () => {
     ]);
     expect(second.selectedFileMappings).toEqual([]);
     expect(task.units[0].expectedEpisodeNumbers).toEqual([45]);
-    expect(probeRuntimeSource).toHaveBeenCalledWith(task.id, first.id, {
-      expectedRevision: task.revision,
-    });
+    expect(probeRuntimeSource).not.toHaveBeenCalled();
   });
 
   it('does not retain a partial selection when subtitle contract validation fails', async () => {
@@ -559,6 +515,7 @@ describe('MediaGovernanceService', () => {
       title: '已确认作品名',
     });
 
+    jest.spyOn(service as unknown as { databaseReady: () => boolean }, 'databaseReady').mockReturnValue(true);
     await expect(
       service.discardTask(task.id, { expectedRevision: 1 }),
     ).rejects.toThrow(HttpException);
@@ -585,6 +542,7 @@ describe('MediaGovernanceService', () => {
       sourceRole: 'primary_media',
     });
 
+    jest.spyOn(service as unknown as { databaseReady: () => boolean }, 'databaseReady').mockReturnValue(true);
     await expect(
       service.discardTask(task.id, { expectedRevision: 2 }),
     ).resolves.toEqual({
@@ -615,6 +573,7 @@ describe('MediaGovernanceService', () => {
       discardAllowed: true,
       discardReasonLabel: null,
     });
+    jest.spyOn(service as unknown as { databaseReady: () => boolean }, 'databaseReady').mockReturnValue(true);
     await expect(
       service.discardTask(task.id, { expectedRevision: 2 }),
     ).resolves.toEqual({
@@ -637,7 +596,7 @@ describe('MediaGovernanceService', () => {
     ).rejects.toThrow(HttpException);
   });
 
-  it('resets an unbound legacy metadata residue after its last source is removed', async () => {
+  it('does not clean legacy source state outside an owned workflow step', async () => {
     const task = await service.create({
       mediaType: 'tv',
       seasonNumbers: ['S01'],
@@ -652,26 +611,9 @@ describe('MediaGovernanceService', () => {
     task.stage = 'metadata';
     task.runState = 'blocked';
 
-    await expect(
-      service.removeSource(task.id, source.id, { expectedRevision: 2 }),
-    ).resolves.toMatchObject({
-      revision: 3,
-      runState: 'draft',
-      sources: [],
-      stage: 'intake',
-      units: [
-        expect.objectContaining({
-          evidenceSha256: null,
-          localAcceptedAt: null,
-        }),
-      ],
-    });
-    await expect(
-      service.discardTask(task.id, { expectedRevision: 3 }),
-    ).resolves.toEqual({
-      clearedWorkItemId: null,
-      deletedTaskId: task.id,
-    });
+    const snapshot = structuredClone(task);
+    await expect(service.removeSource(task.id, source.id, { expectedRevision: 2 })).rejects.toThrow('只能由绑定工作流');
+    expect(task).toEqual(snapshot);
   });
 
   it('fails closed when identity correction is stale or execution has begun', async () => {
@@ -768,7 +710,7 @@ describe('MediaGovernanceService', () => {
     }
   });
 
-  it('runs the complete source, subtitle and progress Demo without storing raw trackers', async () => {
+  it('keeps source contracts private and never simulates workflow progress', async () => {
     jest.useFakeTimers();
     try {
       const task = await service.create({
@@ -806,51 +748,12 @@ describe('MediaGovernanceService', () => {
         releaseGroup: 'DBD-Raws',
         sourceId: supplemental.id,
       });
-      await service.inspectSource(task.id, primary.id, { expectedRevision: 4 });
-      await service.updateSourceSelection(task.id, primary.id, {
-        expectedRevision: 5,
-        fileMappings: [
-          {
-            episodeNumber: 1,
-            fileRole: 'video',
-            index: 0,
-            unitId: task.units[0].id,
-          },
-        ],
-        selectedFileIndices: [0],
-      });
-      await service.probeRuntimeSource(task.id, primary.id, {
-        expectedRevision: 6,
-      });
-      await service.inspectSource(task.id, supplemental.id, {
-        expectedRevision: 7,
-      });
-      await service.updateSourceSelection(task.id, supplemental.id, {
-        expectedRevision: 8,
-        fileMappings: [
-          {
-            episodeNumber: 1,
-            fileRole: 'subtitle',
-            index: 0,
-            language: 'zh-CN',
-            unitId: task.units[0].id,
-          },
-        ],
-        selectedFileIndices: [0],
-      });
-      await service.probeRuntimeSource(task.id, supplemental.id, {
-        expectedRevision: 9,
-      });
-      await service.startDownload(task.id, { expectedRevision: 10 });
+      const snapshot = structuredClone(task);
+      await expect(service.inspectSource(task.id, primary.id, { expectedRevision: task.revision })).rejects.toThrow('只能由绑定工作流');
+      await expect(service.startDownload(task.id, { expectedRevision: task.revision })).rejects.toThrow('只能由绑定工作流');
       jest.advanceTimersByTime(1_000);
-      await Promise.resolve();
-
-      expect(service.detail(task.id)).toMatchObject({
-        progress: { percent: 100, progressLabel: '来源载荷已就绪' },
-        runState: 'succeeded',
-        stage: 'download',
-      });
-      expect(service.summary()).toMatchObject({ downloading: 0, total: 1 });
+      expect(task).toEqual(snapshot);
+      expect(task.progress.percent).toBe(0);
     } finally {
       jest.useRealTimers();
     }

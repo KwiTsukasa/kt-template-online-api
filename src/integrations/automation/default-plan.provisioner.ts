@@ -1,3 +1,5 @@
+import { WORKFLOW_DEFINITIONS, type WorkflowDefinitionProvisionPort } from '@/modules/workflow-engine/contract/workflow-provision.port';
+import { defaultActionWorkflow } from './default-action-workflow';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   TASK_DEFINITIONS,
@@ -40,12 +42,13 @@ export class DefaultPlanProvisioner {
     @Inject(SCHEDULE_DEFINITIONS)
     private readonly schedules: ScheduleDefinitionProvisionPort,
     @Inject(SCHEDULE_PLANS) private readonly control: SchedulePlanPort,
+    @Inject(WORKFLOW_DEFINITIONS) private readonly workflows: WorkflowDefinitionProvisionPort,
   ) {}
 
   /**
-   * 经三个领域自己的端口建立独立默认资源；启停修订为零才应用默认启用，保留管理员停用和编辑。
+   * 经公开端口建立动作、标准流程、触发器及计划，计划仅引用流程，保留管理员的启停和编辑。
    * @param seed - 业务来源身份、执行能力与初始触发建议。
-   * @returns 所属模块分配的任务、触发器和计划身份。
+   * @returns 所属模块分配的动作、流程、触发器和计划身份。
    * @throws 资源缺少发布版本或初始依赖不合法时拒绝继续激活。
    */
   async ensure(seed: DefaultPlanSeed) {
@@ -76,6 +79,13 @@ export class DefaultPlanProvisioner {
     });
     if (!task.document.publishedVersion || !trigger.document.publishedVersion)
       throw new Error('默认资源尚未发布，保留草稿等待配置');
+    const workflow = await this.workflows.provision({
+      sourceKey: (seed.taskSourceKey || seed.sourceKey + ':task') + ':workflow',
+      name: seed.name + ' · 工作流',
+      description: seed.description,
+      definition: defaultActionWorkflow({ id: task.document.id, version: task.document.publishedVersion }, handler),
+    });
+    if (!workflow.document.publishedVersion) throw new Error('默认工作流尚未发布');
     const schedule = await this.schedules.provision({
       sourceKey: seed.sourceKey + ':schedule',
       name: seed.name + ' · 计划',
@@ -87,10 +97,10 @@ export class DefaultPlanProvisioner {
           version: trigger.document.publishedVersion,
         },
         target: {
-          type: 'task',
+          type: 'workflow',
           reference: {
-            id: task.document.id,
-            version: task.document.publishedVersion,
+            id: workflow.document.id,
+            version: workflow.document.publishedVersion,
           },
         },
         input: seed.input || {},
@@ -113,6 +123,7 @@ export class DefaultPlanProvisioner {
     }
     return {
       taskId: task.document.id,
+      workflowId: workflow.document.id,
       triggerId: trigger.document.id,
       scheduleId: schedule.document.id,
     };

@@ -1,3 +1,4 @@
+import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { MEDIA_GOVERNANCE_EXECUTOR_ACTIONS } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 import { sha256MediaGovernanceJson } from '../../../src/modules/admin/media-governance/contract/media-governance-hash';
 import {
@@ -6,7 +7,6 @@ import {
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 import type {
   MediaGovernanceExecutionEnvelope,
-  MediaGovernanceExecutionGateway,
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
 import type {
   MediaGovernanceStateStore,
@@ -16,10 +16,10 @@ import type { MediaScrapeValidationSink } from '../../../src/modules/admin/media
 
 describe('MediaGovernanceService mechanical execution', () => {
   /**
-   * 构造带持久化、执行网关与独立刮削登记器的最小生产执行夹具。
+   * 构造带持久化预留与独立刮削登记器的领域夹具，不装配媒体派发网关。
    * @param storedTasks - 服务启动时需要恢复的历史任务。
    * @param sink - 机械关闭后接收只读快照的独立刮削登记器。
-   * @returns 服务、派发记录、状态仓和刮削登记器。
+   * @returns 服务、预留记录、状态仓和刮削登记器。
    */
   function fixture(
     storedTasks: MediaGovernanceStoredTask[] = [],
@@ -29,14 +29,8 @@ describe('MediaGovernanceService mechanical execution', () => {
   ) {
     const sequences = new Map<string, number>();
     const envelopes = new Map<string, MediaGovernanceExecutionEnvelope>();
-    const dispatch = jest.fn(
-      async (envelope: MediaGovernanceExecutionEnvelope) => ({
-        executionId: `jenkins-${envelope.runId}`,
-        replayed: false,
-        runId: envelope.runId,
-        sealedInputSha256: envelope.sealedInputSha256,
-        status: 'queued' as const,
-      }),
+    const reserveEnvelope = jest.fn<Promise<void>, [MediaGovernanceExecutionEnvelope]>(
+      async () => undefined,
     );
     const stateStore: MediaGovernanceStateStore = {
       acknowledgeRunDispatch: jest.fn(async () => undefined),
@@ -52,40 +46,20 @@ describe('MediaGovernanceService mechanical execution', () => {
       recordRunDispatchFailure: jest.fn(async () => 1),
       reserveRunDispatch: jest.fn(async (_task, envelope) => {
         envelopes.set(envelope.runId, envelope);
+        await reserveEnvelope(envelope);
       }),
       saveTask: jest.fn(async () => undefined),
-    };
-    const gateway: MediaGovernanceExecutionGateway = {
-      control: jest.fn(async (input) => ({
-        command: input.command,
-        controlId: input.controlId,
-        replayed: false,
-        runId: input.runId,
-        status: 'accepted' as const,
-      })),
-      dispatch,
-      enabled: () => true,
-      status: jest.fn(async (input) => ({
-        activeState: 'active',
-        exitCode: 0,
-        result: '',
-        runId: input.runId,
-        runnerId: null,
-        sealedInputSha256: input.sealedInputSha256,
-        status: 'running' as const,
-        subState: 'running',
-        taskId: input.taskId,
-      })),
+      createTask: jest.fn(async (_task, enroll) => enroll({} as never)),
     };
     const service = new MediaGovernanceService(
       undefined,
       undefined,
       stateStore,
-      gateway,
       undefined,
       sink,
     );
-    return { dispatch, gateway, service, sink, stateStore };
+    service.connectWorkflowCreation(async () => undefined, async () => undefined);
+    return { reserveEnvelope, service, sink, stateStore };
   }
 
   /**
@@ -155,6 +129,7 @@ describe('MediaGovernanceService mechanical execution', () => {
       releaseYear: 2026,
       seasonNumbers: ['S02'],
       titleHint: '机械治理闭环测试',
+      workId: 'media-work-mechanical-test',
     });
     task.governanceProfile = 'embedded';
     task.workItemId = 'media-063';
@@ -167,18 +142,19 @@ describe('MediaGovernanceService mechanical execution', () => {
   }
 
   /**
-   * 应用治理成功事件并返回自动预约的机械验收信封。
+   * 核对治理成功没有自动续步，再由工作流上下文显式准备机械验收。
    * @param service - 当前媒体治理服务。
-   * @param dispatch - 记录执行信封的网关方法。
+   * @param reserveEnvelope - 记录密封信封的持久化预留方法。
    * @param task - 位于治理执行 Run 中的任务。
-   * @returns 自动预约的机械验收执行信封。
+   * @returns 工作流显式准备的机械验收执行信封。
    */
   async function completeGovernance(
     service: MediaGovernanceService,
-    dispatch: jest.Mock,
+    reserveEnvelope: jest.Mock,
     task: MediaGovernanceTask,
   ) {
     const runId = task.activeRunId!;
+    const reservationsBefore = reserveEnvelope.mock.calls.length;
     await service.applyExecutorEvent({
       action: 'governance.execute',
       eventType: 'run-started',
@@ -200,14 +176,19 @@ describe('MediaGovernanceService mechanical execution', () => {
       taskId: task.id,
       taskRevision: 2,
     });
-    return dispatch.mock.calls.at(-1)![0] as MediaGovernanceExecutionEnvelope;
+    expect(reserveEnvelope).toHaveBeenCalledTimes(reservationsBefore);
+    expect(task.activeRunId).toBeNull();
+    await service.startAcceptanceVerification(task.id, { expectedRevision: task.revision }, {
+      executionKey: 'workflow:mechanical-test:' + task.id,
+      business: { scopeId: task.workId!, subjectId: task.id, revision: task.revision },
+    });
+    return reserveEnvelope.mock.calls.at(-1)![0] as MediaGovernanceExecutionEnvelope;
   }
 
   it.each(['inspect', 'probe', 'download', 'governance', 'remove'])(
     'rejects persisted %s work instead of falling back to simulated success',
     async (operation) => {
-      const { gateway, service, stateStore } = fixture();
-      gateway.enabled = () => false;
+      const { service, stateStore } = fixture();
       const task = await service.create({
         mediaType: 'movie',
         titleHint: '正式任务禁止模拟',
@@ -230,8 +211,8 @@ describe('MediaGovernanceService mechanical execution', () => {
         attempt = service.removeSource(task.id, 'source-unavailable', input);
       else attempt = service.startGovernance(task.id, input);
       await expect(attempt).rejects.toMatchObject({
-        status: 503,
-        response: { msg: '媒体执行器暂不可用，不能使用模拟执行' },
+        status: 409,
+        response: '媒体步骤只能由绑定工作流准备和执行',
       });
       expect(task).toEqual(before);
       expect(stateStore.saveTask).not.toHaveBeenCalled();
@@ -241,9 +222,9 @@ describe('MediaGovernanceService mechanical execution', () => {
   it.each([0, 2])(
     'rejects acceptance count %s when the plan seals one file',
     async (acceptedFiles) => {
-      const { dispatch, service, stateStore, sink } = fixture();
+      const { reserveEnvelope, service, stateStore, sink } = fixture();
       const task = await createRunningGovernanceTask(service);
-      const envelope = await completeGovernance(service, dispatch, task);
+      const envelope = await completeGovernance(service, reserveEnvelope, task);
       const before = structuredClone(task);
       jest.mocked(stateStore.applyExecutorEvent!).mockClear();
       await expect(
@@ -280,12 +261,12 @@ describe('MediaGovernanceService mechanical execution', () => {
     },
   );
 
-  it('continues governance success directly to mechanical acceptance', async () => {
-    const { dispatch, service } = fixture();
+  it('waits for the workflow to prepare mechanical acceptance after governance succeeds', async () => {
+    const { reserveEnvelope, service } = fixture();
     await service.onModuleInit();
     const task = await createRunningGovernanceTask(service);
 
-    const acceptance = await completeGovernance(service, dispatch, task);
+    const acceptance = await completeGovernance(service, reserveEnvelope, task);
 
     expect(acceptance).toMatchObject({
       action: 'acceptance.verify',
@@ -298,14 +279,14 @@ describe('MediaGovernanceService mechanical execution', () => {
       stage: 'acceptance',
     });
     expect(
-      dispatch.mock.calls.map(([envelope]) => envelope.action),
+      reserveEnvelope.mock.calls.map(([envelope]) => envelope.action),
     ).not.toEqual(
       expect.arrayContaining(['metadata.verify', 'metadata.repair']),
     );
   });
 
   it('serves real HTTP failures without closing a task, then accepts the exact mechanical file count', async () => {
-    const { dispatch, gateway, service } = fixture();
+    const { reserveEnvelope, service } = fixture();
     const secret = 'f'.repeat(64);
     const moduleRef = await Test.createTestingModule({
       controllers: [
@@ -332,14 +313,12 @@ describe('MediaGovernanceService mechanical execution', () => {
     await app.listen(0, '127.0.0.1');
     try {
       const task = await createRunningGovernanceTask(service);
-      gateway.enabled = () => false;
       const unavailable = await request(app.getHttpServer())
         .post(`/media-governance/tasks/${task.id}/governance/start`)
         .send({ expectedRevision: task.revision })
-        .expect(503);
-      expect(unavailable.body.msg).toContain('不能使用模拟执行');
-      gateway.enabled = () => true;
-      const envelope = await completeGovernance(service, dispatch, task);
+        .expect(409);
+      expect(unavailable.body.message).toContain('只能由绑定工作流');
+      const envelope = await completeGovernance(service, reserveEnvelope, task);
       const body = {
         acceptance: {
           acceptedFiles: 0,
@@ -385,10 +364,10 @@ describe('MediaGovernanceService mechanical execution', () => {
     const sink: MediaScrapeValidationSink = {
       enqueueTask: jest.fn(async () => undefined),
     };
-    const { dispatch, service } = fixture([], sink);
+    const { reserveEnvelope, service } = fixture([], sink);
     await service.onModuleInit();
     const task = await createRunningGovernanceTask(service);
-    const acceptance = await completeGovernance(service, dispatch, task);
+    const acceptance = await completeGovernance(service, reserveEnvelope, task);
 
     await service.applyExecutorEvent({
       action: 'acceptance.verify',
@@ -443,10 +422,10 @@ describe('MediaGovernanceService mechanical execution', () => {
         throw new Error('scrape-store-unavailable');
       }),
     };
-    const { dispatch, service } = fixture([], sink);
+    const { reserveEnvelope, service } = fixture([], sink);
     await service.onModuleInit();
     const task = await createRunningGovernanceTask(service);
-    const acceptance = await completeGovernance(service, dispatch, task);
+    const acceptance = await completeGovernance(service, reserveEnvelope, task);
 
     await service.applyExecutorEvent({
       acceptance: {
@@ -479,7 +458,7 @@ describe('MediaGovernanceService mechanical execution', () => {
   });
 
   it('migrates a legacy metadata boundary to mechanical acceptance only', async () => {
-    const seedService = new MediaGovernanceService();
+    const seedService = createMediaWorkflowFixture();
     const task = await seedService.create({
       mediaType: 'movie',
       providerRef: { provider: 'tmdb', providerId: '1390384' },
@@ -492,18 +471,17 @@ describe('MediaGovernanceService mechanical execution', () => {
     task.runState = 'blocked';
     task.stage = 'metadata';
     const stored = structuredClone(task) as MediaGovernanceStoredTask;
-    const { dispatch, service, stateStore } = fixture([stored]);
+    const { reserveEnvelope, service, stateStore } = fixture([stored]);
 
     await service.onModuleInit();
     const restored = service.detail(task.id);
 
     expect(stateStore.saveTask).toHaveBeenCalled();
     expect(restored.stage).toBe('acceptance');
-    expect(restored.runState).toBe('queued');
+    expect(restored.runState).toBe('succeeded');
     expect(restored.gateReason).toBeNull();
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'acceptance.verify' }),
-    );
+    expect(reserveEnvelope).not.toHaveBeenCalled();
+    expect(restored.activeRunId).toBeNull();
     expect(restored.units[0]!.evidenceSha256).toBeNull();
   });
 

@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
-import { MEDIA_RSS_OPERATIONS, MEDIA_EXECUTION_OPERATIONS } from './contract/media-automation.port';
+import { MEDIA_RSS_OPERATIONS } from './contract/media-automation.port';
+import { MEDIA_WORKFLOW } from './contract/media-workflow.port';
+import { MediaGovernanceWorkflow } from './application/media-governance.workflow';
+import { MediaWorkflowService } from './application/media-workflow.service';
+import { MediaWorkflowController } from './presentation/media-workflow.controller';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
@@ -16,10 +20,6 @@ import { MediaGovernanceService } from '@/modules/admin/media-governance/applica
 import { MediaGovernanceExecutorInternalController } from '@/modules/admin/media-governance/presentation/media-governance-executor-internal.controller';
 import { MediaGovernanceExecutorInternalGuard } from '@/modules/admin/media-governance/presentation/media-governance-executor-internal.guard';
 import {
-  MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
-  MediaGovernanceExecutionGatewayClient,
-} from '@/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
-import {
   MEDIA_GOVERNANCE_STATE_STORE,
   MediaGovernanceTypeOrmStateStore,
 } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
@@ -32,8 +32,9 @@ import { MediaGovernanceCatalogService } from '@/modules/admin/media-governance/
 import { AdminMediaScrapeValidationModule } from '@/modules/admin/media-scrape-validation/admin-media-scrape-validation.module';
 
 @Module({
-  exports: [MEDIA_RSS_OPERATIONS, MEDIA_EXECUTION_OPERATIONS],
+  exports: [MEDIA_RSS_OPERATIONS, MEDIA_WORKFLOW],
   controllers: [
+    MediaWorkflowController,
     MediaGovernanceExecutorInternalController,
     MediaGovernanceCatalogController,
     MediaGovernanceController,
@@ -50,13 +51,10 @@ import { AdminMediaScrapeValidationModule } from '@/modules/admin/media-scrape-v
   ],
   providers: [
     { provide: MEDIA_RSS_OPERATIONS, useExisting: MediaGovernanceCatalogService },
-    { provide: MEDIA_EXECUTION_OPERATIONS, useExisting: MediaGovernanceService },
+    { provide: MEDIA_WORKFLOW, useExisting: MediaWorkflowService },
+    MediaGovernanceWorkflow,
+    MediaWorkflowService,
     MediaGovernanceExecutorInternalGuard,
-    MediaGovernanceExecutionGatewayClient,
-    {
-      provide: MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
-      useExisting: MediaGovernanceExecutionGatewayClient,
-    },
     MediaDescriptorStore,
     MediaGovernanceCatalogService,
     MediaGovernanceEventStreamService,

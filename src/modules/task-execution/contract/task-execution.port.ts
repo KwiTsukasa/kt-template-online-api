@@ -30,6 +30,7 @@ export type AtomicTaskResult = {
 };
 export const TASK_EXECUTION = Symbol('TASK_EXECUTION');
 export interface TaskExecutionPort {
+  process: (runId: string, canExecute: () => Promise<boolean>) => Promise<void>;
   resolve: (reference: PublishedReference) => Promise<TaskCapability>;
   start: (request: TaskExecutionRequest) => Promise<AtomicRunView>;
   read: (runId: string) => Promise<AtomicRunView>;

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { DataSource, In, LessThanOrEqual } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
 import { validateDataValues } from '@/common/automation/data-schema';
 import {
@@ -54,6 +54,7 @@ export class TaskExecutionService implements TaskExecutionPort {
    */
   async start(request: TaskExecutionRequest): Promise<AtomicRunView> {
     validateDefinitionInput(() => definitionRecord(request));
+    if (!request.parentRunId || !request.nodeId) throw new BadRequestException('内置动作只能由工作流活动发起');
     const reference = validateDefinitionInput(() =>
       publishedReference(request.taskRef),
     );
@@ -245,30 +246,12 @@ export class TaskExecutionService implements TaskExecutionPort {
   }
 
   /**
-   * 从数据库列出应唤醒的运行，队列消息丢失或进程重启后仍能重新发现。
-   * @returns 有界运行标识列表。
-   */
-  async pendingRunIds(): Promise<string[]> {
-    const rows = await this.database
-      .getRepository(AtomicTaskRun)
-      .find({
-        where: [
-          { status: 'pending', nextAttemptAt: LessThanOrEqual(new Date()) },
-          { status: 'running' },
-        ],
-        order: { nextAttemptAt: 'ASC' },
-        take: 100,
-        select: { id: true },
-      });
-    return rows.map((row) => row.id);
-  }
-
-  /**
    * 在与原任务锁互通的独占连接内推进一次运行，崩溃遗留的副作用不会自动重放。
    * @param runId - 已落盘的运行标识。
+   * @param canExecute - 工作流对父实例和活动令牌的持续授权检查。
    * @throws 无法持久化执行状态时让队列保留失败证据。
    */
-  async process(runId: string): Promise<void> {
+  async process(runId: string, canExecute: () => Promise<boolean>): Promise<void> {
     const repository = this.database.getRepository(AtomicTaskRun);
     const snapshot = await repository.findOneBy({ id: runId });
     if (!snapshot || !['pending', 'running'].includes(snapshot.status)) return;
@@ -288,7 +271,7 @@ export class TaskExecutionService implements TaskExecutionPort {
         await this.failInterrupted(run);
         return;
       }
-      if (run.cancelRequested) {
+      if (run.cancelRequested || !(await canExecute())) {
         await repository.update(
           { id: run.id },
           { status: 'cancelled', finishedAt: new Date() },
@@ -327,6 +310,7 @@ export class TaskExecutionService implements TaskExecutionPort {
           'SELECT IS_USED_LOCK(?) = CONNECTION_ID() AS owned',
           [lock],
         );
+        if (!(await canExecute())) await repository.update({ id: run.id }, { cancelRequested: true });
         return Number(rows[0]?.owned) === 1;
       });
     } finally {
@@ -441,7 +425,7 @@ export class TaskExecutionService implements TaskExecutionPort {
           if (!current || !(await ownsLock())) {
             controlFailure = true;
             controller.abort();
-          } else if (current.cancelRequested) {
+          } else if (current.cancelRequested || (await runs.findOneBy({ id: run.id }))?.cancelRequested) {
             cancellation = true;
             controller.abort();
           }

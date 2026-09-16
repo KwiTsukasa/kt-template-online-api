@@ -86,19 +86,11 @@ export class ScheduleDefinitionService {
     } as import('@/common/automation/data-schema').DataSchema;
     if (trigger.trigger.type === 'event')
       eventSchema = trigger.trigger.payloadSchema;
-    let inputSchema: import('@/common/automation/data-schema').DataSchema;
-    if (definition.target.type === 'task') {
-      if (!this.tasks) throw new BadRequestException('原子任务执行模块未装配');
-      const task = await this.tasks.resolve(definition.target.reference);
-      if (!task.available)
-        throw new BadRequestException('原子任务处理器当前不可用');
-      inputSchema = task.inputSchema;
-    } else {
-      if (!this.workflows)
-        throw new BadRequestException('工作流执行模块未装配');
-      inputSchema = (await this.workflows.resolve(definition.target.reference))
-        .graph.inputSchema;
-    }
+    if (definition.target.type !== 'workflow') throw new BadRequestException('计划只能发起工作流，内置动作必须放在流程服务任务中');
+    if (!this.workflows) throw new BadRequestException('工作流执行模块未装配');
+    const contract = await this.workflows.contract(definition.target.reference);
+    if (contract.processRef) throw new BadRequestException('业务流程必须由对应业务入口创建，计划不能绕过业务上下文');
+    const inputSchema = contract.inputSchema;
     validateDefinitionInput(() =>
       validateScheduleBindings(definition.input, inputSchema, eventSchema),
     );

@@ -1,18 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { validateDataValues } from '@/common/automation/data-schema';
-import { DefinitionRepository, validateDefinitionInput } from '@/common/automation/definition.repository';
-import { publishedReference, type PublishedReference } from '@/common/automation/definition.types';
-import type { FormDefinition, FormDefinitionPort } from '../contract/form.types';
-import { normalizeFormDefinition } from '../domain/form.policy';
-import { FormDraft, FormRevision } from '../infrastructure/persistence/form.entities';
+import {
+  DefinitionRepository,
+  validateDefinitionInput,
+} from '@/common/automation/definition.repository';
+import {
+  publishedReference,
+  type PublishedReference,
+} from '@/common/automation/definition.types';
+import type {
+  FormDefinition,
+  FormDefinitionPort,
+} from '../contract/form.types';
+import {
+  normalizeFormDefinition,
+  validateFormValues,
+} from '../domain/form.policy';
+import {
+  FormDraft,
+  FormRevision,
+} from '../infrastructure/persistence/form.entities';
 
 @Injectable()
 export class FormDefinitionService implements FormDefinitionPort {
   readonly definitions: DefinitionRepository<FormDefinition>;
 
   constructor(database: DataSource) {
-    this.definitions = new DefinitionRepository(database, FormDraft, FormRevision, normalizeFormDefinition);
+    this.definitions = new DefinitionRepository(
+      database,
+      FormDraft,
+      FormRevision,
+      normalizeFormDefinition,
+    );
   }
 
   /**
@@ -21,7 +40,9 @@ export class FormDefinitionService implements FormDefinitionPort {
    * @returns 不包含任何实例填写数据的表单定义。
    */
   async resolve(reference: PublishedReference) {
-    return this.definitions.published(validateDefinitionInput(() => publishedReference(reference)));
+    return this.definitions.published(
+      validateDefinitionInput(() => publishedReference(reference)),
+    );
   }
 
   /**
@@ -31,9 +52,15 @@ export class FormDefinitionService implements FormDefinitionPort {
    * @param writableFields - 由消费方身份策略决定的可写字段。
    * @returns 经严格校验的表单数据。
    */
-  async validate(reference: PublishedReference, input: unknown, writableFields?: readonly string[]) {
+  async validate(
+    reference: PublishedReference,
+    input: unknown,
+    writableFields?: readonly string[],
+  ) {
     const definition = await this.resolve(reference);
-    return validateDefinitionInput(() => validateDataValues(definition.dataSchema, input, writableFields));
+    return validateDefinitionInput(() =>
+      validateFormValues(definition, input, writableFields),
+    );
   }
 
   /**
@@ -45,7 +72,7 @@ export class FormDefinitionService implements FormDefinitionPort {
   preview(input: unknown, values: unknown) {
     return validateDefinitionInput(() => {
       const definition = normalizeFormDefinition(input);
-      return { definition, values: validateDataValues(definition.dataSchema, values) };
+      return { definition, values: validateFormValues(definition, values) };
     });
   }
 }

@@ -40,6 +40,9 @@ export type MediaGovernanceStoredTask = Omit<
 >;
 
 export interface MediaGovernanceStateStore {
+  readWorkflowTask?(taskId: string, manager?: EntityManager): Promise<MediaGovernanceStoredTask | null>;
+  readWorkflowEvidence?(runId: string): Promise<{ taskId: string; status: string; evidenceSha256: string | null } | null>;
+  stopWorkflowRun?(task: MediaGovernanceTask, runId: string, executionKey: string, status: 'failed' | 'cancelled'): Promise<boolean>;
   acknowledgeRunDispatch?(runId: string, executionId: string): Promise<void>;
   applyExecutorEvent?(
     task: MediaGovernanceTask,
@@ -59,6 +62,7 @@ export interface MediaGovernanceStateStore {
     taskId: string;
   }): Promise<Record<string, unknown>>;
   deleteTask?(input: {
+    beforeDelete?: (manager: EntityManager) => Promise<void>;
     expectedRevision: number;
     expectedWorkItemId: null | string;
     taskId: string;
@@ -86,6 +90,7 @@ export interface MediaGovernanceStateStore {
     descriptorRevision: number,
   ): Promise<string>;
   saveTask(task: MediaGovernanceTask): Promise<void>;
+  createTask?(task: MediaGovernanceTask, enroll: (manager: EntityManager) => Promise<void>): Promise<void>;
 }
 
 @Injectable()
@@ -119,6 +124,69 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
    */
   isReady() {
     return this.ready;
+  }
+
+  /**
+   * 为工作流步骤重读指定 Task 及关联事实，避免沿用另一实例回调前的内存修订。
+   * @param taskId - 业务已确认的媒体 Task 身份。
+   * @param manager - 可选的业务创建事务，读取尚未提交的新 Task。
+   * @returns 持久化业务快照，任务不存在时返回空值。
+   */
+  async readWorkflowTask(taskId: string, manager: EntityManager = this.dataSource.manager): Promise<MediaGovernanceStoredTask | null> {
+    this.assertReady();
+    const task = await manager.getRepository(MediaGovernanceTaskEntity).findOneBy({ id: taskId });
+    if (!task?.workId || !task.seriesId) return null;
+    const work = await manager.getRepository(MediaGovernanceWorkEntity).findOneBy({ id: task.workId, seriesId: task.seriesId, status: 'active' });
+    if (!work) return null;
+    const [units, sources] = await Promise.all([
+      manager.getRepository(MediaGovernanceUnitEntity).findBy({ taskId }),
+      manager.getRepository(MediaGovernanceSourceEntity).findBy({ taskId }),
+    ]);
+    let descriptors: MediaGovernanceDescriptorRevisionEntity[] = [];
+    if (sources.length) descriptors = await manager.getRepository(MediaGovernanceDescriptorRevisionEntity).find({
+      where: sources.map((source) => ({ sourceId: source.id })),
+    });
+    return this.restoreTask(task, units, sources, descriptors);
+  }
+
+  /**
+   * 只读取媒体步骤已持久化的终态证据，不以热层百分比或脚本自报代替领域结果。
+   * @param runId - 密封媒体步骤运行身份。
+   * @returns 任务归属、状态及实际证据摘要，运行不存在时为空。
+   */
+  async readWorkflowEvidence(runId: string) {
+    this.assertReady();
+    const run = await this.dataSource.getRepository(MediaGovernanceRunEntity).findOneBy({ id: runId });
+    if (!run) return null;
+    return { taskId: run.taskId, status: run.status, evidenceSha256: run.evidenceSha256 };
+  }
+
+  /**
+   * 在媒体运行锁内释放同一工作流步骤的占用，已收到领域终态的运行保持原证据。
+   * @param task - 停止后的媒体业务投影。
+   * @param runId - 原密封媒体步骤身份。
+   * @param executionKey - 创建该步骤的工作流执行键。
+   * @param status - 工作流确认脚本退出后的失败或取消终态。
+   * @returns 本次写入停止结果时为真，已经收尾时为假。
+   * @throws 媒体运行不属于该业务对象或工作流步骤时拒绝写入。
+   */
+  async stopWorkflowRun(task: MediaGovernanceTask, runId: string, executionKey: string, status: 'failed' | 'cancelled') {
+    this.assertReady();
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(MediaGovernanceRunEntity);
+      const run = await repository.findOne({ where: { id: runId }, lock: { mode: 'pessimistic_write' } });
+      if (!run || run.taskId !== task.id || run.replayKey !== executionKey)
+        throw new Error('media-workflow-stop-identity-mismatch');
+      if (run.finishedAt) return false;
+      const stored = await manager.getRepository(MediaGovernanceTaskEntity).findOne({ where: { id: task.id }, lock: { mode: 'pessimistic_write' } });
+      if (!stored || stored.activeRunId !== runId || stored.revision !== task.revision - 1)
+        throw new Error('media-workflow-stop-task-drift');
+      await this.saveTaskWithManager(manager, task);
+      run.status = status;
+      run.finishedAt = new Date();
+      await repository.save(run);
+      return true;
+    });
   }
 
   /**
@@ -158,6 +226,19 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     await this.dataSource.transaction((manager) =>
       this.saveTaskWithManager(manager, task),
     );
+  }
+
+  /**
+   * 在同一事务内插入完整任务和流程实例，失败时两者一并回滚。
+   * @param task - 已收集来源与季集身份的新任务。
+   * @param enroll - 使用同一事务建立关联及工作流实例的回调。
+   */
+  async createTask(task: MediaGovernanceTask, enroll: (manager: EntityManager) => Promise<void>) {
+    this.assertReady();
+    await this.dataSource.transaction(async (manager) => {
+      await this.saveTaskWithManager(manager, task);
+      await enroll(manager);
+    });
   }
 
   /**
@@ -208,6 +289,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
    * @returns 根据任务版本和工作项身份校验结果，事务性删除完整任务账本。
    */
   async deleteTask(input: {
+    beforeDelete?: (manager: EntityManager) => Promise<void>;
     expectedRevision: number;
     expectedWorkItemId: null | string;
     taskId: string;
@@ -226,6 +308,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       ) {
         throw new Error('media-governance-task-delete-identity-mismatch');
       }
+      await input.beforeDelete?.(manager);
       const clearedWorkItemId = await this.deleteTaskLedgerWithManager(
         manager,
         task,
@@ -292,11 +375,17 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       task.activeRunId !== envelope.runId ||
       task.id !== envelope.taskId ||
       task.revision !== envelope.taskRevision ||
-      task.inputSnapshotSha256 !== envelope.inputSnapshotSha256
+      task.inputSnapshotSha256 !== envelope.inputSnapshotSha256 ||
+      !envelope.replayKey.startsWith('workflow:')
     ) {
       throw new Error('media-governance-run-reservation-identity-mismatch');
     }
     await this.dataSource.transaction(async (manager) => {
+      const current = await manager.getRepository(MediaGovernanceTaskEntity).findOne({
+        where: { id: task.id }, lock: { mode: 'pessimistic_write' },
+      });
+      if (!current || current.activeRunId || current.revision !== envelope.taskRevision - 1)
+        throw new Error('media-workflow-reservation-task-drift');
       await this.saveTaskWithManager(manager, task);
       await manager.getRepository(MediaGovernanceRunEntity).insert(
         manager.getRepository(MediaGovernanceRunEntity).create({
@@ -332,7 +421,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       await manager.getRepository(MediaGovernanceOutboxEntity).insert(
         manager.getRepository(MediaGovernanceOutboxEntity).create({
           attempts: 0,
-          executionId: null,
+          executionId: envelope.replayKey,
           flowId: envelope.flowId,
           id: envelope.runId,
           idempotencyKey: envelope.replayKey,

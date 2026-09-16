@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   Param,
   Post,
+  Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -17,22 +20,75 @@ import {
 import { DefinitionController } from '@/common/automation/definition.controller';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { WorkflowDefinitionService } from '../application/workflow-definition.service';
-import type { WorkflowDefinition } from './workflow.types';
-import type { PublishedReference } from '@/common/automation/definition.types';
+import type { WorkflowDocument } from './workflow.types';
 import { WorkflowExecutionService } from '../application/workflow-execution.service';
+import { WorkflowProcessRegistry } from '../application/workflow-process.registry';
+import { WorkflowScriptRegistry } from '../application/workflow-script.registry';
+import { WorkflowScriptAssetsService } from '../application/workflow-script-assets.service';
+import { exportWorkflowBpmnXml } from '../domain/workflow-bpmn.policy';
+import type { WorkflowBpmnDefinition } from './workflow-bpmn.types';
 
 @ApiTags('自动化工作流')
 @Controller('automation/workflows')
 @UseGuards(JwtAuthGuard, AutomationPermissionGuard)
 @AutomationResource('Workflow')
-export class WorkflowController extends DefinitionController<WorkflowDefinition> {
+export class WorkflowController extends DefinitionController<WorkflowDocument> {
   constructor(
     private readonly workflows: WorkflowDefinitionService,
     private readonly execution: WorkflowExecutionService,
+    private readonly processes: WorkflowProcessRegistry,
+    private readonly scripts: WorkflowScriptRegistry,
+    private readonly scriptAssets: WorkflowScriptAssetsService,
   ) {
     super(workflows.definitions, (definition) =>
       workflows.checkForPublish(definition),
     );
+  }
+
+  /**
+   * 向编排器提供已装配业务接口及单步能力，业务实现不暴露可直接发起的执行路由。
+   * @returns 固定版本的业务流程能力目录。
+   */
+  @Get('processes')
+  @AutomationAction('List')
+  processCatalog() {
+    return vbenSuccess(this.processes.catalog());
+  }
+
+  /**
+   * 返回固定版本脚本及其扩展参数声明，供编排器选择和自动生成配置表单。
+   * @returns 不含源码和主机路径的脚本目录。
+   */
+  @Get('scripts')
+  @AutomationAction('List')
+  scriptCatalog() {
+    return vbenSuccess(this.scripts.catalog());
+  }
+
+  /**
+   * 静态解析上传脚本的标准声明，识别业务参数而不运行用户代码。
+   * @param body - 文件名及 UTF-8 源码。
+   * @returns 参数、默认值和结果字段的标准声明。
+   */
+  @Post('scripts/inspect')
+  @HttpCode(200)
+  @AutomationAction('Edit')
+  inspectScript(@Body() body: { filename: unknown; source: unknown }) {
+    return vbenSuccess(this.scriptAssets.inspect(body.filename, body.source));
+  }
+
+  /**
+   * 在工作流权限内保存脚本新版本，后续运行继续固定到所选版本和内容摘要。
+   * @param body - 已声明标准协议的源码和受控执行目标。
+   * @returns 持久脚本版本及识别到的业务扩展参数。
+   */
+  @Post('scripts')
+  @HttpCode(200)
+  @AutomationAction('Edit')
+  async uploadScript(
+    @Body() body: { filename: unknown; source: unknown; target: unknown },
+  ) {
+    return vbenSuccess(await this.scriptAssets.upload(body));
   }
 
   /**
@@ -48,42 +104,21 @@ export class WorkflowController extends DefinitionController<WorkflowDefinition>
   }
 
   /**
-   * 校验固定表单版本或流程输入后创建运行，禁止把画布草稿直接作为执行内容。
-   * @param body - 发布版本、页面值与幂等请求键。
-   * @returns 持久运行身份。
+   * 仅在用户显式导出时生成 BPMN XML，普通草稿与版本接口仍读写结构化模型。
+   * @param body - 当前待导出的标准流程模型。
+   * @returns 带下载文件名和 XML 内容类型的标准 .bpmn 文件。
+   * @throws 模型或引用不合法时返回请求格式错误。
    */
-  @Post('runs')
+  @Post('export')
   @HttpCode(200)
-  @AutomationAction('Run')
-  async start(
-    @Body()
-    body: {
-      workflowRef: PublishedReference;
-      values: Record<string, unknown>;
-      executionKey: string;
-    },
-  ) {
-    return vbenSuccess(
-      await this.execution.startFromPage(
-        body?.workflowRef,
-        body?.values,
-        body?.executionKey,
-      ),
-    );
-  }
-
-  /**
-   * 向有流程发起权限的用户提供固定表单结构，不要求拥有表单管理权限。
-   * @param id - 工作流资源身份。
-   * @param version - 发起页选择的发布版本。
-   * @returns 该版本的流程和绑定表单结构。
-   */
-  @Get(':id/versions/:version/launch')
-  @AutomationAction('Run')
-  async launch(@Param('id') id: string, @Param('version') version: string) {
-    return vbenSuccess(
-      await this.execution.presentation({ id, version: Number(version) }),
-    );
+  @AutomationAction('List')
+  async exportBpmn(@Body() body: { definition: WorkflowBpmnDefinition }) {
+    try {
+      const xml = await exportWorkflowBpmnXml(body?.definition);
+      return new StreamableFile(Buffer.from(xml, 'utf8'), { type: 'application/xml; charset=utf-8', disposition: 'attachment; filename="workflow.bpmn"' });
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error && error.message || '流程模型无法导出');
+    }
   }
 
   /**
@@ -112,6 +147,25 @@ export class WorkflowController extends DefinitionController<WorkflowDefinition>
   @AutomationAction('List')
   async run(@Param('runId') runId: string) {
     return vbenSuccess(await this.execution.read(runId));
+  }
+
+  /**
+   * 返回指定节点逐轮结果和脚本尝试，历史不会覆盖为下一轮当前值。
+   * @param runId - 已授权工作流实例身份。
+   * @param nodeId - 固定图内的节点身份。
+   * @param beforeVisit - 读取更早记录时使用的轮次边界。
+   * @returns 倒序轮次结果和下一页边界。
+   */
+  @Get('runs/:runId/nodes/:nodeId/visits')
+  @AutomationAction('List')
+  async nodeVisits(
+    @Param('runId') runId: string,
+    @Param('nodeId') nodeId: string,
+    @Query('beforeVisit') beforeVisit?: string,
+  ) {
+    return vbenSuccess(
+      await this.execution.nodeVisits(runId, nodeId, beforeVisit),
+    );
   }
 
   /**

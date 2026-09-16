@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Connection, RowDataPacket } from 'mysql2/promise';
+import { parseMysqlScript } from '../migrate-bot-adapter-protocol';
+import { migrateAutomationNavigation } from './menus-v2';
 import {
   readMigrationCheckpoint,
   saveMigrationCheckpoint,
@@ -94,6 +96,15 @@ export async function migrateAutomationMenus(
       );
     }
     await connection.query(source);
+    // 保留菜单管理里的缓存与其他配置，仅同步本次标准标题及退役入口。
+    await connection.query(`UPDATE admin_menu actual
+      JOIN _kt_automation_expected_menu expected ON actual.id=expected.id AND actual.name=expected.name
+      SET actual.meta=JSON_SET(COALESCE(actual.meta,JSON_OBJECT()),'$.title',JSON_UNQUOTE(JSON_EXTRACT(expected.meta,'$.title')))
+      WHERE expected.path IS NOT NULL AND actual.path=expected.path AND JSON_EXTRACT(expected.meta,'$.hideInMenu')=true`);
+    await connection.query(`UPDATE admin_menu actual
+      JOIN _kt_automation_expected_menu expected ON actual.id=expected.id AND actual.name=expected.name
+      SET actual.status=0,actual.path=NULL,actual.component=NULL,actual.redirect=NULL,actual.auth_code=NULL
+      WHERE expected.status=0`);
     await connection.query(
       `UPDATE admin_menu SET status=0,is_deleted=1 WHERE id IN (${LEGACY_MENU_IDS.map(() => '?').join(',')})`,
       LEGACY_MENU_IDS,
@@ -102,14 +113,21 @@ export async function migrateAutomationMenus(
       SELECT role.id,menu.id FROM admin_role role CROSS JOIN _kt_automation_expected_menu menu
       WHERE role.role_code='super' AND role.status=1 AND role.is_deleted=0`);
     const [count] = await connection.query<RowDataPacket[]>(
-      'SELECT COUNT(*) count FROM admin_menu actual JOIN _kt_automation_expected_menu expected ON expected.id=actual.id WHERE actual.name=expected.name AND actual.path<=>expected.path AND actual.component<=>expected.component AND actual.auth_code<=>expected.auth_code AND actual.status=1 AND actual.is_deleted=0',
+      'SELECT COUNT(*) count FROM admin_menu actual JOIN _kt_automation_expected_menu expected ON expected.id=actual.id WHERE actual.name=expected.name AND actual.path<=>expected.path AND actual.component<=>expected.component AND actual.auth_code<=>expected.auth_code AND actual.status=expected.status AND actual.is_deleted=0',
     );
     if (Number(count[0].count) !== ids.length)
       throw new Error('自动化菜单路径、组件或权限验证失败');
     if (!(await readMigrationCheckpoint(connection, 'menus:after'))) {
-      await saveMigrationCheckpoint(connection, 'menus:after', await readManagedMenus(connection, allIds), 'sealed');
+      await saveMigrationCheckpoint(
+        connection,
+        'menus:after',
+        await readManagedMenus(connection, allIds),
+        'sealed',
+      );
     }
+    await migrateMediaWorkflowPermission(connection, sqlRoot);
     return {
+      navigation: await migrateAutomationNavigation(connection),
       newMenuCount: ids.length,
       retiredLegacyCount: legacy.length,
       backup: 'menus:before',
@@ -121,6 +139,41 @@ export async function migrateAutomationMenus(
 }
 
 /**
+ * 注册媒体人工办理与取消权限，并退役手工绑定权限；保留所有角色授权关联。
+ * @param connection - 当前菜单迁移事务连接。
+ * @param sqlRoot - 当前发布包的权限 SQL 目录。
+ * @throws 固定菜单身份被其他权限占用或注册后不可用时拒绝迁移。
+ */
+async function migrateMediaWorkflowPermission(
+  connection: Connection,
+  sqlRoot: string,
+): Promise<void> {
+  const [existing] = await connection.query<RowDataPacket[]>(
+    "SELECT CAST(id AS CHAR) id,name,auth_code FROM admin_menu WHERE id=2041700000000120612 OR name='MediaWorkflowRun' OR auth_code='Media:Governance:WorkflowRun' FOR UPDATE",
+  );
+  if (
+    existing.some(
+      (row) =>
+        row.id !== '2041700000000120612' ||
+        row.name !== 'MediaWorkflowRun' ||
+        row.auth_code !== 'Media:Governance:WorkflowRun',
+    )
+  )
+    throw new Error('媒体工作流权限身份冲突');
+  const source = readFileSync(
+    join(sqlRoot, 'media-workflow-permissions-v1.sql'),
+    'utf8',
+  );
+  for (const statement of parseMysqlScript(source))
+    await connection.query(statement);
+  const [rows] = await connection.query<RowDataPacket[]>(
+    'SELECT status,is_deleted FROM admin_menu WHERE id=2041700000000120612',
+  );
+  if (rows.length !== 1 || rows[0].status !== 1 || rows[0].is_deleted !== 0)
+    throw new Error('媒体工作流权限未正确注册');
+}
+
+/**
  * 读取精确菜单范围的语义配置和角色关联，为无使用窗口内的回滚核对提供依据。
  * @param connection - 当前迁移连接。
  * @param ids - 版本化迁移管理的完整菜单身份。
@@ -128,7 +181,13 @@ export async function migrateAutomationMenus(
  */
 export async function readManagedMenus(connection: Connection, ids: string[]) {
   const placeholders = ids.map(() => '?').join(',');
-  const [menus] = await connection.query<RowDataPacket[]>(`SELECT CAST(id AS CHAR) id,CAST(pid AS CHAR) pid,name,path,component,redirect,auth_code,type,meta,status,sort,is_deleted FROM admin_menu WHERE id IN (${placeholders}) ORDER BY id`, ids);
-  const [grants] = await connection.query<RowDataPacket[]>(`SELECT CAST(role_id AS CHAR) role_id,CAST(menu_id AS CHAR) menu_id FROM admin_role_menu WHERE menu_id IN (${placeholders}) ORDER BY role_id,menu_id`, ids);
+  const [menus] = await connection.query<RowDataPacket[]>(
+    `SELECT CAST(id AS CHAR) id,CAST(pid AS CHAR) pid,name,path,component,redirect,auth_code,type,meta,status,sort,is_deleted FROM admin_menu WHERE id IN (${placeholders}) ORDER BY id`,
+    ids,
+  );
+  const [grants] = await connection.query<RowDataPacket[]>(
+    `SELECT CAST(role_id AS CHAR) role_id,CAST(menu_id AS CHAR) menu_id FROM admin_role_menu WHERE menu_id IN (${placeholders}) ORDER BY role_id,menu_id`,
+    ids,
+  );
   return { menus, grants };
 }

@@ -20,7 +20,6 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-aut
 import { TaskDefinitionService } from '../application/task-definition.service';
 import { TaskExecutionService } from '../application/task-execution.service';
 import type { AtomicTaskDefinition } from './task-definition.types';
-import type { TaskExecutionRequest } from './task-execution.port';
 
 @ApiTags('原子任务')
 @Controller('automation/tasks')
@@ -67,18 +66,6 @@ export class TaskExecutionController extends DefinitionController<AtomicTaskDefi
   }
 
   /**
-   * 从任务发起页提交固定版本与经过动态表单校验的参数，返回持久运行身份。
-   * @param body - 任务版本、幂等请求键、输入和期限。
-   * @returns 当前运行状态。
-   */
-  @Post('runs')
-  @HttpCode(200)
-  @AutomationAction('Run')
-  async start(@Body() body: TaskExecutionRequest) {
-    return vbenSuccess(await this.execution.start(body));
-  }
-
-  /**
    * 按任务运行身份查询执行状态与声明输出。
    * @param runId - 运行记录标识。
    * @returns 当前任务运行。
@@ -103,15 +90,4 @@ export class TaskExecutionController extends DefinitionController<AtomicTaskDefi
     return vbenSuccess(await this.execution.review(runId, user?.id, body));
   }
 
-  /**
-   * 向已持久化的任务运行发送取消意图，处理器退出前不释放执行锁。
-   * @param runId - 待取消的运行标识。
-   * @returns 取消请求提交后的状态。
-   */
-  @Post('runs/:runId/cancel')
-  @HttpCode(200)
-  @AutomationAction('Cancel')
-  async cancel(@Param('runId') runId: string) {
-    return vbenSuccess(await this.execution.cancel(runId));
-  }
 }

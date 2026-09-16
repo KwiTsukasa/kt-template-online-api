@@ -21,9 +21,17 @@ module.exports = {
       files: [
         'src/modules/plugins/hermes-agent/assets/**/*.mjs',
         'test/plugins/runtime/hermes-agent/**/*.mjs',
+        'test/modules/automation/*.test.mjs',
+        'test/modules/automation/*.test.cjs',
       ],
       parserOptions: {
         project: null,
+      },
+    },
+    {
+      files: ['test/modules/automation/*.test.cjs'],
+      rules: {
+        '@typescript-eslint/no-require-imports': 'off',
       },
     },
   ],

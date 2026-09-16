@@ -16,7 +16,6 @@ import {
   AtomicTaskRun,
   AtomicTaskRunReview,
 } from './infrastructure/persistence/task-execution.entities';
-import { TaskExecutionWorker } from './infrastructure/task-execution.worker';
 import { TaskRunFeedService } from './application/task-run-feed.service';
 import { TASK_RUN_FEED } from './contract/task-run-feed.port';
 import { TASK_DEFINITIONS } from './contract/task-provision.port';
@@ -39,7 +38,6 @@ import { TASK_DEFINITIONS } from './contract/task-provision.port';
     { provide: TASK_DEFINITIONS, useExisting: TaskDefinitionService },
     TaskExecutionService,
     TaskHandlerRegistry,
-    TaskExecutionWorker,
     TaskRunFeedService,
     { provide: TASK_RUN_FEED, useExisting: TaskRunFeedService },
     AutomationPermissionGuard,

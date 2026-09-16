@@ -15,6 +15,8 @@ export class WorkflowExecutionWorker
 {
   private readonly logger = new Logger(WorkflowExecutionWorker.name);
   private queue?: Queue<{ runId: string }>;
+  private actionQueue?: Queue<{ runId: string }>;
+  private actionWorker?: Worker<{ runId: string }>;
   private worker?: Worker<{ runId: string }>;
   private timer?: ReturnType<typeof setInterval>;
   private pumping?: Promise<void>;
@@ -32,11 +34,17 @@ export class WorkflowExecutionWorker
       async (job) => this.execution.process(job.data.runId),
       { ...options, concurrency: 4 },
     );
+    this.actionQueue = new Queue('workflow-action', options);
+    this.actionWorker = new Worker('workflow-action', async (job) => this.execution.processAction(job.data.runId), { ...options, concurrency: 4 });
+    this.actionWorker.on('error', (error) => this.logger.error(error.message));
+    this.actionQueue.on('error', (error) => this.logger.error(error.message));
     this.worker.on('error', (error) => this.logger.error(error.message));
     this.queue.on('error', (error) => this.logger.error(error.message));
     await Promise.all([
       this.queue.waitUntilReady(),
       this.worker.waitUntilReady(),
+      this.actionQueue.waitUntilReady(),
+      this.actionWorker.waitUntilReady(),
     ]);
     await this.pump();
     this.timer = setInterval(() => void this.pump(), 500);
@@ -46,6 +54,8 @@ export class WorkflowExecutionWorker
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     await this.pumping;
+    await this.actionWorker?.close();
+    await this.actionQueue?.close();
     await this.worker?.close();
     await this.queue?.close();
   }
@@ -70,6 +80,12 @@ export class WorkflowExecutionWorker
               removeOnFail: true,
             },
           );
+        }
+        for (const runId of await this.execution.pendingActionIds()) {
+          if (this.stopped) break;
+          await this.actionQueue?.add('action', { runId }, {
+            jobId: `workflow-action-${runId}`, removeOnComplete: true, removeOnFail: true,
+          });
         }
       } catch (error) {
         this.logger.error('流程恢复消息投递失败', error);

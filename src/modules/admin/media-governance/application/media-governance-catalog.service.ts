@@ -7,7 +7,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { DataSource, EntityManager, In, LessThanOrEqual } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, LessThanOrEqual } from 'typeorm';
 import { throwVbenError, toKtDateTime } from '@/common';
 import type {
   MediaGovernanceEpisodePageQueryDto,
@@ -976,12 +976,14 @@ export class MediaGovernanceCatalogService
    * @param seriesId - Task 所属 Series 标识。
    * @param workId - Task 所属 Work 标识。
    * @param input - TV Work 的可选既有季号集合。
+   * @param actorId - 已认证管理员或自动接收入口的服务身份。
    * @returns 新建的 Work-scoped Task。
    */
   async createWorkTask(
     seriesId: string,
     workId: string,
     input: MediaGovernanceWorkTaskCreateDto,
+    actorId = 'system:media-intake',
   ) {
     const work = await this.requireWork(seriesId, workId);
     const seasonNumbers = [...new Set(input.seasonNumbers ?? [])].sort(
@@ -1015,7 +1017,7 @@ export class MediaGovernanceCatalogService
         seriesId,
         titleHint: work.title,
         workId,
-      });
+      }, { actorId });
     let task: MediaGovernanceTask;
     if (work.workType === 'tv') {
       task = await createTask();
@@ -1419,6 +1421,7 @@ export class MediaGovernanceCatalogService
    * @param workId - Season 所属 Work 标识。
    * @param seasonNumber - canonical 季号。
    * @param input - 统一内容类型、发布组和按集磁链。
+   * @param actorId - 已认证的业务创建人。
    * @returns 新 Task、来源与集绑定。
    */
   async createMagnetBatch(
@@ -1426,6 +1429,7 @@ export class MediaGovernanceCatalogService
     workId: string,
     seasonNumber: number,
     input: MediaGovernanceMagnetBatchCreateDto,
+    actorId = 'system:media-intake',
   ) {
     return this.createMagnetBatchWithRole(
       seriesId,
@@ -1433,6 +1437,9 @@ export class MediaGovernanceCatalogService
       seasonNumber,
       input,
       'pending-source',
+      undefined,
+      [],
+      actorId,
     );
   }
 
@@ -3649,6 +3656,8 @@ export class MediaGovernanceCatalogService
    * @param bindingRole - 手动或 RSS 创建的绑定角色。
    * @param taskIdentity - RSS 订阅持久化的精确资料身份；手动磁链不传。
    * @param torrentDescriptors - 与 RSS 条目同序的原始 torrent 描述符；普通磁链批次不传。
+   * @param actorId - 业务创建人或自动订阅的服务身份。
+   * @param rssItems - 与来源同序的订阅条目，关联与任务、流程实例在同一事务提交。
    * @returns 新 Task、来源与集绑定。
    */
   private async createMagnetBatchWithRole(
@@ -3659,6 +3668,8 @@ export class MediaGovernanceCatalogService
     bindingRole: 'pending-rss' | 'pending-source',
     taskIdentity?: RssTaskIdentity,
     torrentDescriptors: Array<Buffer | null> = [],
+    actorId = 'system:media-rss',
+    rssItems: ReadonlyArray<Pick<MediaGovernanceRssItemEntity, 'id' | 'subscriptionId'>> = [],
   ) {
     const work = await this.requireWork(seriesId, workId);
     const season = await this.requireSeason(seriesId, workId, seasonNumber);
@@ -3715,6 +3726,8 @@ export class MediaGovernanceCatalogService
       taskReleaseYear = taskIdentity.releaseYear;
       taskTitle = taskIdentity.title;
     }
+    const episodeByNumber = new Map(episodes.map((episode) => [episode.episodeNumber, episode]));
+    let bindings: MediaGovernanceTaskEpisodeBindingEntity[] = [];
     const task = await this.mediaTasks.create({
       mediaType: 'tv',
       metadataIdentity: this.workMetadataIdentity(work),
@@ -3728,67 +3741,46 @@ export class MediaGovernanceCatalogService
       seriesId,
       titleHint: taskTitle,
       workId,
-    });
-    const sources = [];
-    for (let index = 0; index < input.items.length; index += 1) {
-      const item = input.items[index];
-      const torrentDescriptor = torrentDescriptors[index];
-      let source;
-      if (torrentDescriptor) {
-        source = await this.mediaTasks.addTorrentSource(
-          task.id,
-          {
-            contentKind: input.contentKind,
-            expectedRevision: task.revision,
-            releaseGroup: input.releaseGroup,
-            seasonNumbers: [seasonToken(seasonNumber)],
-            sourceRole: 'primary_media',
-          },
-          { buffer: torrentDescriptor, size: torrentDescriptor.length },
-        );
-      } else {
-        source = await this.mediaTasks.addMagnetSource(task.id, {
-          contentKind: input.contentKind,
-          expectedRevision: task.revision,
-          magnetUri: item.magnetUri,
-          releaseGroup: input.releaseGroup,
-          seasonNumbers: [seasonToken(seasonNumber)],
-          sourceRole: 'primary_media',
+    }, {
+      actorId,
+      sources: input.items.map((item, index) => ({
+        input: { contentKind: input.contentKind, expectedRevision: 1, magnetUri: item.magnetUri,
+          releaseGroup: input.releaseGroup, seasonNumbers: [seasonToken(seasonNumber)], sourceRole: 'primary_media' },
+        torrent: torrentDescriptors[index] ?? undefined,
+      })),
+      persistRelations: async (manager, preparedTask) => {
+        const bindingRepository = manager.getRepository(MediaGovernanceTaskEpisodeBindingEntity);
+        const managedEpisodes = manager.getRepository(MediaGovernanceEpisodeEntity);
+        const lockedEpisodes = await managedEpisodes.find({
+          where: { id: In([...episodeByNumber.values()].map((episode) => episode.id)) },
+          order: { id: 'ASC' }, lock: { mode: 'pessimistic_write' },
         });
-      }
-      sources.push(source);
-    }
-    const episodeByNumber = new Map(
-      episodes.map((episode) => [episode.episodeNumber, episode]),
-    );
-    const bindings = await this.dataSource.transaction(async (manager) => {
-      const bindingRepository = manager.getRepository(
-        MediaGovernanceTaskEpisodeBindingEntity,
-      );
-      const managedEpisodes = manager.getRepository(
-        MediaGovernanceEpisodeEntity,
-      );
-      const rows = [];
-      for (let index = 0; index < input.items.length; index += 1) {
-        const item = input.items[index];
-        const source = sources[index];
-        const episode = episodeByNumber.get(item.episodeNumber)!;
-        episode.status = 'queued';
-        rows.push(
-          bindingRepository.create({
-            bindingRole,
-            episodeId: episode.id,
-            id: `media-task-episode-${randomUUID()}`,
-            seasonId: season.id,
-            seriesId,
-            sourceId: source.id,
-            taskId: task.id,
-          }),
-        );
-      }
-      await managedEpisodes.save([...episodeByNumber.values()]);
-      return bindingRepository.save(rows);
+        if (await bindingRepository.existsBy({ episodeId: In(lockedEpisodes.map((episode) => episode.id)) })) {
+          throwVbenError('所选集已被其他任务接收', HttpStatus.CONFLICT);
+        }
+        if (rssItems.length && rssItems.length !== preparedTask.sources.length) throwVbenError('订阅条目与来源数量不一致', HttpStatus.CONFLICT);
+        const rows = [];
+        for (const [index, item] of input.items.entries()) {
+          const source = preparedTask.sources[index];
+          const episode = lockedEpisodes.find((candidate) => candidate.episodeNumber === item.episodeNumber);
+          if (!source || !episode) throwVbenError('来源与剧集身份不完整', HttpStatus.CONFLICT);
+          episode.status = 'queued';
+          rows.push(bindingRepository.create({ bindingRole, episodeId: episode.id,
+            id: `media-task-episode-${randomUUID()}`, seasonId: season.id, seriesId,
+            sourceId: source.id, taskId: preparedTask.id }));
+          const rssItem = rssItems[index];
+          if (rssItem) {
+            const repository = manager.getRepository(MediaGovernanceRssItemEntity);
+            const current = await repository.findOne({ where: rssItem, lock: { mode: 'pessimistic_write' } });
+            if (!current || current.taskId || current.sourceId) throwVbenError('订阅条目已被其他任务接收', HttpStatus.CONFLICT);
+            await repository.update(rssItem, { taskId: preparedTask.id, sourceId: source.id, state: 'queued', stateReason: null });
+          }
+        }
+        await managedEpisodes.save(lockedEpisodes);
+        bindings = await bindingRepository.save(rows);
+      },
     });
+    const sources = task.sources;
     const result = {
       bindings,
       sources,
@@ -4400,6 +4392,8 @@ export class MediaGovernanceCatalogService
           'pending-rss',
           taskIdentity,
           chunk.map((candidate) => candidate.torrentDescriptor),
+          'system:media-rss',
+          chunk.map((candidate) => ({ id: candidate.entity.id, subscriptionId: subscription.id })),
         );
         createdTasks += 1;
         for (let index = 0; index < chunk.length; index += 1) {
@@ -4410,13 +4404,12 @@ export class MediaGovernanceCatalogService
           candidate.entity.taskId = batch.task.id;
           queued += 1;
         }
-        await itemRepository.save(chunk.map((candidate) => candidate.entity));
       } catch (error) {
         for (const candidate of chunk) {
-          candidate.entity.state = 'failed';
-          candidate.entity.stateReason = boundedError(error);
+          await itemRepository.update({ id: candidate.entity.id, taskId: IsNull(), sourceId: IsNull() }, {
+            state: 'failed', stateReason: boundedError(error),
+          });
         }
-        await itemRepository.save(chunk.map((candidate) => candidate.entity));
       }
     }
     return { createdTasks, discovered, ignored, queued };

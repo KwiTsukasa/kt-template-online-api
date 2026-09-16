@@ -11,6 +11,40 @@ const end: WorkflowNode = { id: 'end', name: '结束', type: 'end' };
 const wait: WorkflowNode = { id: 'wait', name: '等待', type: 'wait', durationMs: 1000 };
 
 describe('workflow domain graph validation', () => {
+  it('normalizes old ends to success and rejects unsupported outcomes', () => {
+    const input = definition([start, { ...end }], [edge('start', 'end')]);
+    expect(normalizeWorkflowDefinition(input).graph.nodes[1]).toMatchObject({ type: 'end', outcome: 'succeeded' });
+    for (const outcome of ['failed', 'cancelled']) {
+      const value = JSON.parse(JSON.stringify(input)) as WorkflowDefinition;
+      Object.assign(value.graph.nodes[1]!, { outcome });
+      expect(normalizeWorkflowDefinition(value).graph.nodes[1]).toMatchObject({ outcome });
+    }
+    Object.assign(input.graph.nodes[1]!, { outcome: 'timeout' });
+    expect(() => normalizeWorkflowDefinition(input)).toThrow('结束状态');
+  });
+
+  it('accepts distinct branch endings and detects orphan or missing endings', () => {
+    const rule: WorkflowNode = { id: 'rule', name: '条件', type: 'rule', ruleRef: { id: '123', version: 1 }, facts: {}, branches: [{ port: 'yes', value: true }, { port: 'no', value: false }] };
+    const failure: WorkflowNode = { id: 'failure', name: '失败', type: 'end', outcome: 'failed' };
+    const input = definition([start, rule, end, failure], [edge('start', 'rule'), edge('rule', 'end', 'yes'), edge('rule', 'failure', 'no')]);
+    expect(validateWorkflowGraph(input.graph).valid).toBe(true);
+    input.graph.edges.pop();
+    expect(validateWorkflowGraph(input.graph).issues.some((issue) => issue.code === 'orphan' && issue.nodeId === 'failure')).toBe(true);
+    input.graph.nodes = [start];
+    input.graph.edges = [];
+    expect(validateWorkflowGraph(input.graph).issues.some((issue) => issue.code === 'end-count')).toBe(true);
+  });
+
+  it('round-trips presentation separately from execution and rejects invalid sizes or port sides', () => {
+    const input = definition([start, end], [edge('start', 'end')]);
+    input.layout.direction = 'vertical';
+    input.layout.nodes.start = { x: 120, y: 80, width: 220, height: 128, shape: 'diamond', inputSide: 'top', outputSide: 'bottom' };
+    const normalized = normalizeWorkflowDefinition(input);
+    expect(normalized.layout).toEqual(input.layout);
+    expect(normalized.graph.nodes).toEqual([start, { ...end, outcome: 'succeeded' }]);
+    for (const invalid of [{ width: 119 }, { height: Infinity }, { inputSide: 'diagonal' }, { shape: 'custom-html' }])
+      expect(() => normalizeWorkflowDefinition({ ...input, layout: { ...input.layout, nodes: { start: { ...input.layout.nodes.start, ...invalid } } } })).toThrow();
+  });
   it('keeps engine-specific cells out of execution definitions and preserves layout independently', () => {
     const input = definition([start, wait, end], [edge('start', 'wait'), edge('wait', 'end')]);
     input.layout.nodes.wait = { x: 120, y: 250 };

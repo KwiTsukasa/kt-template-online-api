@@ -16,9 +16,7 @@ import {
 } from '@/modules/message-management/contract/message-delivery.port';
 import {
   MEDIA_RSS_OPERATIONS,
-  MEDIA_EXECUTION_OPERATIONS,
   type MediaRssOperationsPort,
-  type MediaExecutionOperationsPort,
 } from '@/modules/admin/media-governance/contract/media-automation.port';
 import {
   NETWORK_DDNS_OPERATIONS,
@@ -38,8 +36,6 @@ export class BusinessTaskRegistration implements OnModuleInit, OnModuleDestroy {
     @Inject(TASK_HANDLERS) private readonly handlers: TaskHandlerRegistryPort,
     @Inject(MESSAGE_DELIVERY) private readonly messages: MessageDeliveryPort,
     @Inject(MEDIA_RSS_OPERATIONS) private readonly rss: MediaRssOperationsPort,
-    @Inject(MEDIA_EXECUTION_OPERATIONS)
-    private readonly media: MediaExecutionOperationsPort,
     @Inject(NETWORK_DDNS_OPERATIONS)
     private readonly ddns: NetworkDdnsOperationsPort,
     @Inject(NAPCAT_INSPECTION) private readonly napcat: NapcatInspectionPort,
@@ -62,7 +58,6 @@ export class BusinessTaskRegistration implements OnModuleInit, OnModuleDestroy {
     const operations: Record<string, () => Promise<void>> = {
       'message.delivery.scan': () => this.messages.drain(),
       'media.rss.poll': () => this.rss.pollDueSubscriptions(),
-      'media.execution.reconcile': () => this.media.reconcileExecutions(),
       'network.ddns.reconcile': () => this.ddns.reconcileNow(),
       'napcat.offline.inspect': () => this.napcat.inspectOffline(),
     };
@@ -76,8 +71,6 @@ export class BusinessTaskRegistration implements OnModuleInit, OnModuleDestroy {
       inputSchema: { fields: [] },
       outputSchema: { fields: [] },
       isAvailable: async () => {
-        if (item.key === 'media.execution.reconcile')
-          return this.media.executionAvailable();
         return true;
       },
       execute: async ({ signal }) => {

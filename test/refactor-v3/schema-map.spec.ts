@@ -210,7 +210,9 @@ describe('refactor v3 schema skeleton', () => {
     expect(seed).toContain("'Bot:Account:RefreshLogin'");
     expect(seed).toContain("'Bot:Command:Test'");
     expect(seed).toContain("'PluginPlatform:Plugin:List'");
-    expect(seed).toContain("'Automation:Task:Run'");
+    expect(seed).toContain("'Automation:Task:Review'");
+    expect(seed).not.toContain("'/task-execution/start'");
+    expect(seed).not.toContain("'/workflow-engine/start'");
     expect(seed).toContain("'/bot/napcat'");
     expect(seed).toContain("'/bot/tencent'");
     expect(seed).toContain("'/plugin-platform/plugins'");

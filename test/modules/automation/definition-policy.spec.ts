@@ -2,7 +2,10 @@ import {
   normalizeDataSchema,
   validateDataValues,
 } from '@/common/automation/data-schema';
-import { normalizeFormDefinition } from '@/modules/form-definition/domain/form.policy';
+import {
+  normalizeFormDefinition,
+  validateFormValues,
+} from '@/modules/form-definition/domain/form.policy';
 import {
   evaluateRuleDefinition,
   normalizeRuleDefinition,
@@ -51,6 +54,77 @@ const form = {
 };
 
 describe('independent automation definitions', () => {
+  it('enforces conditional required fields on complete input without coercing the dependency', () => {
+    const definition = normalizeFormDefinition({
+      schemaVersion: 1,
+      dataSchema: {
+        fields: [
+          {
+            key: 'notify',
+            label: '通知申请人',
+            type: 'boolean',
+            required: true,
+          },
+          {
+            key: 'recipient',
+            label: '接收人',
+            type: 'string',
+            required: false,
+          },
+        ],
+      },
+      uiSchema: {
+        columns: 1,
+        fields: [
+          {
+            key: 'notify',
+            component: 'Switch',
+            span: 1,
+            placeholder: '',
+            help: '',
+          },
+          {
+            key: 'recipient',
+            component: 'Input',
+            span: 1,
+            placeholder: '',
+            help: '',
+            requiredWhen: { field: 'notify', equals: true },
+          },
+        ],
+      },
+    });
+    expect(validateFormValues(definition, { notify: false })).toEqual({
+      notify: false,
+    });
+    expect(() => validateFormValues(definition, { notify: true })).toThrow(
+      '接收人',
+    );
+    expect(() =>
+      validateFormValues(definition, { notify: true, recipient: ' ' }),
+    ).toThrow('不能为空');
+    expect(
+      validateFormValues(definition, { notify: true, recipient: 'operator' }),
+    ).toEqual({ notify: true, recipient: 'operator' });
+    expect(() =>
+      validateFormValues(definition, { notify: 'true', recipient: 'operator' }),
+    ).toThrow('类型');
+    expect(() =>
+      validateFormValues(definition, { notify: true, recipient: 'operator' }, [
+        'notify',
+      ]),
+    ).toThrow('无权');
+    const invalid = JSON.parse(JSON.stringify(definition)) as typeof definition;
+    invalid.uiSchema.fields[1].requiredWhen.field = 'missing';
+    expect(() => normalizeFormDefinition(invalid)).toThrow('其他已声明字段');
+    invalid.uiSchema.fields[1].requiredWhen.field = 'recipient';
+    expect(() => normalizeFormDefinition(invalid)).toThrow('其他已声明字段');
+    invalid.uiSchema.fields[1].requiredWhen = {
+      field: 'notify',
+      equals: 'true',
+    };
+    expect(() => normalizeFormDefinition(invalid)).toThrow('类型');
+  });
   it('uses strict numeric rules without coercing text', () => {
     const definition = normalizeRuleDefinition(rule);
     expect(evaluateRuleDefinition(definition, { amount: 100 }).result).toBe(
@@ -118,12 +192,19 @@ describe('independent automation definitions', () => {
       matchedRowId: null,
     });
     const evaluated = evaluateRuleDefinition(definition, { amount: 20 });
-    expect(evaluated.trace.map(({ location, matched }) => [location, matched])).toEqual([
-      ['rows.priority', false], ['rows.priority.0', false],
-      ['rows.priority.1', true], ['rows.priority.1.0', false], ['rows.normal', false],
+    expect(
+      evaluated.trace.map(({ location, matched }) => [location, matched]),
+    ).toEqual([
+      ['rows.priority', false],
+      ['rows.priority.0', false],
+      ['rows.priority.1', true],
+      ['rows.priority.1.0', false],
+      ['rows.normal', false],
     ]);
     expect(JSON.stringify(evaluated.trace)).not.toContain('"value"');
-    expect(evaluateRuleDefinition(definition, { amount: 200 }).trace).toHaveLength(4);
+    expect(
+      evaluateRuleDefinition(definition, { amount: 200 }).trace,
+    ).toHaveLength(4);
   });
 
   it('validates the full form schema and permits only compatible registered controls', () => {

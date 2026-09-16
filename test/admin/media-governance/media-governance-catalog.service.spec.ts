@@ -1038,7 +1038,7 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       seriesId: 'media-series-jjk',
       titleHint: '咒术回战',
       workId: 'media-work-jjk-tv',
-    });
+    }, { actorId: 'system:media-intake' });
   });
 
   it('derives a seasonless theatrical Task from its Bangumi Work', async () => {
@@ -1096,7 +1096,7 @@ describe('MediaGovernanceCatalogService automatic synchronization', () => {
       seriesId: 'media-series-theatrical',
       titleHint: '超辉夜姬！',
       workId: 'media-work-theatrical',
-    });
+    }, { actorId: 'system:media-intake' });
   });
 
   it('rejects a second open movie Task while holding the Work slot lock', async () => {

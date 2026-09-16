@@ -110,10 +110,24 @@ spec:
               value: http://172.21.0.1:48087/internal/llm-codex
             - name: LLM_CODEX_GATEWAY_TIMEOUT_MS
               value: "20000"
-            - name: MEDIA_GOVERNANCE_EXECUTOR_BASE_URL
-              value: http://172.21.0.1:48088
-            - name: MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS
-              value: "20000"
+            - name: WORKFLOW_SCRIPT_STATE_ROOT
+              value: /data/workflow-engine
+            - name: WORKFLOW_BASH_BINARY
+              value: /bin/bash
+            - name: WORKFLOW_PYTHON_BINARY
+              value: /usr/bin/python3
+            - name: WORKFLOW_NAS_SSH_HOST
+              value: nas
+            - name: WORKFLOW_NAS_SSH_CONFIG
+              value: /app/secrets/workflow-nas-ssh/config
+            - name: WORKFLOW_NAS_STATE_ROOT
+              value: /vol1/docker/kt-workflow/script-state
+            - name: WORKFLOW_NAS_NODE_BINARY
+              value: /vol1/docker/kt-codex/runtime/nvm/versions/node/v22.14.0/bin/node
+            - name: WORKFLOW_NAS_BASH_BINARY
+              value: /bin/bash
+            - name: WORKFLOW_NAS_PYTHON_BINARY
+              value: /usr/bin/python3
             - name: PUBLIC_RATE_LIMIT_REDIS_HOST
               value: kt-plugin-redis
             - name: PUBLIC_RATE_LIMIT_REDIS_PORT
@@ -169,6 +183,11 @@ spec:
             - secretRef:
                 name: kt-template-online-api-env
           volumeMounts:
+            - name: workflow-nas-ssh
+              mountPath: /app/secrets/workflow-nas-ssh
+              readOnly: true
+            - name: workflow-state
+              mountPath: /data/workflow-engine
             - name: napcat-ssh-key
               mountPath: /app/secrets/napcat-ssh
               readOnly: true
@@ -196,6 +215,14 @@ spec:
               cpu: 1000m
               memory: 3072Mi
       volumes:
+        - name: workflow-nas-ssh
+          secret:
+            secretName: kt-workflow-nas-ssh
+            defaultMode: 0400
+        - name: workflow-state
+          hostPath:
+            path: /var/lib/rancher/k3s/kt-template-online-api/workflow-engine
+            type: DirectoryOrCreate
         - name: napcat-ssh-key
           secret:
             secretName: kt-bot-napcat-ssh-key

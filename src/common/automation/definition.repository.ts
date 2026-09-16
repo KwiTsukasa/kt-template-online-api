@@ -3,7 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource, type EntityTarget, Like } from 'typeorm';
+import { DataSource, type EntityManager, type EntityTarget, Like } from 'typeorm';
 import { createSnowflakeId } from '../snowflake/snowflake-id';
 import {
   DefinitionDraftRow,
@@ -36,7 +36,8 @@ export class DefinitionRepository<T> {
     private readonly database: DataSource,
     private readonly draftEntity: EntityTarget<DefinitionDraftRow>,
     private readonly revisionEntity: EntityTarget<DefinitionRevisionRow>,
-    private readonly normalize: (definition: unknown) => T,
+    private readonly normalize: (definition: unknown) => T | Promise<T>,
+    private readonly onPublish?: (definition: T, reference: PublishedReference, manager: EntityManager) => Promise<void>,
   ) {}
 
   /**
@@ -71,9 +72,7 @@ export class DefinitionRepository<T> {
       return { document: existing as DefinitionDocument<T>, created: false };
     }
     const metadata = this.metadata(input);
-    const definition = validateDefinitionInput(() =>
-      this.normalize(input.definition),
-    );
+    const definition = await this.normalizeInput(input.definition);
     await checkReferences(definition);
     const id = input.preferredId || createSnowflakeId();
     try {
@@ -92,6 +91,7 @@ export class DefinitionRepository<T> {
           ...metadata,
           definition: definition as object,
         });
+        await this.onPublish?.(definition, { id, version: 1 }, manager);
       });
       return { document: await this.detail(id), created: true };
     } catch (error) {
@@ -157,9 +157,7 @@ export class DefinitionRepository<T> {
    */
   async create(body: DefinitionWrite): Promise<DefinitionDocument<T>> {
     const metadata = this.metadata(body);
-    const definition = validateDefinitionInput(() =>
-      this.normalize(body.definition),
-    );
+    const definition = await this.normalizeInput(body.definition);
     const row = this.database.getRepository(this.draftEntity).create({
       ...metadata,
       definition,
@@ -184,9 +182,7 @@ export class DefinitionRepository<T> {
     body: DefinitionWrite,
   ): Promise<DefinitionDocument<T>> {
     const metadata = this.metadata(body);
-    const definition = validateDefinitionInput(() =>
-      this.normalize(body.definition),
-    );
+    const definition = await this.normalizeInput(body.definition);
     this.requireRevision(body.expectedRevision);
     const changed = await this.database.getRepository(this.draftEntity).update(
       { id, revision: body.expectedRevision },
@@ -224,9 +220,7 @@ export class DefinitionRepository<T> {
       if (!row) throw new NotFoundException('定义不存在');
       if (row.revision !== expectedRevision)
         throw new ConflictException('草稿已变化，请刷新后发布');
-      const definition = validateDefinitionInput(() =>
-        this.normalize(row.definition),
-      );
+      const definition = await this.normalizeInput(row.definition);
       await checkReferences(definition);
       const version = (row.publishedVersion || 0) + 1;
       const revisions = manager.getRepository(this.revisionEntity);
@@ -241,6 +235,7 @@ export class DefinitionRepository<T> {
         { id, revision: expectedRevision },
         { publishedVersion: version, revision: expectedRevision + 1 },
       );
+      await this.onPublish?.(definition, { id, version }, manager);
       return { id, version, revision: expectedRevision + 1 };
     });
   }
@@ -303,5 +298,20 @@ export class DefinitionRepository<T> {
   private requireRevision(revision: unknown): asserts revision is number {
     if (!Number.isSafeInteger(revision) || Number(revision) < 1)
       throw new BadRequestException('必须提供正整数 expectedRevision');
+  }
+
+  /**
+   * 等待领域解析完成后才允许持久化，异步 XML 解析错误与同步校验错误均返回请求错误。
+   * @param definition - 调用方提交的领域定义。
+   * @returns 完整解析并规范化的定义。
+   * @throws 领域格式不合法时返回 HTTP 400。
+   */
+  private async normalizeInput(definition: unknown): Promise<T> {
+    try {
+      return await this.normalize(definition);
+    } catch (error) {
+      if (error instanceof Error) throw new BadRequestException(error.message);
+      throw new BadRequestException('定义数据不合法');
+    }
   }
 }

@@ -1,4 +1,9 @@
 import { normalizeDataSchema } from '@/common/automation/data-schema';
+import { normalizeWorkflowScripts } from './workflow-script.policy';
+import {
+  canReferenceWorkflowNode,
+  validateWorkflowLoops,
+} from './workflow-loop.policy';
 import {
   definitionRecord,
   publishedReference,
@@ -11,6 +16,8 @@ import type {
   WorkflowGraph,
   WorkflowIssue,
   WorkflowNode,
+  WorkflowNodeLayout,
+  WorkflowPortSide,
   WorkflowValidation,
 } from '../contract/workflow.types';
 
@@ -34,7 +41,7 @@ function identity(value: unknown): string {
 }
 
 /**
- * 将输入映射限制为常量、流程输入或上游节点输出，不执行表达式代码。
+ * 限制字段映射、循环序号及有界候选来源，禁止嵌套取值链或执行表达式代码。
  * @param input - 编辑器提交的映射字典。
  * @returns 经过类型检查的变量绑定。
  * @throws 绑定类型、字段标识或常量值非法时拒绝保存。
@@ -57,6 +64,17 @@ export function normalizeBindings(
       )
         result[field] = { type: 'literal', value };
       else throw new Error('映射常量必须是有界标量');
+    } else if (binding.type === 'iteration') result[field] = { type: 'iteration' };
+    else if (binding.type === 'first') {
+      if (!Array.isArray(binding.sources) || binding.sources.length < 1 || binding.sources.length > 8)
+        throw new Error('优先取值需要 1 至 8 个字段来源');
+      const sources = binding.sources.map((rawSource) => {
+        const candidate = definitionRecord(rawSource);
+        if (candidate.type === 'input') return { type: 'input' as const, field: identity(candidate.field) };
+        if (candidate.type === 'node') return { type: 'node' as const, nodeId: identity(candidate.nodeId), field: identity(candidate.field) };
+        throw new Error('优先取值只能引用流程输入或节点输出');
+      });
+      result[field] = { type: 'first', sources };
     } else if (binding.type === 'input')
       result[field] = { type: 'input', field: identity(binding.field) };
     else if (binding.type === 'node')
@@ -65,7 +83,7 @@ export function normalizeBindings(
         nodeId: identity(binding.nodeId),
         field: identity(binding.field),
       };
-    else throw new Error('变量只支持常量、流程输入或节点输出');
+    else throw new Error('变量映射类型不支持');
   }
   return result;
 }
@@ -86,8 +104,18 @@ function normalizeNode(input: unknown): WorkflowNode {
   )
     throw new Error('节点名称需要 1 至 128 个字符');
   const base = { id, name: node.name.trim() };
-  if (node.type === 'start' || node.type === 'end')
-    return { ...base, type: node.type };
+  if (node.type === 'start') return { ...base, type: 'start' };
+  if (node.type === 'end') {
+    let outcome = node.outcome;
+    if (outcome === undefined) outcome = 'succeeded';
+    if (
+      outcome !== 'succeeded' &&
+      outcome !== 'failed' &&
+      outcome !== 'cancelled'
+    )
+      throw new Error('结束状态只支持成功、失败或取消');
+    return { ...base, type: 'end', outcome };
+  }
   if (node.type === 'task')
     return {
       ...base,
@@ -95,6 +123,20 @@ function normalizeNode(input: unknown): WorkflowNode {
       taskRef: publishedReference(node.taskRef),
       input: normalizeBindings(node.input),
     };
+  if (node.type === 'business') {
+    if (
+      typeof node.stepKey !== 'string' ||
+      !/^[a-z][a-z0-9.-]{1,63}$/.test(node.stepKey)
+    )
+      throw new Error('业务步骤标识不合法');
+    return {
+      ...base,
+      type: 'business',
+      stepKey: node.stepKey,
+      scripts: normalizeWorkflowScripts(node.scripts),
+      input: normalizeBindings(node.input),
+    };
+  }
   if (node.type === 'rule') {
     if (
       !Array.isArray(node.branches) ||
@@ -143,6 +185,31 @@ function normalizeNode(input: unknown): WorkflowNode {
       throw new Error('等待时间需要 1 秒至 30 天');
     return { ...base, type: 'wait', durationMs: Number(node.durationMs) };
   }
+  if (node.type === 'loop') {
+    if (
+      !Number.isSafeInteger(node.maxIterations) ||
+      Number(node.maxIterations) < 1 ||
+      Number(node.maxIterations) > 1000
+    )
+      throw new Error('循环次数上限需要 1 至 1000');
+    let condition = null;
+    if (node.condition !== null && node.condition !== undefined) {
+      const value = definitionRecord(node.condition);
+      if (typeof value.continueOn !== 'boolean')
+        throw new Error('循环继续条件必须是布尔值');
+      condition = {
+        ruleRef: publishedReference(value.ruleRef),
+        facts: normalizeBindings(value.facts),
+        continueOn: value.continueOn,
+      };
+    }
+    return {
+      ...base,
+      type: 'loop',
+      maxIterations: Number(node.maxIterations),
+      condition,
+    };
+  }
   throw new Error('流程节点类型不支持');
 }
 
@@ -154,10 +221,7 @@ function normalizeNode(input: unknown): WorkflowNode {
  */
 function point(input: unknown): { x: number; y: number } {
   const value = definitionRecord(input);
-  if (
-    typeof value.x !== 'number' ||
-    typeof value.y !== 'number'
-  )
+  if (typeof value.x !== 'number' || typeof value.y !== 'number')
     throw new Error('图布局坐标不合法');
   if (
     !Number.isFinite(value.x) ||
@@ -167,6 +231,47 @@ function point(input: unknown): { x: number; y: number } {
   )
     throw new Error('图布局坐标不合法');
   return { x: value.x, y: value.y };
+}
+
+/**
+ * 保留节点形态与端口朝向，并限制尺寸以保证重载后的节点仍可操作。
+ * @param input - 节点独立于执行数据的展示配置。
+ * @returns 合法坐标、尺寸、形态与端口方向。
+ * @throws 尺寸或展示枚举不合法时拒绝保存。
+ */
+function nodeLayout(input: unknown): WorkflowNodeLayout {
+  const value = definitionRecord(input);
+  const result: WorkflowNodeLayout = point(value);
+  for (const dimension of ['width', 'height'] as const) {
+    const size = value[dimension];
+    if (size === undefined) continue;
+    let minimum = 64;
+    if (dimension === 'width') minimum = 120;
+    if (
+      typeof size !== 'number' ||
+      !Number.isFinite(size) ||
+      size < minimum ||
+      size > 600
+    )
+      throw new Error('节点宽度需要 120 至 600，高度需要 64 至 600');
+    result[dimension] = size;
+  }
+  if (value.shape !== undefined) {
+    if (
+      !['rounded', 'rectangle', 'capsule', 'diamond'].includes(
+        String(value.shape),
+      )
+    )
+      throw new Error('节点形态不支持');
+    result.shape = value.shape as WorkflowNodeLayout['shape'];
+  }
+  for (const side of ['inputSide', 'outputSide'] as const) {
+    if (value[side] === undefined) continue;
+    if (!['left', 'right', 'top', 'bottom'].includes(String(value[side])))
+      throw new Error('节点端口方向不支持');
+    result[side] = value[side] as WorkflowPortSide;
+  }
+  return result;
 }
 
 /**
@@ -186,11 +291,7 @@ export function normalizeWorkflowDefinition(
     !Array.isArray(raw.edges)
   )
     throw new Error('工作流结构版本或图规模不支持');
-  if (
-    raw.nodes.length < 2 ||
-    raw.nodes.length > 128 ||
-    raw.edges.length > 256
-  )
+  if (raw.nodes.length < 2 || raw.nodes.length > 128 || raw.edges.length > 256)
     throw new Error('工作流结构版本或图规模不支持');
   const nodes = raw.nodes.map(normalizeNode);
   const edges: WorkflowEdge[] = raw.edges.map((value) => {
@@ -233,6 +334,20 @@ export function normalizeWorkflowDefinition(
     formMapping,
     timeoutMs: Number(raw.timeoutMs),
   };
+  if (raw.processRef !== undefined && raw.processRef !== null) {
+    const processRef = definitionRecord(raw.processRef);
+    if (
+      typeof processRef.key !== 'string' ||
+      !/^[a-z][a-z0-9.-]{2,63}$/.test(processRef.key) ||
+      !Number.isSafeInteger(processRef.version) ||
+      Number(processRef.version) < 1
+    )
+      throw new Error('业务流程接口引用不合法');
+    graph.processRef = {
+      key: processRef.key,
+      version: Number(processRef.version),
+    };
+  }
   const display = definitionRecord(source.layout);
   if (display.schemaVersion !== 1) throw new Error('图布局版本不支持');
   const viewport = definitionRecord(display.viewport);
@@ -250,10 +365,15 @@ export function normalizeWorkflowDefinition(
     viewport: { ...point(viewport), zoom: viewport.zoom },
   };
   const positions = definitionRecord(display.nodes);
+  if (display.direction !== undefined) {
+    if (display.direction !== 'horizontal' && display.direction !== 'vertical')
+      throw new Error('流程布局方向不支持');
+    layout.direction = display.direction;
+  }
   const routes = definitionRecord(display.edges);
   for (const node of nodes)
     if (positions[node.id] !== undefined)
-      layout.nodes[node.id] = point(positions[node.id]);
+      layout.nodes[node.id] = nodeLayout(positions[node.id]);
   for (const edge of edges) {
     if (routes[edge.id] === undefined) continue;
     const route = definitionRecord(routes[edge.id]);
@@ -265,14 +385,14 @@ export function normalizeWorkflowDefinition(
 }
 
 /**
- * 验证有向无环图、端口、开始结束、可达性和并行配对，返回可定位到图元素的错误。
+ * 验证受控回环之外的拓扑、端口、可达性和并行配对，返回可定位到图元素的错误。
  * @param graph - 经过格式规范化的执行图。
  * @returns 完整错误清单与确定的拓扑顺序。
  */
 export function validateWorkflowGraph(
   graph: WorkflowGraph,
 ): WorkflowValidation {
-  const issues: WorkflowIssue[] = [];
+  const issues: WorkflowIssue[] = validateWorkflowLoops(graph);
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
   const incoming = new Map(
     graph.nodes.map((node) => [node.id, [] as WorkflowEdge[]]),
@@ -287,8 +407,8 @@ export function validateWorkflowGraph(
       code: 'start-count',
       message: '流程必须且只能有一个开始节点',
     });
-  if (ends.length !== 1)
-    issues.push({ code: 'end-count', message: '流程必须且只能有一个结束节点' });
+  if (!ends.length)
+    issues.push({ code: 'end-count', message: '流程必须至少有一个结束节点' });
   const endpoints = new Set<string>();
   for (const edge of graph.edges) {
     const source = nodes.get(edge.source);
@@ -318,6 +438,8 @@ export function validateWorkflowGraph(
         message: '节点不能连接自身',
       });
     let validSource = edge.sourcePort === 'out';
+    if (source.type === 'loop')
+      validSource = ['body', 'done'].includes(edge.sourcePort);
     if (source.type === 'rule')
       validSource = source.branches.some(
         (branch) => branch.port === edge.sourcePort,
@@ -325,7 +447,10 @@ export function validateWorkflowGraph(
     if (
       source.type === 'end' ||
       target.type === 'start' ||
-      edge.targetPort !== 'in' ||
+      !(
+        edge.targetPort === 'in' ||
+        (target.type === 'loop' && edge.targetPort === 'repeat')
+      ) ||
       !validSource
     )
       issues.push({
@@ -335,7 +460,11 @@ export function validateWorkflowGraph(
       });
   }
   const indegree = new Map(
-    graph.nodes.map((node) => [node.id, incoming.get(node.id)!.length]),
+    graph.nodes.map((node) => [
+      node.id,
+      incoming.get(node.id)!.filter((edge) => edge.targetPort !== 'repeat')
+        .length,
+    ]),
   );
   const queue = graph.nodes
     .filter((node) => indegree.get(node.id) === 0)
@@ -345,6 +474,7 @@ export function validateWorkflowGraph(
     const id = queue.shift()!;
     order.push(id);
     for (const edge of outgoing.get(id)!) {
+      if (edge.targetPort === 'repeat') continue;
       indegree.set(edge.target, indegree.get(edge.target)! - 1);
       if (indegree.get(edge.target) === 0) queue.push(edge.target);
     }
@@ -352,7 +482,7 @@ export function validateWorkflowGraph(
   if (order.length !== graph.nodes.length)
     issues.push({
       code: 'cycle',
-      message: '流程存在循环，当前只支持有向无环图',
+      message: '回环必须经过循环节点的返回端口，不能形成无控制器的循环',
     });
   const reachable = (from: string, stop?: string): Set<string> => {
     const seen = new Set<string>();
@@ -377,7 +507,10 @@ export function validateWorkflowGraph(
         code: 'orphan',
         message: '节点无法从开始节点到达',
       });
-    if (node.type !== 'end' && ends[0] && !reachable(node.id).has(ends[0].id))
+    if (
+      node.type !== 'end' &&
+      !ends.some((end) => reachable(node.id).has(end.id))
+    )
       issues.push({
         nodeId: node.id,
         code: 'no-end',
@@ -416,7 +549,7 @@ export function validateWorkflowGraph(
         });
       for (const edge of outputs) {
         const branch = reachable(edge.target, node.joinId);
-        if (!branch.has(node.joinId) || (ends[0] && branch.has(ends[0].id)))
+        if (!branch.has(node.joinId) || ends.some((end) => branch.has(end.id)))
           issues.push({
             nodeId: node.id,
             edgeId: edge.id,
@@ -427,9 +560,18 @@ export function validateWorkflowGraph(
       const branches = outputs.map((edge) =>
         reachable(edge.target, node.joinId),
       );
-      const branchNodes = new Set([node.id, ...branches.flatMap((branch) => [...branch])]);
+      const branchNodes = new Set([
+        node.id,
+        ...branches.flatMap((branch) => [...branch]),
+      ]);
       for (const edge of incoming.get(node.joinId) || []) {
-        if (!branchNodes.has(edge.source)) issues.push({ nodeId: node.joinId, edgeId: edge.id, code: 'join-outside-input', message: '汇合节点不能接收配对并行范围之外的路径' });
+        if (!branchNodes.has(edge.source))
+          issues.push({
+            nodeId: node.joinId,
+            edgeId: edge.id,
+            code: 'join-outside-input',
+            message: '汇合节点不能接收配对并行范围之外的路径',
+          });
       }
       for (let index = 0; index < branches.length; index += 1) {
         for (let other = index + 1; other < branches.length; other += 1) {
@@ -459,7 +601,7 @@ export function validateWorkflowGraph(
           code: 'rule-branches',
           message: '规则的每个结果分支必须连接一个后继节点',
         });
-    } else if (outputs.length !== 1)
+    } else if (node.type !== 'loop' && outputs.length !== 1)
       issues.push({
         nodeId: node.id,
         code: 'output-count',
@@ -475,9 +617,16 @@ export function validateWorkflowGraph(
         });
     }
     let bindings: Record<string, ValueBinding> = {};
-    if (node.type === 'task') bindings = node.input;
+    if (node.type === 'task' || node.type === 'business') bindings = node.input;
     if (node.type === 'rule') bindings = node.facts;
-    for (const [field, binding] of Object.entries(bindings)) {
+    if (node.type === 'loop' && node.condition) bindings = node.condition.facts;
+    const allBindings = Object.entries(bindings);
+    if (node.type === 'business')
+      node.scripts.forEach((script, index) => {
+        for (const [field, binding] of Object.entries(script.params))
+          allBindings.push([`scripts.${index}.params.${field}`, binding]);
+      });
+    for (const [field, binding] of allBindings) {
       if (
         binding.type === 'input' &&
         !graph.inputSchema.fields.some((input) => input.key === binding.field)
@@ -492,7 +641,7 @@ export function validateWorkflowGraph(
         binding.type === 'node' &&
         (binding.nodeId === node.id ||
           !nodes.has(binding.nodeId) ||
-          !reachable(binding.nodeId).has(node.id))
+          !canReferenceWorkflowNode(graph, binding.nodeId, node.id))
       )
         issues.push({
           nodeId: node.id,

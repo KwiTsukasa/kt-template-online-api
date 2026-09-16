@@ -13,7 +13,7 @@ export type BusinessTaskDefault = {
 /**
  * 从部署配置读取建议周期，仅在初次建立计划时采用，后续管理员配置不回写为默认值。
  * @param config - 当前 API 部署配置。
- * @returns 五项既有业务的初始计划和执行约束。
+   * @returns 当前仍提供原子能力的业务初始计划和执行约束。
  */
 export function businessTaskDefaults(
   config: Pick<ConfigService, 'get'>,
@@ -42,15 +42,6 @@ export function businessTaskDefaults(
       name: '媒体 RSS 到期订阅扫描',
       description: '按订阅周期和乐观锁领取到期订阅，保留条目去重及集范围约束',
       intervalMs: 60000,
-      enabled: true,
-      timeoutMs: 300000,
-      idempotent: true,
-    },
-    {
-      key: 'media.execution.reconcile',
-      name: '媒体执行状态核对',
-      description: '沿已有运行身份核对媒体状态并重试未确认投递',
-      intervalMs: 5000,
       enabled: true,
       timeoutMs: 300000,
       idempotent: true,

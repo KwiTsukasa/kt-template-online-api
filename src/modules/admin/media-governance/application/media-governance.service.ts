@@ -1,3 +1,4 @@
+import type { EntityManager } from 'typeorm';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   HttpException,
@@ -8,6 +9,14 @@ import {
   Optional,
 } from '@nestjs/common';
 import { throwVbenError } from '@/common';
+import type {
+  WorkflowBusinessIdentity,
+  WorkflowCompletionContext,
+  WorkflowStepAcceptance,
+  WorkflowStepInvocation,
+  WorkflowStepStop,
+} from '@/modules/workflow-engine/contract/workflow-process.interface';
+import type { MediaWorkflowEnvelopeDto } from '../contract/media-workflow.dto';
 import { sha256MediaGovernanceJson } from '@/modules/admin/media-governance/contract/media-governance-hash';
 import type {
   MediaGovernanceDescriptorRedeemDto,
@@ -47,9 +56,7 @@ import {
 } from '@/modules/admin/media-governance/contract/media-governance-executor.contract';
 import { readMediaGovernanceCanonicalReplacement } from '@/modules/admin/media-governance/contract/media-governance-plan.contract';
 import {
-  MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
   type MediaGovernanceExecutionEnvelope,
-  type MediaGovernanceExecutionGateway,
 } from '@/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
 import {
   assertAdminMediaGovernancePlanCanonicalIdentity,
@@ -70,6 +77,11 @@ import {
 type MediaGovernanceProviderRef = {
   provider: MediaGovernanceProvider;
   providerId: string;
+};
+
+type MediaWorkflowStepContext = {
+  executionKey: string;
+  business: WorkflowBusinessIdentity;
 };
 
 export type MediaGovernanceUnit = {
@@ -238,6 +250,17 @@ type MediaGovernanceTaskCreateInput = MediaGovernanceTaskCreateDto & {
   workId?: string;
 };
 
+export interface MediaTaskCreationOptions {
+  actorId: string;
+  sources?: Array<{
+    input: MediaGovernanceMagnetSourceCreateDto;
+    torrent?: Buffer;
+  }>;
+  persistRelations?: (manager: EntityManager, task: MediaGovernanceTask) => Promise<void>;
+}
+
+type MediaWorkflowCreation = (task: MediaGovernanceTask, actorId: string, manager: EntityManager) => Promise<void>;
+
 const MEDIA_TYPE_LABELS: Record<MediaGovernanceMediaType, string> = {
   movie: 'Movie 电影',
   theatrical: 'Theatrical 剧场版',
@@ -260,7 +283,6 @@ const SOURCE_HEALTH_REASON_LABELS: Record<string, string> = {
   tracker_auth_failed: '来源追踪器拒绝了当前访问身份',
   tracker_unreachable: '来源追踪器在限定时间内不可达',
 };
-const MAX_DISPATCH_ATTEMPTS = 5;
 const STALE_RUN_THRESHOLD_MS = 10 * 60_000;
 const HIGH_FREQUENCY_EXECUTOR_EVENTS = new Set([
   'download-progress',
@@ -271,9 +293,8 @@ const HIGH_FREQUENCY_EXECUTOR_EVENTS = new Set([
 @Injectable()
 export class MediaGovernanceService implements OnModuleInit {
   private readonly tasks: MediaGovernanceTask[] = [];
-  private dispatchRetryActive = false;
-  private executionReconcileActive = false;
-  private readonly rssContinuationTasks = new Set<string>();
+  private workflowCreation?: MediaWorkflowCreation;
+  private workflowDiscard?: (task: MediaGovernanceTask, manager: EntityManager) => Promise<void>;
   private progressSnapshotQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -284,9 +305,6 @@ export class MediaGovernanceService implements OnModuleInit {
     @Optional()
     @Inject(MEDIA_GOVERNANCE_STATE_STORE)
     private readonly stateStore?: MediaGovernanceStateStore,
-    @Optional()
-    @Inject(MEDIA_GOVERNANCE_EXECUTION_GATEWAY)
-    private readonly executionGateway?: MediaGovernanceExecutionGateway,
     @Optional()
     @Inject(MEDIA_GOVERNANCE_PROGRESS_HOT_STORE)
     private readonly progressHotStore?: MediaGovernanceProgressHotStore,
@@ -308,39 +326,239 @@ export class MediaGovernanceService implements OnModuleInit {
         await this.persistTask(task);
       }
     }
-    if (this.executionGateway?.enabled()) {
-      for (const task of this.tasks) {
-        await this.continueMechanicalPipeline(task).catch(() => false);
-        await this.continueRssIntakePipeline(task).catch(() => false);
-      }
+  }
+
+  /**
+   * 接入工作流模块提供的创建回调，媒体模块只保存事实，不自行编排执行。
+   * @param enroll - 在同一数据库事务中创建流程实例的回调。
+   * @param assertDiscard - 删除业务对象前核对活动工作流的事务回调。
+   * @returns 只解除本次回调的函数。
+   * @throws 已有创建回调时拒绝重复装配。
+   */
+  connectWorkflowCreation(enroll: MediaWorkflowCreation, assertDiscard: (task: MediaGovernanceTask, manager: EntityManager) => Promise<void>): () => void {
+    if (this.workflowCreation) throw new Error('媒体任务创建已经接入工作流');
+    this.workflowCreation = enroll;
+    this.workflowDiscard = assertDiscard;
+    return () => {
+      if (this.workflowCreation !== enroll) return;
+      this.workflowCreation = undefined;
+      this.workflowDiscard = undefined;
+    };
+  }
+
+  /**
+   * 重读已持久化的 Task 并核对其所属 Work，工作流不得跨作品使用来源或治理计划。
+   * @param workId - 业务入口或运行快照固定的 Work 身份。
+   * @param taskId - 该 Work 下已经存在的媒体 Task。
+   * @param manager - 可选的创建事务，仅返回事务内事实而不更新公共内存。
+   * @returns 与持久事实一致的媒体任务。
+   * @throws 持久化端口不可用、任务不存在或 Work 归属漂移时拒绝执行。
+   */
+  async workflowTask(workId: string, taskId: string, manager?: EntityManager): Promise<MediaGovernanceTask> {
+    if (!this.stateStore?.readWorkflowTask || !this.databaseReady())
+      throwVbenError('媒体工作流持久化端口不可用', HttpStatus.SERVICE_UNAVAILABLE);
+    const stored = await this.stateStore.readWorkflowTask(taskId, manager);
+    if (!stored || !workId || stored.workId !== workId)
+      throwVbenError('媒体任务与作品归属不匹配', HttpStatus.CONFLICT);
+    const restored = this.restoreStoredTask(stored);
+    if (manager) return restored;
+    const existing = this.tasks.find((task) => task.id === taskId);
+    if (existing) {
+      Object.assign(existing, restored);
+      return existing;
     }
+    this.tasks.push(restored);
+    return restored;
   }
 
   /**
-   * 判断媒体持久状态与执行网关是否均已装配，不把运行可用性与调度启停混为一体。
-   * @returns 当前实例可以核对媒体执行状态时为真。
+   * 根据工作流执行键复用原密封身份；新步骤仅核验前置事实和预留授权，不派发脚本。
+   * @param invocation - 工作流固定的业务对象、步骤、上游修订和可选来源。
+   * @returns 交给标准脚本的媒体运行身份及密封摘要。
+   * @throws 业务修订、阶段、来源或已有执行身份不匹配时拒绝准备。
    */
-  executionAvailable(): boolean {
-    return Boolean(this.stateStore && this.executionGateway?.enabled());
+  async prepareWorkflowStep(invocation: WorkflowStepInvocation): Promise<Record<string, unknown>> {
+    const task = await this.workflowTask(invocation.business.scopeId, invocation.business.subjectId);
+    const runId = this.workflowMediaRunId(invocation.executionKey);
+    const existing = await this.stateStore?.readRunEnvelope?.(runId);
+    if (existing) {
+      if (existing.taskId !== task.id || existing.replayKey !== invocation.executionKey)
+        throwVbenError('工作流步骤密封身份不一致', HttpStatus.CONFLICT);
+      return this.workflowScriptParameters(existing);
+    }
+    this.assertRevision(task, Number(invocation.input.revision));
+    this.assertExecutionMode(task, invocation);
+    if (task.activeRunId)
+      throwVbenError('媒体任务仍有未结束的步骤', HttpStatus.CONFLICT);
+    let sources = task.sources.filter((source) => source.descriptorTombstonedAt === null);
+    if (typeof invocation.input.sourceIndex === 'number') {
+      if (invocation.input.sourceId) throwVbenError('来源序号和来源身份只能选择一种', HttpStatus.BAD_REQUEST);
+      sources.sort((left, right) => left.id.localeCompare(right.id));
+      const source = sources[invocation.input.sourceIndex - 1];
+      if (!source) throwVbenError('来源序号超出任务范围', HttpStatus.CONFLICT);
+      sources = [source];
+    }
+    if (typeof invocation.input.sourceId === 'string' && invocation.input.sourceId) {
+      sources = [this.findSource(task, invocation.input.sourceId)];
+    }
+    const command = { expectedRevision: task.revision };
+    switch (invocation.stepKey) {
+      case 'source.inspect':
+      case 'source.probe-runtime': {
+        if (!sources.length || sources.some((source) => source.descriptorTombstonedAt !== null))
+          throwVbenError('媒体步骤没有可用来源', HttpStatus.CONFLICT);
+        if (sources.length !== 1) throwVbenError('来源步骤必须明确选择一个来源', HttpStatus.BAD_REQUEST);
+        if (invocation.stepKey === 'source.probe-runtime' && sources.some((source) => source.manifestState !== 'inspected'))
+          throwVbenError('必须先检查来源清单', HttpStatus.CONFLICT);
+        await this.reserveExecution(task, invocation.stepKey, sources, invocation);
+        break;
+      }
+      case 'source.download':
+        if (invocation.input.autoSelect === true) {
+          this.normalizeExplicitEmbeddedRssSources(task);
+          for (const source of task.sources.filter((item) => item.descriptorTombstonedAt === null)) {
+            await this.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: invocation.input.subtitleLanguage ?? 'zh-CN' });
+          }
+        }
+        await this.startDownload(task.id, { expectedRevision: task.revision }, invocation);
+        break;
+      case 'governance.execute':
+        await this.startGovernance(task.id, command, invocation);
+        break;
+      case 'governance.rebase':
+        await this.startCanonicalIdentityRebase(task.id, command, invocation);
+        break;
+      case 'acceptance.verify':
+        await this.startAcceptanceVerification(task.id, command, invocation);
+        break;
+      case 'source.cleanup':
+        if (typeof invocation.input.sourceId !== 'string' || !invocation.input.sourceId)
+          throwVbenError('清理步骤必须明确指定来源', HttpStatus.BAD_REQUEST);
+        await this.removeSource(task.id, String(invocation.input.sourceId), command, invocation);
+        break;
+      default:
+        throwVbenError('媒体工作流步骤尚未实现', HttpStatus.BAD_REQUEST);
+    }
+    const envelope = await this.stateStore?.readRunEnvelope?.(runId);
+    if (!envelope) throwVbenError('媒体步骤密封记录缺失', HttpStatus.SERVICE_UNAVAILABLE);
+    return this.workflowScriptParameters(envelope);
   }
 
   /**
-   * 沿既有运行身份重试未确认投递并核对状态，不创建新的媒体业务任务。
-   * @throws 执行网关不可用或状态核对失败时拒绝本轮调用。
+   * 核对成功脚本回执、原密封输入和媒体持久终态，输出后继步骤使用的最新修订。
+   * @param acceptance - 同一步骤保存的准备参数和全部成功脚本结果。
+   * @returns 真实媒体运行、任务修订与证据摘要。
+   * @throws 回执身份、证据摘要或业务终态不一致时拒绝验收。
    */
-  async reconcileExecutions(): Promise<void> {
-    if (!this.executionAvailable()) throw new Error('媒体执行网关当前不可用');
-    await this.retryPendingDispatches();
-    await this.reconcileActiveExecutions();
+  async acceptWorkflowStep(acceptance: WorkflowStepAcceptance): Promise<Record<string, unknown>> {
+    const { invocation, prepared, results } = acceptance;
+    const task = await this.workflowTask(invocation.business.scopeId, invocation.business.subjectId);
+    const runId = this.workflowMediaRunId(invocation.executionKey);
+    if (prepared.mediaRunId !== runId || prepared.taskId !== task.id)
+      throwVbenError('媒体步骤准备身份不匹配', HttpStatus.CONFLICT);
+    const envelope = await this.stateStore?.readRunEnvelope?.(runId);
+    const evidence = await this.stateStore?.readWorkflowEvidence?.(runId);
+    if (!envelope || envelope.replayKey !== invocation.executionKey || envelope.sealedInputSha256 !== prepared.sealedInputSha256)
+      throwVbenError('媒体步骤密封输入不匹配', HttpStatus.CONFLICT);
+    const receipt = results.find((result) =>
+      result.output.mediaRunId === runId && result.output.taskId === task.id &&
+      result.output.sealedInputSha256 === envelope.sealedInputSha256,
+    );
+    if (!evidence || evidence.taskId !== task.id || evidence.status !== 'succeeded' ||
+      !evidence.evidenceSha256 || receipt?.output.evidenceSha256 !== evidence.evidenceSha256)
+      throwVbenError('媒体步骤尚无匹配的成功证据', HttpStatus.CONFLICT);
+    return { taskId: task.id, revision: task.revision, mediaRunId: runId, evidenceSha256: evidence.evidenceSha256 };
   }
 
   /**
-   * 规范化作品身份与季号后创建并持久化媒体治理任务草稿。
+   * 在工作流确认脚本退出后释放原媒体步骤占用，保留已完成的领域证据和实际文件状态。
+   * @param context - 工作流的密封身份、失败或取消结果和已确认回执。
+   * @throws 停止端口或原步骤身份不可验证时保留占用并等待恢复核对。
+   */
+  async stopWorkflowStep(context: WorkflowStepStop): Promise<void> {
+    const { invocation, prepared } = context;
+    const task = await this.workflowTask(invocation.business.scopeId, invocation.business.subjectId);
+    const runId = this.workflowMediaRunId(invocation.executionKey);
+    if (prepared.mediaRunId !== runId || prepared.taskId !== task.id || !this.stateStore?.stopWorkflowRun)
+      throwVbenError('媒体停止步骤身份或持久端口不可用', HttpStatus.CONFLICT);
+    if (task.activeRunId !== runId) return;
+    task.activeRunId = null;
+    task.runState = 'blocked';
+    task.gateReason = '工作流步骤执行失败';
+    if (context.status === 'cancelled') task.gateReason = '工作流已取消当前步骤';
+    task.nextCommandLabel = '查看工作流运行记录';
+    this.bumpRevision(task);
+    await this.stateStore.stopWorkflowRun(task, runId, invocation.executionKey, context.status);
+    const current = await this.workflowTask(invocation.business.scopeId, task.id);
+    this.publishTaskPatch(current, 'state-updated');
+  }
+
+  /**
+   * 检查最终输出指向该 Task 的机械验收运行，并要求所有业务单元都有实际验收证据。
+   * @param context - 固定 Work、Task 和流程映射的最终媒体证据。
+   * @throws 身份、机械验收终态或任一单元证据缺失时禁止流程宣告成功。
+   */
+  async completeWorkflow(context: WorkflowCompletionContext): Promise<void> {
+    const task = await this.workflowTask(context.business.scopeId, context.business.subjectId);
+    const runId = String(context.output.mediaRunId ?? '');
+    const envelope = await this.stateStore?.readRunEnvelope?.(runId);
+    const evidence = await this.stateStore?.readWorkflowEvidence?.(runId);
+    const identityMatches = context.output.taskId === task.id && context.output.workId === task.workId &&
+      envelope?.taskId === task.id && envelope.action === 'acceptance.verify';
+    const evidenceMatches = evidence?.status === 'succeeded' && Boolean(evidence.evidenceSha256) &&
+      evidence.evidenceSha256 === context.output.evidenceSha256;
+    const closed = task.stage === 'closed' && task.runState === 'succeeded' &&
+      task.activeRunId === null && task.closedMode === 'mechanical' && Boolean(task.closedAt);
+    if (!identityMatches || !evidenceMatches || !closed || !task.units.length ||
+      task.units.some((unit) => !unit.evidenceSha256 || !unit.localAcceptedAt))
+      throwVbenError('媒体治理尚未完成机械验收', HttpStatus.CONFLICT);
+  }
+
+  /**
+   * 将工作流拥有的步骤键固定为媒体运行身份，使进程恢复不会重新预留副作用。
+   * @param executionKey - 工作流运行、节点和循环访问共同确定的执行键。
+   * @returns 同一执行键始终一致的媒体运行标识。
+   */
+  private workflowMediaRunId(executionKey: string): string {
+    return `media-run-${createHash('sha256').update(executionKey).digest('hex').slice(0, 48)}`;
+  }
+
+  /**
+   * 只向脚本传递媒体运行定位字段，描述符、计划授权和私有凭据保留在内部接口。
+   * @param envelope - 已持久化的原媒体步骤信封。
+   * @returns 脚本标准 params 区允许使用的业务字段。
+   */
+  private workflowScriptParameters(envelope: MediaGovernanceExecutionEnvelope): Record<string, unknown> {
+    return { mediaRunId: envelope.runId, taskId: envelope.taskId, sealedInputSha256: envelope.sealedInputSha256 };
+  }
+
+  /**
+   * 向工作流拥有的当前脚本返回原密封信封，停止或已结束的媒体步骤不能再次取得执行授权。
+   * @param input - 内部认证后提交的媒体身份、工作流执行键及密封摘要。
+   * @returns 与原预留完全一致的媒体执行信封。
+   * @throws 运行归属、执行键、摘要、活动状态或授权期限不匹配时拒绝读取。
+   */
+  async workflowEnvelope(input: MediaWorkflowEnvelopeDto) {
+    const envelope = await this.stateStore?.readRunEnvelope?.(input.mediaRunId);
+    const sameIdentity = this.workflowMediaRunId(input.executionKey) === input.mediaRunId &&
+      envelope?.taskId === input.taskId && envelope?.replayKey === input.executionKey &&
+      envelope?.sealedInputSha256 === input.sealedInputSha256;
+    if (!sameIdentity) throw new HttpException('媒体工作流密封身份不匹配', HttpStatus.CONFLICT);
+    const stored = await this.stateStore?.readWorkflowTask?.(input.taskId);
+    if (!stored || stored.activeRunId !== input.mediaRunId || Date.parse(envelope!.expiresAt) <= Date.now())
+      throw new HttpException('媒体步骤不再处于可执行状态', HttpStatus.CONFLICT);
+    return envelope!;
+  }
+
+  /**
+   * 收集完整初始资料后，以同一事务创建媒体任务和统一绑定的工作流实例。
    * @param input - 用于作品身份与季号后创建并持久化媒体治理任务草稿的结构化输入，包含 `titleHint`、`seasonNumbers`、`mediaType`、`providerRef` 字段。
-   * @returns 作品身份与季号后创建并持久化媒体治理任务草稿。
+   * @param options - 可信入口传入的操作者、初始来源及同事务业务关联。
+   * @returns 已提交任务与工作流的媒体对象。
    */
   async create(
     input: MediaGovernanceTaskCreateInput,
+    options: MediaTaskCreationOptions = { actorId: 'system:media-intake' },
   ): Promise<MediaGovernanceTask> {
     const titleHint = input.titleHint.trim();
     const seasonNumbers = (input.seasonNumbers ?? []).map((season) =>
@@ -426,7 +644,18 @@ export class MediaGovernanceService implements OnModuleInit {
       workId: input.workId ?? null,
       workItemId: input.workItemId ?? null,
     };
-    await this.persistTask(task);
+    const enroll = this.workflowCreation;
+    if (!enroll || !this.stateStore?.createTask)
+      throwVbenError('媒体工作流创建链路尚未装配', HttpStatus.SERVICE_UNAVAILABLE);
+    for (const source of options.sources ?? []) {
+      const classification = { ...source.input, expectedRevision: task.revision };
+      if (source.torrent) await this.prepareTorrentSource(task, classification, { buffer: source.torrent, size: source.torrent.length });
+      else await this.prepareMagnetSource(task, classification);
+    }
+    await this.stateStore.createTask(task, async (manager) => {
+      await options.persistRelations?.(manager, task);
+      await enroll(task, options.actorId, manager);
+    });
     this.tasks.unshift(task);
     this.publishTaskPatch(task, 'created');
     return task;
@@ -636,10 +865,11 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 按期望版本删除可丢弃草稿，并同步清除持久化账本。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param input - 用于discard任务的结构化输入，包含 `expectedRevision` 字段。
-   * @returns 包含 `clearedWorkItemId`、`deletedTaskId` 字段的discard任务。
+   * 在版本及流程状态核对通过后删除可丢弃草稿，事务失败时保留内存与持久账本。
+   * @param taskId - 当前媒体任务身份。
+   * @param input - 页面读取的期望任务修订。
+   * @returns 被删除任务和已解除的作品条目引用。
+   * @throws 草稿不可丢弃、流程仍有活动令牌或持久化不可用时拒绝删除。
    */
   async discardTask(
     taskId: string,
@@ -653,6 +883,8 @@ export class MediaGovernanceService implements OnModuleInit {
     const discardReason = this.getDiscardDisabledReason(task);
     if (discardReason) throwVbenError(discardReason, HttpStatus.CONFLICT);
 
+    if (!this.workflowDiscard) throwVbenError('工作流删除核对端口尚未装配', HttpStatus.SERVICE_UNAVAILABLE);
+    const assertDiscard = this.workflowDiscard;
     let clearedWorkItemId = task.workItemId;
     if (this.stateStore) {
       if (!this.databaseReady() || !this.stateStore.deleteTask) {
@@ -666,9 +898,11 @@ export class MediaGovernanceService implements OnModuleInit {
           expectedRevision: task.revision,
           expectedWorkItemId: task.workItemId,
           taskId: task.id,
+          beforeDelete: (manager) => assertDiscard(task, manager),
         });
         clearedWorkItemId = receipt.clearedWorkItemId;
-      } catch {
+      } catch (error) {
+        if (error instanceof HttpException) throw error;
         throwVbenError(
           '媒体治理数据库删除链路暂不可用',
           HttpStatus.SERVICE_UNAVAILABLE,
@@ -923,17 +1157,6 @@ export class MediaGovernanceService implements OnModuleInit {
       task.stage === 'closed'
     ) {
       this.scheduleScrapeValidation(task);
-    }
-    if (input.eventType === 'run-failed') {
-      await this.continueStalledInitialDownload(task, input).catch(() => false);
-    }
-    if (input.eventType === 'run-succeeded') {
-      const mechanicalContinued = await this.continueMechanicalPipeline(
-        task,
-      ).catch(() => false);
-      if (!mechanicalContinued) {
-        await this.continueRssIntakePipeline(task).catch(() => false);
-      }
     }
     return {
       applied: true,
@@ -1325,6 +1548,18 @@ export class MediaGovernanceService implements OnModuleInit {
     input: MediaGovernanceMagnetSourceCreateDto,
   ): Promise<MediaGovernanceSource> {
     const task = this.detail(taskId);
+    const source = await this.prepareMagnetSource(task, input);
+    await this.commitTask(task, 'source-updated');
+    return source;
+  }
+
+  /**
+   * 准备magnet来源并更新指定任务草稿，持久化由来源编辑或任务创建事务统一完成。
+   * @param task - 尚未广播或正在编辑的业务任务。
+   * @param input - 已由业务入口验证的来源分类与描述符参数。
+   * @returns 已附加到任务的来源事实。
+   */
+  private async prepareMagnetSource(task: MediaGovernanceTask, input: MediaGovernanceMagnetSourceCreateDto): Promise<MediaGovernanceSource> {
     this.assertRevision(task, input.expectedRevision);
     this.assertSourceOwnerAvailable(task, input.sourceRole);
     const seasonNumbers = this.normalizeSourceSeasons(
@@ -1352,7 +1587,7 @@ export class MediaGovernanceService implements OnModuleInit {
       magnetUri: input.magnetUri,
       revision: 1,
       sourceId,
-      taskId,
+      taskId: task.id,
     });
     let sourceHealthReasonLabel = '未声明追踪器，等待运行时探针';
     if (trackerCount > 0) {
@@ -1387,7 +1622,6 @@ export class MediaGovernanceService implements OnModuleInit {
     if (governanceProfile) task.governanceProfile = governanceProfile;
     task.nextCommandLabel = '检查来源清单';
     this.bumpRevision(task);
-    await this.commitTask(task, 'source-updated');
     return source;
   }
 
@@ -1404,6 +1638,20 @@ export class MediaGovernanceService implements OnModuleInit {
     file: { buffer: Buffer; size: number },
   ): Promise<MediaGovernanceSource> {
     const task = this.detail(taskId);
+    const source = await this.prepareTorrentSource(task, input, file);
+    await this.commitTask(task, 'source-updated');
+    return source;
+  }
+
+  /**
+   * 准备torrent来源并更新指定任务草稿，持久化由来源编辑或任务创建事务统一完成。
+   * @param task - 尚未广播或正在编辑的业务任务。
+   * @param input - 已由业务入口验证的来源分类与描述符参数。
+   * @param file - 完整种子字节与实际长度。
+   * @returns 已附加到任务的来源事实。
+   */
+  private async prepareTorrentSource(task: MediaGovernanceTask, input: MediaGovernanceSourceClassificationDto,
+    file: { buffer: Buffer; size: number }): Promise<MediaGovernanceSource> {
     this.assertRevision(task, input.expectedRevision);
     this.assertSourceOwnerAvailable(task, input.sourceRole);
     if (!file?.buffer || file.size !== file.buffer.length) {
@@ -1420,7 +1668,7 @@ export class MediaGovernanceService implements OnModuleInit {
       bytes: file.buffer,
       revision: 1,
       sourceId,
-      taskId,
+      taskId: task.id,
     });
     const parsed = stored ?? {
       ...localParsed,
@@ -1458,7 +1706,6 @@ export class MediaGovernanceService implements OnModuleInit {
     if (governanceProfile) task.governanceProfile = governanceProfile;
     task.nextCommandLabel = '运行死种/死链探针';
     this.bumpRevision(task);
-    await this.commitTask(task, 'source-updated');
     return source;
   }
 
@@ -1811,10 +2058,11 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 在允许阶段停用描述符，并触发来源运行态的精确清理。
+   * 在允许阶段为工作流准备指定来源的精确清理，并保留原描述符直到回执确认。
    * @param taskId - 用于精确定位任务的标识。
    * @param sourceId - 用于精确定位来源的标识。
    * @param input - 用于来源的结构化输入，包含 `expectedRevision` 字段。
+   * @param workflow - 工作流固定的步骤键与业务身份，缺失时禁止清理。
    * @returns 来源。
    * @throws 当 `reserveExecution` 调用失败时重新抛出该入口捕获且决定公开的原异常。
    */
@@ -1822,10 +2070,11 @@ export class MediaGovernanceService implements OnModuleInit {
     taskId: string,
     sourceId: string,
     input: MediaGovernanceRevisionCommandDto,
+    workflow?: MediaWorkflowStepContext,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    this.assertExecutionMode(task);
+    this.assertExecutionMode(task, workflow);
     const source = this.findSource(task, sourceId);
     const resettableUnboundResidue =
       task.stage === 'metadata' &&
@@ -1884,7 +2133,7 @@ export class MediaGovernanceService implements OnModuleInit {
     ) {
       throwVbenError('当前阶段不能移除来源', HttpStatus.CONFLICT);
     }
-    if (this.executionGateway?.enabled()) {
+    {
       const previous = {
         descriptorTombstonedAt: source.descriptorTombstonedAt,
         sourceHealth: source.sourceHealth,
@@ -1896,18 +2145,13 @@ export class MediaGovernanceService implements OnModuleInit {
       source.sourceHealthLabel = '正在精确清理';
       source.sourceHealthReasonLabel = '描述文件已停用，正在清理来源独占运行态';
       try {
-        await this.reserveExecution(task, 'source.cleanup', [source]);
+        await this.reserveExecution(task, 'source.cleanup', [source], workflow);
       } catch (error) {
         Object.assign(source, previous);
         throw error;
       }
       return task;
     }
-    source.descriptorTombstonedAt = new Date().toISOString();
-    this.finalizeSourceRemoval(task, source);
-    this.bumpRevision(task);
-    await this.commitTask(task, 'source-updated');
-    return task;
   }
 
   /**
@@ -2225,111 +2469,37 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 通过启动正式来源清单检查，或在模拟模式构造受限清单。
+   * 拒绝历史的独立来源检查入口，调用方必须从媒体业务发起绑定流程。
    * @param taskId - 用于精确定位任务的标识。
-   * @param sourceId - 用于精确定位来源的标识。
-   * @param input - 用于通过启动正式来源清单检查，或在模拟模式构造受限清单的结构化输入，包含 `expectedRevision` 字段。
-   * @returns 通过启动正式来源清单检查，或在模拟模式构造受限清单。
+   * @param _sourceId - 保留历史调用签名的来源标识，入口退役后不再解析或执行。
+   * @param input - 历史入口携带的期望任务修订。
+   * @throws 任务核对后返回必须使用工作流的冲突错误。
    */
   async inspectSource(
     taskId: string,
-    sourceId: string,
+    _sourceId: string,
     input: MediaGovernanceRevisionCommandDto,
-  ): Promise<MediaGovernanceSource> {
+  ): Promise<never> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    this.assertExecutionMode(task);
-    const source = this.findSource(task, sourceId);
-    if (this.executionGateway?.enabled()) {
-      source.sourceHealth = 'probing';
-      source.sourceHealthLabel = '等待 NAS 检查来源清单';
-      source.sourceHealthReasonLabel = '最长 2 分钟，期间每 5 秒更新等待进度';
-      await this.reserveExecution(task, 'source.inspect', [source]);
-      return source;
-    }
-    if (source.manifestState === 'pending-inspection') {
-      let manifestIndex = 0;
-      if (source.sourceRole === 'supplemental_subtitle') {
-        source.manifest = task.units.flatMap((unit) => {
-          if (unit.subtitleContract?.sourceId !== source.id) return [];
-          return unit.subtitleContract.mappings.map((mapping) => ({
-            executable: false,
-            index: manifestIndex++,
-            relativePath: mapping.relativePath,
-            sizeBytes: 2 * 1024 * 1024,
-          }));
-        });
-      } else {
-        source.manifest = task.units.map((unit, index) => {
-          let relativePath = 'Movie.mkv';
-          if (unit.seasonNumber) {
-            relativePath = `${unit.seasonNumber}/Episode-${String(index + 1).padStart(2, '0')}.mkv`;
-          }
-          return {
-            executable: false,
-            index,
-            relativePath: validateDescriptorManifestEntry({
-              entryType: 'file',
-              executable: false,
-              relativePath,
-            }),
-            sizeBytes: 1024 * 1024 * 1024,
-          };
-        });
-      }
-      if (source.manifest.length === 0) {
-        throwVbenError('来源尚未绑定可检查的文件合同', HttpStatus.CONFLICT);
-      }
-      source.manifestSha256 = createHash('sha256')
-        .update(JSON.stringify(source.manifest))
-        .digest('hex');
-      source.manifestState = 'inspected';
-      source.selectedBytes = source.manifest.reduce(
-        (total, item) => total + item.sizeBytes,
-        0,
-      );
-      source.selectedFileCount = source.manifest.length;
-      source.selectedFileIndices = source.manifest.map((entry) => entry.index);
-    }
-    task.nextCommandLabel = '运行死种/死链探针';
-    this.bumpRevision(task);
-    await this.commitTask(task, 'source-updated');
-    return source;
+    throw new HttpException('媒体步骤只能由绑定工作流准备和执行', HttpStatus.CONFLICT);
   }
 
   /**
-   * 启动来源运行时可用性探针，或返回模拟探针结果。
+   * 拒绝历史的独立探测入口，可用性检查必须作为工作流步骤执行。
    * @param taskId - 用于精确定位任务的标识。
-   * @param sourceId - 用于精确定位来源的标识。
-   * @param input - 用于来源运行时可用性探针，或返回模拟探针结果的结构化输入，包含 `expectedRevision` 字段。
-   * @returns 来源运行时可用性探针，或返回模拟探针。
+   * @param _sourceId - 保留历史调用签名的来源标识，入口退役后不再解析或执行。
+   * @param input - 历史入口携带的期望任务修订。
+   * @throws 任务核对后返回必须使用工作流的冲突错误。
    */
   async probeRuntimeSource(
     taskId: string,
-    sourceId: string,
+    _sourceId: string,
     input: MediaGovernanceRevisionCommandDto,
-  ): Promise<MediaGovernanceSource> {
+  ): Promise<never> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    this.assertExecutionMode(task);
-    const source = this.findSource(task, sourceId);
-    if (source.manifestState !== 'inspected') {
-      throwVbenError('必须先检查来源清单', HttpStatus.CONFLICT);
-    }
-    if (this.executionGateway?.enabled()) {
-      source.sourceHealth = 'probing';
-      source.sourceHealthLabel = '正在运行死种/死链探针';
-      source.sourceHealthReasonLabel = '最长 10 分钟给出可复核分类';
-      await this.reserveExecution(task, 'source.probe-runtime', [source]);
-      return source;
-    }
-    source.sourceHealth = 'viable';
-    source.sourceHealthLabel = '演示探针通过';
-    source.sourceHealthReasonLabel = '进程内演示未连接 NAS，正式探针仍保持关闭';
-    task.nextCommandLabel = '开始 NAS 下载';
-    this.bumpRevision(task);
-    await this.commitTask(task, 'source-updated');
-    return source;
+    throw new HttpException('媒体步骤只能由绑定工作流准备和执行', HttpStatus.CONFLICT);
   }
 
   /**
@@ -2347,18 +2517,20 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 根据来源与文件映射的完整性校验结果启动或续接隔离下载。
+   * 核对来源与文件映射后为工作流密封隔离下载授权，不自行派发或续步。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于下载任务的结构化输入，包含 `expectedRevision` 字段。
+   * @param workflow - 工作流固定的步骤键与业务身份，缺失时禁止预留。
    * @returns 下载任务。
    */
   async startDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
+    workflow?: MediaWorkflowStepContext,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    this.assertExecutionMode(task);
+    this.assertExecutionMode(task, workflow);
     if (task.runState === 'running') {
       throwVbenError('任务已有运行中的操作', HttpStatus.CONFLICT);
     }
@@ -2383,41 +2555,14 @@ export class MediaGovernanceService implements OnModuleInit {
       throwVbenError('仍有来源未完成清单检查或运行时探针', HttpStatus.CONFLICT);
     }
     this.assertDownloadFileMappings(task);
-    if (this.executionGateway?.enabled()) {
+    {
       let action: 'source.download' | 'source.resume' = 'source.download';
       if (task.stage === 'download' && task.runState === 'blocked') {
         action = 'source.resume';
       }
-      await this.reserveExecution(task, action, task.sources);
+      await this.reserveExecution(task, action, task.sources, workflow);
       return task;
     }
-    task.stage = 'download';
-    task.runState = 'running';
-    task.nextCommandLabel = '等待来源载荷就绪';
-    const selectedBytes = task.sources.reduce(
-      (total, source) => total + source.selectedBytes,
-      0,
-    );
-    const selectedFileCount = task.sources.reduce(
-      (total, source) => total + source.selectedFileCount,
-      0,
-    );
-    task.progress = {
-      completedBytes: 0,
-      completedItems: 0,
-      etaLabel: '演示约 1 秒',
-      heartbeatLabel: '刚刚',
-      observedAt: new Date().toISOString(),
-      percent: 0,
-      progressLabel: `正在连接来源（0/${selectedFileCount}）`,
-      speedLabel: '演示模式',
-      totalBytes: selectedBytes,
-      totalItems: selectedFileCount,
-    };
-    this.bumpRevision(task);
-    await this.commitTask(task, 'state-updated');
-    this.scheduleProgress(task, { selectedBytes, selectedFileCount });
-    return task;
   }
 
   /**
@@ -2602,118 +2747,37 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 把已有真实进度的首次停滞下载转换为唯一一个新续传 Run，并让 `source.resume` 终态承担重试上限。
-   * @param task - 已提交失败终态、清空活动 Run 且保留下载进度的媒体任务。
-   * @param input - 携带失败动作与来源原因的权威执行器终态事件。
-   * @returns 成功预约一次 `source.resume` 时为 `true`；零载荷、非停滞或已是续传动作时为 `false`。
-   */
-  private async continueStalledInitialDownload(
-    task: MediaGovernanceTask,
-    input: MediaGovernanceExecutorEventDto,
-  ): Promise<boolean> {
-    const partialPayloadAvailable =
-      task.progress.totalBytes > 0 &&
-      task.progress.completedBytes > 0 &&
-      task.progress.completedBytes < task.progress.totalBytes;
-    const initialDownloadStalled =
-      input.eventType === 'run-failed' &&
-      input.action === 'source.download' &&
-      input.sourceHealthReason === 'download_stalled' &&
-      !input.summary.includes('download_cancelled');
-    const taskCanResume =
-      task.stage === 'download' &&
-      task.runState === 'blocked' &&
-      task.activeRunId === null;
-    if (!initialDownloadStalled || !taskCanResume || !partialPayloadAvailable) {
-      return false;
-    }
-    await this.resumeDownload(task.id, { expectedRevision: task.revision });
-    this.publishTaskPatch(task, 'state-updated');
-    return true;
-  }
-
-  /**
-   * 根据下载运行身份校验结果发送幂等暂停、取消或续传命令。
+   * 拒绝旧下载控制入口，取消和恢复必须由持有脚本身份的工作流决定。
    * @param taskId - 用于精确定位任务的标识。
-   * @param expectedRevision - 决定根据下载运行身份校验结果发送幂等暂停、取消或续传命令内容、边界或目标的 `expectedRevision` 值。
-   * @param command - 决定根据下载运行身份校验结果发送幂等暂停、取消或续传命令内容、边界或目标的 `command` 值。
-   * @returns 根据下载运行身份校验结果发送幂等暂停、取消或续传命令。
+   * @param expectedRevision - 旧客户端读取到的任务修订。
+   * @param command - 被拒绝的历史下载操作，用于返回明确错误。
+   * @throws 任务修订核对后始终返回工作流控制要求，不触发运行态变更。
    */
   private async controlDownload(
     taskId: string,
     expectedRevision: number,
     command: 'cancel' | 'pause' | 'resume',
-  ) {
+  ): Promise<never> {
     const task = this.detail(taskId);
     this.assertRevision(task, expectedRevision);
-    let commandAllowed = false;
-    if (command === 'pause') commandAllowed = task.runState === 'running';
-    if (command === 'resume') commandAllowed = task.runState === 'blocked';
-    if (command === 'cancel') {
-      commandAllowed = ['blocked', 'running'].includes(task.runState);
-    }
-    if (task.stage !== 'download' || !task.activeRunId || !commandAllowed) {
-      const message = {
-        cancel: '当前没有可取消的下载',
-        pause: '当前没有可暂停的下载',
-        resume: '当前没有可续传的下载',
-      }[command];
-      throwVbenError(message, HttpStatus.CONFLICT);
-    }
-    if (
-      !this.executionGateway?.enabled() ||
-      !this.stateStore?.readRunEnvelope
-    ) {
-      throwVbenError(
-        '媒体执行器控制链路暂不可用',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    const envelope = await this.stateStore.readRunEnvelope(task.activeRunId);
-    if (
-      !envelope ||
-      !['source.download', 'source.resume'].includes(envelope.action) ||
-      envelope.taskId !== task.id ||
-      envelope.runId !== task.activeRunId
-    ) {
-      throwVbenError('下载 Run 身份不匹配', HttpStatus.CONFLICT);
-    }
-    await this.executionGateway.control({
-      command,
-      controlId: `media-control-${randomUUID()}`,
-      runId: envelope.runId,
-      sealedInputSha256: envelope.sealedInputSha256,
-      taskId: task.id,
-    });
-    task.runState = 'blocked';
-    if (command === 'resume') task.runState = 'running';
-    task.gateReason = null;
-    if (command === 'pause') task.gateReason = '下载暂停请求已送达';
-    if (command === 'cancel') task.gateReason = '下载取消请求已送达';
-    task.nextCommandLabel = {
-      cancel: '等待执行器停止并保留待清理载荷',
-      pause: '等待执行器确认安全暂停',
-      resume: '正在从同一 Run 续传',
-    }[command];
-    this.refreshSemanticProjection(task);
-    await this.persistTask(task);
-    this.publishTaskPatch(task, 'state-updated');
-    return task;
+    throw new HttpException(`下载操作 ${command} 必须由所属工作流控制`, HttpStatus.CONFLICT);
   }
 
   /**
-   * 密封本地治理计划，并启动正式执行或受限模拟流程。
+   * 核对载荷与业务身份后密封治理计划，只为当前工作流步骤预留执行授权。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于治理任务的结构化输入，包含 `expectedRevision` 字段。
+   * @param workflow - 工作流固定的步骤键与业务身份，缺失时禁止预留。
    * @returns 治理任务。
    */
   async startGovernance(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
+    workflow?: MediaWorkflowStepContext,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    this.assertExecutionMode(task);
+    this.assertExecutionMode(task, workflow);
     const retryingPlanFailure =
       task.stage === 'download' &&
       task.runState === 'blocked' &&
@@ -2736,7 +2800,7 @@ export class MediaGovernanceService implements OnModuleInit {
     ) {
       throwVbenError('来源载荷尚未就绪', HttpStatus.CONFLICT);
     }
-    if (this.executionGateway?.enabled()) {
+    {
       if (!task.payloadSeal) {
         throwVbenError('下载载荷缺少密封证据', HttpStatus.CONFLICT);
       }
@@ -2777,53 +2841,9 @@ export class MediaGovernanceService implements OnModuleInit {
         await this.commitTask(task, 'state-updated');
         throwVbenError(task.gateReason, HttpStatus.CONFLICT);
       }
-      await this.reserveExecution(task, 'governance.execute');
+      await this.reserveExecution(task, 'governance.execute', undefined, workflow);
       return task;
     }
-    task.stage = 'governance';
-    task.runState = 'running';
-    task.nextCommandLabel = '等待目录与文件名归一化';
-    task.progress = {
-      ...task.progress,
-      completedItems: 1,
-      etaLabel: '演示约 1 秒',
-      percent: 10,
-      progressLabel: '正在密封本地治理计划（1/6）',
-      totalItems: 6,
-    };
-    this.bumpRevision(task);
-    await this.commitTask(task, 'state-updated');
-    const timer = setTimeout(() => {
-      const observedAt = new Date().toISOString();
-      const evidenceSha256 = sha256MediaGovernanceJson({
-        taskId: task.id,
-        taskRevision: task.revision,
-        units: task.units.map((unit) => unit.id),
-      });
-      task.stage = 'closed';
-      task.runState = 'succeeded';
-      task.gateReason = null;
-      task.closedAt = observedAt;
-      task.closedMode = 'mechanical';
-      task.nextCommandLabel = '查看机械验收证据';
-      for (const unit of task.units) {
-        unit.evidenceSha256 = evidenceSha256;
-        unit.localAcceptedAt = observedAt;
-      }
-      task.progress = {
-        ...task.progress,
-        completedItems: 6,
-        etaLabel: '已完成',
-        percent: 100,
-        progressLabel: '目录与文件名归一化已完成',
-      };
-      this.refreshSemanticProjection(task);
-      void this.commitTask(task, 'state-updated')
-        .then(() => this.scheduleScrapeValidation(task))
-        .catch(() => undefined);
-    }, 500);
-    timer.unref?.();
-    return task;
   }
 
   /**
@@ -2869,15 +2889,18 @@ export class MediaGovernanceService implements OnModuleInit {
    * 在期望版本门内把既有错误身份目录重封为规范身份重排计划并立即派发本地事务。
    * @param taskId - 用于精确定位待恢复任务的标识。
    * @param input - 携带调用方已读取任务版本的并发控制输入。
+   * @param workflow - 工作流固定的步骤键与业务身份，缺失时禁止身份重整。
    * @returns 已进入规范身份重排运行的最新任务状态。
    * @throws 当任务已有运行、身份或计划证据不完整、目录已一致或执行链路不可用时抛出。
    */
   async startCanonicalIdentityRebase(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
+    workflow?: MediaWorkflowStepContext,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task, workflow);
     if (task.activeRunId || task.stage === 'closed') {
       throwVbenError('当前任务不满足规范身份重排条件', HttpStatus.CONFLICT);
     }
@@ -2925,7 +2948,7 @@ export class MediaGovernanceService implements OnModuleInit {
         etaLabel: '等待本地事务',
         progressLabel: '规范身份重排计划已密封',
       };
-      await this.reserveExecution(task, 'governance.execute');
+      await this.reserveExecution(task, 'governance.execute', undefined, workflow);
     } catch (error) {
       Object.assign(task, previous);
       if (error instanceof HttpException) throw error;
@@ -2941,14 +2964,17 @@ export class MediaGovernanceService implements OnModuleInit {
    * 在文件治理完成后启动只校验路径、命名与写边界的机械验收。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 包含当前任务期望修订号的机械验收命令。
+   * @param workflow - 工作流固定的步骤键与业务身份，缺失时禁止预留验收。
    * @returns 预约机械验收后的最新治理任务。
    */
   async startAcceptanceVerification(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
+    workflow?: MediaWorkflowStepContext,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    this.assertExecutionMode(task, workflow);
     const retryingFailedVerification =
       task.stage === 'acceptance' &&
       task.runState === 'blocked' &&
@@ -2964,7 +2990,7 @@ export class MediaGovernanceService implements OnModuleInit {
     this.assertCanonicalSealedPlan(task);
     let sources: MediaGovernanceSource[] | undefined;
     if (task.sources.length > 0) sources = task.sources;
-    await this.reserveExecution(task, 'acceptance.verify', sources);
+    await this.reserveExecution(task, 'acceptance.verify', sources, workflow);
     return task;
   }
 
@@ -3027,122 +3053,10 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 从文件治理成功边界自动预约机械验收，不读取或等待 NAS 刮削状态。
-   * @param task - 已提交当前终态且可能等待机械验收的媒体治理任务。
-   * @returns 成功预约机械验收时返回 `true`；其他阶段或已闭环时返回 `false`。
-   */
-  private async continueMechanicalPipeline(
-    task: MediaGovernanceTask,
-  ): Promise<boolean> {
-    if (
-      task.activeRunId ||
-      !this.executionGateway?.enabled() ||
-      task.stage !== 'acceptance' ||
-      task.runState !== 'succeeded'
-    ) {
-      return false;
-    }
-    await this.startAcceptanceVerification(task.id, {
-      expectedRevision: task.revision,
-    });
-    this.publishTaskPatch(task, 'state-updated');
-    return true;
-  }
-
-  /**
-   * 让 RSS 入队 Task 依次完成清单检查、保守自动映射、来源探针和下载派发，人工映射失败时停止在可见阻断态。
-   *
-   * @param task - 可能处于接收阶段任一持久化边界的 RSS Task。
-   * @returns 本轮成功预约后继 Run 或完成一个自动映射步骤时返回 `true`。
-   */
-  private async continueRssIntakePipeline(
-    task: MediaGovernanceTask,
-  ): Promise<boolean> {
-    const retryableSelectionFailure =
-      task.runState === 'blocked' &&
-      task.gateReason === 'RSS 来源无法安全自动映射文件';
-    if (task.operationKind !== 'rss-intake-auto') return false;
-    if (task.stage !== 'intake' || task.activeRunId) return false;
-    if (
-      ['blocked', 'queued', 'running'].includes(task.runState) &&
-      !retryableSelectionFailure
-    ) {
-      return false;
-    }
-    if (this.rssContinuationTasks.has(task.id)) return false;
-    this.rssContinuationTasks.add(task.id);
-    try {
-      if (retryableSelectionFailure) {
-        task.runState = 'succeeded';
-        task.gateReason = null;
-        task.nextCommandLabel = '继续检查 RSS 来源清单';
-      }
-      const pendingInspection = task.sources.find(
-        (source) =>
-          source.descriptorTombstonedAt === null &&
-          source.manifestState === 'pending-inspection',
-      );
-      if (pendingInspection) {
-        await this.inspectSource(task.id, pendingInspection.id, {
-          expectedRevision: task.revision,
-        });
-        return true;
-      }
-      this.normalizeExplicitEmbeddedRssSources(task);
-      const unmapped = task.sources.find(
-        (source) =>
-          source.descriptorTombstonedAt === null &&
-          source.manifestState === 'inspected' &&
-          (source.selectedFileCount === 0 ||
-            source.selectedFileMappings.length !== source.selectedFileCount),
-      );
-      if (unmapped) {
-        try {
-          await this.applyAutomaticSourceSelection(task, {
-            sourceId: unmapped.id,
-            subtitleLanguage: 'zh-CN',
-          });
-        } catch {
-          task.runState = 'blocked';
-          task.gateReason = 'RSS 来源无法安全自动映射文件';
-          task.nextCommandLabel = '手动配置当前来源的逐文件治理映射';
-          this.bumpRevision(task);
-          await this.commitTask(task, 'state-updated');
-          return false;
-        }
-      }
-      const unchecked = task.sources.find(
-        (source) =>
-          source.descriptorTombstonedAt === null &&
-          source.manifestState === 'inspected' &&
-          source.selectedFileCount > 0 &&
-          source.selectedFileMappings.length === source.selectedFileCount &&
-          source.sourceHealth === 'unchecked',
-      );
-      if (unchecked) {
-        await this.probeRuntimeSource(task.id, unchecked.id, {
-          expectedRevision: task.revision,
-        });
-        return true;
-      }
-      if (
-        task.sources.length > 0 &&
-        task.sources.every((source) => this.isSourceDownloadable(source))
-      ) {
-        await this.startDownload(task.id, { expectedRevision: task.revision });
-        return true;
-      }
-      return Boolean(unmapped);
-    } finally {
-      this.rssContinuationTasks.delete(task.id);
-    }
-  }
-
-  /**
    * 将全部清单都明确标注内封字幕的 RSS 主来源从错误的外挂分类原子纠偏，并清除失败调用遗留的部分映射。
    * @param task - 已完成全部来源清单检查的 RSS 接收任务。
    */
-  private normalizeExplicitEmbeddedRssSources(task: MediaGovernanceTask) {
+  normalizeExplicitEmbeddedRssSources(task: MediaGovernanceTask) {
     if (
       task.operationKind !== 'rss-intake-auto' ||
       task.governanceProfile !== 'sidecar-bundled'
@@ -3212,7 +3126,7 @@ export class MediaGovernanceService implements OnModuleInit {
    * @param value - 指定来源与首选中文字幕语言的机械选择参数。
    * @returns 文件选择写入后的数量、字节数和新 revision 回执。
    */
-  private async applyAutomaticSourceSelection(
+  async applyAutomaticSourceSelection(
     task: MediaGovernanceTask,
     value: Record<string, unknown>,
   ) {
@@ -3539,26 +3453,27 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 预留运行身份、密封执行信封并通过发件箱派发。
-   * @param task - 用于预留运行身份、密封执行信封并通过发件箱派发的领域对象，包含 `activeRunId`、`nextCommandLabel`、`progress`、`revision` 字段。
-   * @param action - 决定预留运行身份、密封执行信封并通过发件箱派发内容、边界或目标的 `action` 值。
-   * @param sources - 决定预留运行身份、密封执行信封并通过发件箱派发内容、边界或目标的 `sources` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
-   * @returns 预留运行身份、密封执行信封并通过发件箱派发。
-   * @throws 当 `stateStore.reserveRunDispatch` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   * 在修订比较通过后持久化工作流步骤的密封身份，不启动脚本或媒体独立队列。
+   * @param task - 本次步骤将占用的媒体 Task，失败时恢复原有内存投影。
+   * @param action - 当前图节点明确选择的媒体原子动作。
+   * @param sources - 该动作需要的来源集合，治理计划步骤可以省略。
+   * @param workflow - 决定固定运行身份的工作流执行键与业务对象。
+   * @returns 运行身份、授权与待执行状态持久化后返回。
+   * @throws 持久化或并发修订检查失败时恢复原内存状态并抛出错误。
    */
   private async reserveExecution(
     task: MediaGovernanceTask,
     action: MediaGovernanceExecutorAction,
     sources?: MediaGovernanceSource[],
+    workflow?: MediaWorkflowStepContext,
   ) {
+    this.assertExecutionMode(task, workflow);
     if (task.activeRunId) {
       throwVbenError('任务已有运行中的操作', HttpStatus.CONFLICT);
     }
     if (
       !this.databaseReady() ||
-      !this.executionGateway ||
-      !this.stateStore?.reserveRunDispatch ||
-      !this.stateStore.acknowledgeRunDispatch
+      !this.stateStore?.reserveRunDispatch
     ) {
       throwVbenError(
         '媒体执行器持久化链路暂不可用',
@@ -3574,7 +3489,7 @@ export class MediaGovernanceService implements OnModuleInit {
       semanticProjection: structuredClone(task.semanticProjection),
       stage: task.stage,
     };
-    const runId = `media-run-${randomUUID()}`;
+    const runId = this.workflowMediaRunId(workflow!.executionKey);
     task.activeRunId = runId;
     const queuedAt = new Date().toISOString();
     if (action === 'source.resume') {
@@ -3590,7 +3505,7 @@ export class MediaGovernanceService implements OnModuleInit {
         heartbeatLabel: '刚刚',
         observedAt: queuedAt,
         percent: 0,
-        progressLabel: '已入队，等待 Jenkins 调度',
+        progressLabel: '已入队，等待工作流执行脚本',
         speedLabel: '0 B/s',
         totalBytes: 0,
         totalItems: 0,
@@ -3608,7 +3523,7 @@ export class MediaGovernanceService implements OnModuleInit {
         task.stage = 'download';
       }
     }
-    task.nextCommandLabel = '已入队，等待 Jenkins 调度';
+    task.nextCommandLabel = '已入队，等待工作流执行脚本';
     this.bumpRevision(task);
     const executionInput: Parameters<
       typeof buildMediaGovernanceExecutionEnvelope
@@ -3616,12 +3531,17 @@ export class MediaGovernanceService implements OnModuleInit {
       action,
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       inputSnapshotSha256: task.inputSnapshotSha256,
-      replayKey: `${task.id}:${action}:r${task.revision}`,
+      replayKey: workflow!.executionKey,
       runId,
       taskId: task.id,
       taskRevision: task.revision,
       unitIds: task.units.map((unit) => unit.id),
     };
+    if (workflow) {
+      executionInput.replayKey = workflow.executionKey;
+      task.nextCommandLabel = '等待工作流执行脚本';
+      task.progress.progressLabel = '步骤已准备，等待工作流执行脚本';
+    }
     if (
       task.sealedPlan &&
       task.sealedPlanSha256 &&
@@ -3661,220 +3581,7 @@ export class MediaGovernanceService implements OnModuleInit {
       Object.assign(task, previous);
       throw error;
     }
-    await this.dispatchEnvelope(task, envelope);
     return envelope;
-  }
-
-  /**
-   * 向执行器派发密封信封，并记录确认或有界重试状态。
-   * @param task - 用于Envelope的领域对象，包含 `nextCommandLabel` 字段。
-   * @param envelope - 用于Envelope的领域对象，包含 `runId`、`expiresAt` 字段。
-   */
-  private async dispatchEnvelope(
-    task: MediaGovernanceTask,
-    envelope: MediaGovernanceExecutionEnvelope,
-  ) {
-    try {
-      const result = await this.executionGateway!.dispatch(envelope);
-      await this.stateStore!.acknowledgeRunDispatch!(
-        envelope.runId,
-        result.executionId,
-      );
-      task.nextCommandLabel = 'Jenkins 已接单，等待执行器进度';
-    } catch {
-      let attempts = 1;
-      if (this.stateStore?.recordRunDispatchFailure) {
-        attempts = await this.stateStore.recordRunDispatchFailure(
-          envelope.runId,
-        );
-      }
-      if (
-        attempts >= MAX_DISPATCH_ATTEMPTS ||
-        Date.parse(envelope.expiresAt) <= Date.now()
-      ) {
-        await this.failDispatch(task, envelope.runId, attempts);
-        return;
-      }
-      task.nextCommandLabel = `Jenkins 暂不可用，正在进行第 ${attempts + 1}/${MAX_DISPATCH_ATTEMPTS} 次调度`;
-    }
-    this.refreshSemanticProjection(task);
-    await this.persistTask(task);
-  }
-
-  /** 通过串行重试未确认且尚未过期的发件箱运行。 */
-  private async retryPendingDispatches() {
-    if (
-      !this.executionGateway?.enabled() ||
-      !this.stateStore?.pendingRunDispatches ||
-      !this.stateStore.acknowledgeRunDispatch
-    ) {
-      return;
-    }
-    if (this.dispatchRetryActive) return;
-    this.dispatchRetryActive = true;
-    let envelopes: MediaGovernanceExecutionEnvelope[];
-    try {
-      envelopes = await this.stateStore.pendingRunDispatches();
-    } catch {
-      this.dispatchRetryActive = false;
-      return;
-    }
-    try {
-      for (const envelope of envelopes) {
-        const task = this.tasks.find(
-          (candidate) => candidate.id === envelope.taskId,
-        );
-        if (!task || task.activeRunId !== envelope.runId) continue;
-        if (Date.parse(envelope.expiresAt) <= Date.now()) {
-          await this.failDispatch(task, envelope.runId, MAX_DISPATCH_ATTEMPTS);
-          continue;
-        }
-        await this.dispatchEnvelope(task, envelope);
-      }
-    } finally {
-      this.dispatchRetryActive = false;
-    }
-  }
-
-  /**
-   * 轮询活动运行，先补齐 NAS journal 缺口并持久化热进度游标，再应用精确下一终态。
-   * @throws 当补投事件身份、顺序或热进度持久能力不符合密封运行合同时抛出。
-   */
-  private async reconcileActiveExecutions() {
-    if (
-      !this.executionGateway?.enabled() ||
-      !this.stateStore?.readRunEnvelope ||
-      !this.stateStore.readRunSequence
-    ) {
-      return;
-    }
-    if (this.executionReconcileActive) return;
-    this.executionReconcileActive = true;
-    try {
-      for (const task of [...this.tasks]) {
-        const runId = task.activeRunId;
-        if (!runId) continue;
-        try {
-          const envelope = await this.stateStore.readRunEnvelope(runId);
-          if (
-            !envelope ||
-            envelope.runId !== runId ||
-            envelope.taskId !== task.id ||
-            envelope.taskRevision !== task.revision
-          ) {
-            continue;
-          }
-          const previousSequence = await this.stateStore.readRunSequence(runId);
-          const observed = await this.executionGateway.status({
-            afterSequence: previousSequence,
-            runId,
-            sealedInputSha256: envelope.sealedInputSha256,
-            taskId: task.id,
-          });
-          const pendingEvents = observed.pendingEvents ?? [];
-          for (const [index, event] of pendingEvents.entries()) {
-            const identityInvalid =
-              event.action !== envelope.action ||
-              event.runId !== runId ||
-              event.taskId !== task.id ||
-              event.taskRevision !== envelope.taskRevision;
-            const sequenceInvalid =
-              event.sequence !== previousSequence + index + 1;
-            const terminalInvalid = ['run-failed', 'run-succeeded'].includes(
-              event.eventType,
-            );
-            if (identityInvalid || sequenceInvalid || terminalInvalid) {
-              throw new Error('media-governance-executor-replay-invalid');
-            }
-            await this.applyExecutorEvent(event);
-          }
-          if (pendingEvents.length > 0 && this.progressHotStore) {
-            if (!this.stateStore.saveExecutorProgressSnapshot) {
-              throw new Error(
-                'media-governance-executor-replay-snapshot-unavailable',
-              );
-            }
-            await this.progressSnapshotQueue.catch(() => undefined);
-            const lastPendingEvent = pendingEvents.at(-1)!;
-            await this.stateStore.saveExecutorProgressSnapshot(
-              structuredClone(task),
-              structuredClone(lastPendingEvent),
-            );
-          }
-          if (observed.status === 'queued' || observed.status === 'running') {
-            continue;
-          }
-          let summary = 'NAS 执行单元已退出或被回收，但未返回可验证终态';
-          if (observed.status === 'exited') {
-            summary = `NAS 执行器已退出（退出码 ${observed.exitCode}），但未返回可验证终态`;
-          }
-          const terminal = observed.terminalEvent;
-          const replayedSequence = previousSequence + pendingEvents.length;
-          if (
-            !observed.manifestSha256 ||
-            !terminal ||
-            terminal.action !== envelope.action ||
-            !['run-failed', 'run-succeeded'].includes(terminal.eventType)
-          ) {
-            continue;
-          }
-          if (
-            terminal.runId !== runId ||
-            terminal.taskId !== task.id ||
-            terminal.taskRevision !== envelope.taskRevision ||
-            terminal.sequence !== replayedSequence + 1
-          ) {
-            continue;
-          }
-          if (
-            terminal.eventType === 'run-failed' &&
-            terminal.summary !== summary
-          ) {
-            continue;
-          }
-          if (
-            terminal.eventType === 'run-succeeded' &&
-            !/^[a-f0-9]{64}$/u.test(terminal.evidenceSha256 ?? '')
-          ) {
-            continue;
-          }
-          await this.applyExecutorEvent(terminal);
-        } catch {
-          // 单个状态探针失败不得覆盖仍可能运行的任务，下一轮继续核对。
-        }
-      }
-      for (const task of [...this.tasks]) {
-        if (task.activeRunId) continue;
-        await this.continueRssIntakePipeline(task).catch(() => false);
-      }
-    } finally {
-      this.executionReconcileActive = false;
-    }
-  }
-
-  /**
-   * 在派发耗尽后关闭活动运行并持久化稳定阻塞原因。
-   * @param task - 用于在派发耗尽后关闭活动运行并持久化稳定阻塞原因的领域对象，包含 `activeRunId`、`runState`、`gateReason`、`nextCommandLabel` 字段。
-   * @param runId - 用于精确定位`run` 对应结果的标识。
-   * @param attempts - 决定在派发耗尽后关闭活动运行并持久化稳定阻塞原因内容、边界或目标的 `attempts` 值。
-   */
-  private async failDispatch(
-    task: MediaGovernanceTask,
-    runId: string,
-    attempts: number,
-  ) {
-    if (task.activeRunId !== runId) return;
-    task.activeRunId = null;
-    task.runState = 'blocked';
-    task.gateReason = `Jenkins 调度连续失败 ${attempts} 次，未启动任何 NAS 执行器`;
-    task.nextCommandLabel = '检查 Jenkins 后从当前任务重新发起';
-    this.bumpRevision(task);
-    if (this.stateStore?.failRunDispatch) {
-      await this.stateStore.failRunDispatch(task, runId);
-    } else {
-      await this.persistTask(task);
-    }
-    this.publishTaskPatch(task, 'state-updated');
   }
 
   /**
@@ -3980,22 +3687,15 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 只允许未注入任何持久化或网关的内存夹具使用模拟执行，正式任务在网关缺失时失败关闭。
+   * 只有持久化可用且 Work、Task 与工作流固定身份一致时才允许准备媒体步骤。
    * @param task - 准备执行 NAS 副作用的当前任务。
-   * @throws 正式执行器缺失或配置不可用时返回服务不可用，且不改变任务状态。
+   * @param workflow - 当前步骤的工作流执行键与业务身份。
+   * @throws 缺少工作流上下文或身份、持久化条件不符时拒绝执行，且不改变任务状态。
    */
-  private assertExecutionMode(task: MediaGovernanceTask) {
-    if (this.executionGateway?.enabled()) return;
-    if (
-      this.stateStore ||
-      this.executionGateway ||
-      task.persistenceMode === 'database'
-    ) {
-      throwVbenError(
-        '媒体执行器暂不可用，不能使用模拟执行',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
+  private assertExecutionMode(task: MediaGovernanceTask, workflow?: MediaWorkflowStepContext) {
+    const identityMatches = workflow?.business.subjectId === task.id && workflow?.business.scopeId === task.workId;
+    if (workflow && this.databaseReady() && identityMatches) return;
+    throw new HttpException('媒体步骤只能由绑定工作流准备和执行', HttpStatus.CONFLICT);
   }
 
   /**
@@ -4323,53 +4023,6 @@ export class MediaGovernanceService implements OnModuleInit {
       seasonCount += mixedSeasonCount;
     }
     return { seasonCount, taskIds };
-  }
-
-  /**
-   * 通过在模拟模式调度中间与完成进度更新。
-   * @param task - 用于通过在模拟模式调度中间与完成进度更新的领域对象，包含 `progress`、`runState`、`nextCommandLabel` 字段。
-   * @param source - 用于通过在模拟模式调度中间与完成进度更新的领域对象，包含 `selectedBytes`、`selectedFileCount` 字段。
-   */
-  private scheduleProgress(
-    task: MediaGovernanceTask,
-    source: Pick<MediaGovernanceSource, 'selectedBytes' | 'selectedFileCount'>,
-  ) {
-    const halfway = setTimeout(() => {
-      task.progress = {
-        ...task.progress,
-        completedBytes: Math.floor(source.selectedBytes * 0.55),
-        completedItems: Math.max(
-          1,
-          Math.floor(source.selectedFileCount * 0.55),
-        ),
-        etaLabel: '约 1 秒',
-        heartbeatLabel: '刚刚',
-        observedAt: new Date().toISOString(),
-        percent: 55,
-        progressLabel: `正在下载 ${Math.max(1, Math.floor(source.selectedFileCount * 0.55))}/${source.selectedFileCount} 个文件`,
-        speedLabel: '演示模式 55 MB/s',
-      };
-      void this.commitTask(task, 'state-updated').catch(() => undefined);
-    }, 250);
-    const complete = setTimeout(() => {
-      task.runState = 'succeeded';
-      task.nextCommandLabel = '开始本地治理';
-      task.progress = {
-        ...task.progress,
-        completedBytes: source.selectedBytes,
-        completedItems: source.selectedFileCount,
-        etaLabel: '已完成',
-        heartbeatLabel: '刚刚',
-        observedAt: new Date().toISOString(),
-        percent: 100,
-        progressLabel: '来源载荷已就绪',
-        speedLabel: '0 B/s',
-      };
-      this.refreshSemanticProjection(task);
-      void this.commitTask(task, 'state-updated').catch(() => undefined);
-    }, 500);
-    halfway.unref?.();
-    complete.unref?.();
   }
 
   /**

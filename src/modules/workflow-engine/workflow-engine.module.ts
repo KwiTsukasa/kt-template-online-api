@@ -1,3 +1,5 @@
+import { WORKFLOW_DEFINITIONS } from './contract/workflow-provision.port';
+import { WorkflowHumanTaskService } from './application/workflow-human-task.service';
 import {
   Module,
   type DynamicModule,
@@ -15,6 +17,7 @@ import {
 } from './infrastructure/persistence/workflow.entities';
 import {
   WorkflowNodeRun,
+  WorkflowNodeVisit,
   WorkflowRun,
 } from './infrastructure/persistence/workflow-run.entities';
 import { WorkflowExecutionService } from './application/workflow-execution.service';
@@ -22,6 +25,21 @@ import { WorkflowExecutionWorker } from './infrastructure/workflow-execution.wor
 import { WORKFLOW_EXECUTION } from './contract/workflow.types';
 import { WorkflowRunFeedService } from './application/workflow-run-feed.service';
 import { WORKFLOW_RUN_FEED } from './contract/workflow-run-feed.port';
+import { WorkflowProcessRegistry } from './application/workflow-process.registry';
+import { WorkflowBusinessService } from './application/workflow-business.service';
+import {
+  WORKFLOW_BUSINESSES,
+  WORKFLOW_PROCESSES,
+} from './contract/workflow-process.interface';
+import { WorkflowBusinessBinding } from './infrastructure/persistence/workflow-business.entity';
+import { WorkflowScriptRegistry } from './application/workflow-script.registry';
+import { WorkflowScriptExecutionService } from './application/workflow-script-execution.service';
+import { WorkflowScriptRunner } from './infrastructure/workflow-script.runner';
+import { WorkflowScriptAsset } from './infrastructure/persistence/workflow-script.entity';
+import { WorkflowScriptAssetsService } from './application/workflow-script-assets.service';
+import { WORKFLOW_SCRIPT_ASSETS } from './contract/workflow-script.types';
+import { WorkflowBpmnActivity } from './infrastructure/persistence/workflow-bpmn.entity';
+import { WorkflowBpmnExecutionService } from './application/workflow-bpmn-execution.service';
 
 @Module({})
 export class WorkflowEngineModule {
@@ -41,20 +59,43 @@ export class WorkflowEngineModule {
           WorkflowRevision,
           WorkflowRun,
           WorkflowNodeRun,
+          WorkflowNodeVisit,
+          WorkflowBusinessBinding,
+          WorkflowScriptAsset,
+          WorkflowBpmnActivity,
         ]),
         ...(imports || []),
       ],
       controllers: [WorkflowController],
       providers: [
         WorkflowDefinitionService,
+        { provide: WORKFLOW_DEFINITIONS, useExisting: WorkflowDefinitionService },
+        WorkflowProcessRegistry,
+        WorkflowBusinessService,
+        WorkflowScriptRegistry,
+        WorkflowScriptExecutionService,
+        WorkflowScriptRunner,
+        WorkflowScriptAssetsService,
+        { provide: WORKFLOW_SCRIPT_ASSETS, useExisting: WorkflowScriptAssetsService },
+        { provide: WORKFLOW_PROCESSES, useExisting: WorkflowProcessRegistry },
+        { provide: WORKFLOW_BUSINESSES, useExisting: WorkflowBusinessService },
         WorkflowExecutionService,
+        WorkflowBpmnExecutionService,
+        WorkflowHumanTaskService,
         WorkflowExecutionWorker,
         WorkflowRunFeedService,
         { provide: WORKFLOW_RUN_FEED, useExisting: WorkflowRunFeedService },
         AutomationPermissionGuard,
         { provide: WORKFLOW_EXECUTION, useExisting: WorkflowExecutionService },
       ],
-      exports: [WORKFLOW_EXECUTION, WORKFLOW_RUN_FEED],
+      exports: [
+        WORKFLOW_DEFINITIONS,
+        WORKFLOW_EXECUTION,
+        WORKFLOW_RUN_FEED,
+        WORKFLOW_PROCESSES,
+        WORKFLOW_BUSINESSES,
+        WORKFLOW_SCRIPT_ASSETS,
+      ],
     };
   }
 }

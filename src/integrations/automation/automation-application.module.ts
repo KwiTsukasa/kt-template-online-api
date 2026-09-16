@@ -15,6 +15,7 @@ import { PluginAutomationModule } from './plugin-automation.module';
 import { BusinessAutomationModule } from './business-automation.module';
 import { BotAdapterCoreModule } from '@/modules/bot-adapter/core/bot-adapter-core.module';
 import { BotReminderAutomationModule } from './bot-reminder-automation.module';
+import { MediaWorkflowModule } from './media-workflow.module';
 
 const workflows = WorkflowEngineModule.register([
   TaskExecutionModule,
@@ -30,27 +31,32 @@ const schedules = SchedulePlanModule.register([
 
 @Module({
   imports: [
+    MediaWorkflowModule.register([AdminMediaGovernanceModule, workflows]),
     BotReminderAutomationModule.register([
       BotAdapterCoreModule,
       TaskExecutionModule,
       TriggerEngineModule,
       schedules,
+      workflows,
     ]),
     AutomationMonitorModule.register([
       TaskExecutionModule,
       workflows,
       schedules,
+      workflows,
     ]),
     PluginAutomationModule.register([
       PluginPlatformModule,
       TaskExecutionModule,
       TriggerEngineModule,
       schedules,
+      workflows,
     ]),
     BusinessAutomationModule.register([
       TaskExecutionModule,
       TriggerEngineModule,
       schedules,
+      workflows,
       MessageManagementModule,
       AdminMediaGovernanceModule,
       AdminPlatformConfigModule,

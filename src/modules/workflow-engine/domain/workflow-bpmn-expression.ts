@@ -35,10 +35,55 @@ export type BpmnExpression =
   | { op: 'not'; value: BpmnExpression }
   | { op: 'and' | 'or'; values: BpmnExpression[] }
   | { op: 'coalesce'; values: BpmnExpression[] }
+  | { op: 'sum'; values: BpmnExpression[] }
   | { op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte'; left: BpmnExpression; right: BpmnExpression };
 
 /**
- * 解释 BPMN FormalExpression 中声明的有限 JSON 表达式，不执行动态 JavaScript。
+ * 在没有运行数据时检查条件树与已知入口类型，保留业务字段的动态求值但拒绝未知运算。
+ * @param expression - 发布模型内的有限表达式。
+ * @param paths - 当前复杂网关公开的入口计数及阶段路径类型。
+ * @param depth - 当前递归深度，用于限制恶意或意外嵌套。
+ * @returns 可静态判断的标量类型，业务字段返回未知类型。
+ * @throws 表达式结构、字段、操作数类型或深度不合法时拒绝发布。
+ */
+export function bpmnConditionType(expression: BpmnExpression, paths: Record<string, string>, depth = 0): string {
+  if (!expression || typeof expression !== 'object' || Array.isArray(expression) || depth > 16) throw new Error('BPMN 条件结构或深度无效');
+  if (!('op' in expression)) {
+    const value = evaluateBpmnExpression(expression, {});
+    if ('path' in expression) {
+      if (expression.path.startsWith('content.activationCount.') || expression.path === 'content.waitingForStart') {
+        if (!Object.hasOwn(paths, expression.path)) throw new Error('复杂网关条件引用了不存在的入口或阶段字段');
+        return paths[expression.path];
+      }
+      return 'unknown';
+    }
+    return typeof value;
+  }
+  if (expression.op === 'not') {
+    bpmnConditionType(expression.value, paths, depth + 1);
+    return 'boolean';
+  }
+  if (['and', 'or', 'sum', 'coalesce'].includes(expression.op) && 'values' in expression) {
+    if (!Array.isArray(expression.values) || !expression.values.length || expression.values.length > 32) throw new Error('BPMN 条件操作数需要 1 至 32 项');
+    const types = expression.values.map((value) => bpmnConditionType(value, paths, depth + 1));
+    if (expression.op === 'sum') {
+      if (types.some((type) => !['number', 'unknown'].includes(type))) throw new Error('BPMN 求和只接受数值字段');
+      return 'number';
+    }
+    if (expression.op === 'coalesce') {
+      if (expression.values.length > 8) throw new Error('优先取值不能超过 8 项');
+      return 'unknown';
+    }
+    return 'boolean';
+  }
+  if (!['eq', 'ne', 'lt', 'lte', 'gt', 'gte'].includes(expression.op) || !('left' in expression) || !('right' in expression)) throw new Error('BPMN 条件运算符或操作数无效');
+  const types = [expression.left, expression.right].map((value) => bpmnConditionType(value, paths, depth + 1));
+  if (!['eq', 'ne'].includes(expression.op) && types.some((type) => !['number', 'unknown'].includes(type))) throw new Error('BPMN 顺序比较只接受数值字段');
+  return 'boolean';
+}
+
+/**
+ * 仅对公开字段、有限数值和声明的操作符求值，阻止动态代码与原型访问。
  * @param expression - 有常量、字段路径或明确运算符的表达式。
  * @param context - 当前活动公开的流程变量和实例输入。
  * @param depth - 限制递归深度的内部计数。
@@ -63,6 +108,17 @@ export function evaluateBpmnExpression(expression: BpmnExpression, context: Reco
     return value;
   }
   if (expression.op === 'not') return !Boolean(evaluateBpmnExpression(expression.value, context, depth + 1));
+  if (expression.op === 'sum') {
+    if (!Array.isArray(expression.values) || !expression.values.length || expression.values.length > 32) throw new Error('BPMN 求和必须包含 1 至 32 个操作数');
+    let total = 0;
+    for (const operand of expression.values) {
+      const value = evaluateBpmnExpression(operand, context, depth + 1);
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('BPMN 求和只接受有限数值');
+      total += value;
+      if (!Number.isFinite(total)) throw new Error('BPMN 求和结果超出有限数值范围');
+    }
+    return total;
+  }
   if (expression.op === 'coalesce') {
     if (!Array.isArray(expression.values) || !expression.values.length || expression.values.length > 8)
       throw new Error('优先取值需要 1 至 8 个表达式');

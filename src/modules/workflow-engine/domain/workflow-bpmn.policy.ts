@@ -2,6 +2,7 @@
 import * as BpmnModdle from 'bpmn-moddle';
 import {
   BPMN_FORMAT,
+  KT_BPMN_EXPRESSION,
   KT_BPMN_MODDLE,
   KT_BPMN_STEP,
   type WorkflowBpmnDefinition,
@@ -11,6 +12,7 @@ import {
 } from '../contract/workflow-bpmn.types';
 import { dehydrateWorkflowBpmn, hydrateWorkflowBpmn } from './workflow-bpmn-model';
 import { validateBpmnCorrelations } from './workflow-bpmn-correlation';
+import { bpmnConditionType } from './workflow-bpmn-expression';
 
 /**
  * 从内部结构化模型恢复完整 BPMN 元模型，不生成 XML。
@@ -165,7 +167,20 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
     if (element.$type === 'bpmn:TerminateEventDefinition' && element.$parent?.$type !== 'bpmn:EndEvent') report('terminate-scope', '终止事件只能用作结束事件');
     if (element.$type === 'bpmn:CallActivity' && !model.processes.some((process) => process.id === element.calledElement)) report('call-reference', '调用活动必须引用此发布版本内的已声明流程');
     if (['bpmn:ServiceTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask'].includes(element.$type) && element.implementation !== KT_BPMN_STEP) report('task-implementation', '任务必须绑定工作流统一执行端口');
-    if (element.$type === 'bpmn:ComplexGateway') report('unsupported', '复杂网关尚未通过执行符合性验收，不能发布');
+    if (element.$type === 'bpmn:ComplexGateway') {
+      const incoming = flows.filter((flow) => flow.targetRef === element), outgoing = flows.filter((flow) => flow.sourceRef === element);
+      if (!incoming.length || !outgoing.length) report('complex-flow', '复杂网关至少需要一个入口和一个出口');
+      if (element.default && !outgoing.includes(element.default)) report('complex-default', '复杂网关默认路径必须引用自身出口');
+      const paths: Record<string, string> = { 'content.waitingForStart': 'boolean' };
+      for (const flow of incoming) paths[`content.activationCount.${flow.id}`] = 'number';
+      const conditions = [element.activationCondition, ...outgoing.filter((flow) => flow !== element.default && flow.conditionExpression).map((flow) => flow.conditionExpression)];
+      for (const condition of conditions) {
+        try {
+          if (condition?.$type !== 'bpmn:FormalExpression' || condition.language !== KT_BPMN_EXPRESSION || typeof condition.body !== 'string') throw new Error('复杂网关必须配置使用工作流 JSON 语言的激活条件');
+          if (!['boolean', 'unknown'].includes(bpmnConditionType(JSON.parse(condition.body), paths))) throw new Error('复杂网关条件必须返回布尔值');
+        } catch (error) { report('complex-condition', String(error)); }
+      }
+    }
     if (element.$type === 'bpmn:StartEvent' && element.$parent?.$type === 'bpmn:Process') {
       if ((element.eventDefinitions || []).some((event: WorkflowBpmnElement) => ['bpmn:ErrorEventDefinition', 'bpmn:CancelEventDefinition', 'bpmn:CompensateEventDefinition'].includes(event.$type))) report('start-event', '此类事件不能启动顶层流程');
     }

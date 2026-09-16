@@ -12,6 +12,7 @@ import { readWorkflowBpmnExtension } from '../domain/workflow-bpmn.policy';
 import { WorkflowMultiInstance, WorkflowStandardLoop } from './workflow-bpmn-loop';
 import { WorkflowInclusiveGateway } from './workflow-bpmn-inclusive';
 import { WorkflowEventBasedGateway } from './workflow-bpmn-event-gateway';
+import { WorkflowComplexGateway } from './workflow-bpmn-complex';
 import { bpmnMessageProcess } from '../domain/workflow-bpmn-correlation';
 
 export interface WorkflowBpmnCheckpoint {
@@ -191,7 +192,7 @@ export async function advanceWorkflowBpmn(
   const engine = new Engine({
     moddleContext: { rootElement: executionRoot, elementsById: model.elements, references: model.references, warnings: [] } as any,
     moddleOptions: { kt: KT_BPMN_MODDLE },
-    elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
+    elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, ComplexGateway: WorkflowComplexGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
     variables,
     expressions,
     timers,

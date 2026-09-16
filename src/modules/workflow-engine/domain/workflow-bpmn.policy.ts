@@ -132,6 +132,7 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
         }
         const definitions: WorkflowBpmnElement[] = [...(target.eventDefinitions ?? []), ...(target.eventDefinitionRef ?? [])];
         if (!definitions.length || definitions.some((event) => !['bpmn:MessageEventDefinition', 'bpmn:SignalEventDefinition', 'bpmn:TimerEventDefinition', 'bpmn:ConditionalEventDefinition'].includes(event.$type))) report('event-gateway-trigger', '事件网关只接受消息、信号、定时和条件捕获事件');
+        if (element.eventGatewayType === 'Parallel' && definitions.some((event) => event.$type !== 'bpmn:MessageEventDefinition')) report('event-gateway-parallel-message', '并行实例化事件网关只接受消息触发');
         if (definitions.some((event) => event.$type === 'bpmn:MessageEventDefinition')) catchesMessage = true;
       }
       if (receivesMessage && catchesMessage) report('event-gateway-mixed-message', '同一事件网关不能混用消息捕获事件和接收任务');

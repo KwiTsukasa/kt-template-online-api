@@ -11,12 +11,14 @@ import { evaluateBpmnExpression, type BpmnExpression } from '../domain/workflow-
 import { readWorkflowBpmnExtension } from '../domain/workflow-bpmn.policy';
 import { WorkflowMultiInstance, WorkflowStandardLoop } from './workflow-bpmn-loop';
 import { WorkflowInclusiveGateway } from './workflow-bpmn-inclusive';
+import { WorkflowEventBasedGateway } from './workflow-bpmn-event-gateway';
 
 export interface WorkflowBpmnCheckpoint {
   modelSha256: string;
   engine: BpmnEngineExecutionState;
   activityScopes: Record<string, string[]>;
   outputs: Record<string, Record<string, unknown>>;
+  entrySelections?: Record<string, string>;
 }
 
 export interface WorkflowBpmnJob {
@@ -70,6 +72,20 @@ export async function advanceWorkflowBpmn(
 ) {
   const modelSha256 = createHash('sha256').update(JSON.stringify(model.definition.model)).digest('hex');
   if (checkpoint && checkpoint.modelSha256 !== modelSha256) throw new Error('BPMN 恢复快照与发布版本不一致');
+  const entrySelections = { ...checkpoint?.entrySelections };
+  const entryGroups = new Map<string, { entryId: string; scopeId: string }>();
+  const elements = Object.values(model.elements);
+  for (const element of elements) {
+    if (!element.$parent?.id || element.$parent.triggeredByEvent) continue;
+    if (element.$type === 'bpmn:StartEvent' || (element.$type === 'bpmn:ReceiveTask' && element.instantiate && !elements.some((flow) => flow.$type === 'bpmn:SequenceFlow' && flow.targetRef === element))) {
+      entryGroups.set(element.id, { entryId: element.id, scopeId: element.$parent.id });
+    }
+    if (element.$type === 'bpmn:EventBasedGateway' && element.instantiate) {
+      const group = { entryId: element.id, scopeId: element.$parent.id };
+      entryGroups.set(element.id, group);
+      for (const flow of elements) if (flow.$type === 'bpmn:SequenceFlow' && flow.sourceRef === element) entryGroups.set(flow.targetRef.id, group);
+    }
+  }
   const completed = new Map(completions.map((result) => [result.executionId, result]));
   if (completed.size !== completions.length) throw new Error('同一 BPMN 活动实例不能提交两份结果');
   const jobs = new Map<string, WorkflowBpmnJob>();
@@ -152,7 +168,7 @@ export async function advanceWorkflowBpmn(
   const engine = new Engine({
     moddleContext: { rootElement: model.root, elementsById: model.elements, references: model.references, warnings: [] } as any,
     moddleOptions: { kt: KT_BPMN_MODDLE },
-    elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
+    elements: { ScriptTask: ServiceTask, ManualTask: Task, InclusiveGateway: WorkflowInclusiveGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
     variables,
     expressions,
     timers,
@@ -188,6 +204,21 @@ export async function advanceWorkflowBpmn(
     }
     return activities.filter((activity) => !parentExecutions.has(activity.content.executionId));
   };
+  const discardOtherEntries = () => {
+    if (!engine.execution) return;
+    for (const activity of pendingActivities()) {
+      const group = entryGroups.get(activity.id);
+      if (!group) continue;
+      const parent = activity.content.parent;
+      const scope = [parent, ...(parent?.path ?? [])].find((item) => item?.id === group.scopeId);
+      let executionId = activity.content.executionId;
+      if (activity.content.isDefinitionScope) executionId = parent.executionId;
+      const scopeExecutionId = scope?.executionId ?? activityScopes.get(executionId)?.[0];
+      const selected = entrySelections[scopeExecutionId];
+      if (!selected || selected === group.entryId) continue;
+      activity.owner.getApi({ fields: activity.fields, properties: activity.messageProperties, content: { ...activity.content, executionId } }).discard();
+    }
+  };
   engine.on('error', (error) => { failure = error; });
   engine.on('end', () => { ended = true; });
   // 引擎对外事件补齐了流程实例父链；任务内部消息仅含静态父元素，不能用于作用域撤销。
@@ -200,6 +231,16 @@ export async function advanceWorkflowBpmn(
       if (event.startsWith('activity.') && content.executionId) {
         activityScopes.set(content.executionId, [content.parent, ...(content.parent?.path ?? [])].filter((parent) => parent?.executionId).map((parent) => parent.executionId));
       }
+      if (event === 'activity.end' && model.elements[content.id]?.$type !== 'bpmn:EventBasedGateway') {
+        const group = entryGroups.get(content.id);
+        const parent = content.parent;
+        const scope = [parent, ...(parent?.path ?? [])].find((item) => item?.id === group?.scopeId);
+        if (group && scope?.executionId && !entrySelections[scope.executionId]) {
+          entrySelections[scope.executionId] = group.entryId;
+          discardOtherEntries();
+        }
+      }
+      if (event === 'activity.wait' && entryGroups.has(content.id)) deliveries.push(discardOtherEntries);
       if (content.type === 'bpmn:UserTask' && event === 'activity.wait') {
         const step = readWorkflowBpmnExtension<WorkflowBpmnStep>(model.elements[content.id], 'kt:Step');
         if (step?.kind !== 'human') throw new Error(`人工活动 ${content.id} 未配置办理契约`);
@@ -249,6 +290,7 @@ export async function advanceWorkflowBpmn(
       engine.recover(checkpoint.engine);
       await engine.resume();
     } else await engine.execute();
+    discardOtherEntries();
     for (const deliver of deliveries) {
       if (deliveries.length > 10000) throw new Error('BPMN 单次结果交付超过安全上限');
       deliver();
@@ -286,7 +328,7 @@ export async function advanceWorkflowBpmn(
     if (failure) status = 'failed';
     else if (ended) status = 'succeeded';
     return {
-      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs },
+      checkpoint: { modelSha256, engine: state, activityScopes: Object.fromEntries(activityScopes), outputs, entrySelections },
       jobs: [...jobs.values()],
       cancelledExecutionIds: [...cancelled],
       unconsumedCompletionIds: [...completed.keys()],

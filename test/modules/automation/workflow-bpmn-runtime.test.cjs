@@ -484,3 +484,113 @@ test('并行多重消息保留各自事件索引，不能用一种消息完成�
   result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'wait', executionId: result.activeActivities[0].executionId }]);
   assert.equal(result.status, 'succeeded');
 });
+
+test('并行实例化事件网关收到首条消息后保留其他等待，恢复后两条分支各执行一次', async () => {
+  const model = await diagram('<bpmn:eventBasedGateway id="start" instantiate="true" eventGatewayType="Parallel"/>' +
+    '<bpmn:intermediateCatchEvent id="a"><bpmn:messageEventDefinition messageRef="A"/></bpmn:intermediateCatchEvent>' +
+    '<bpmn:intermediateCatchEvent id="b"><bpmn:messageEventDefinition messageRef="B"/></bpmn:intermediateCatchEvent>' +
+    step('workA') + step('workB') + '<bpmn:parallelGateway id="join"/><bpmn:endEvent id="end"/>' +
+    flow('start', 'a') + flow('start', 'b') + flow('a', 'workA') + flow('b', 'workB') + flow('workA', 'join') + flow('workB', 'join') + flow('join', 'end'),
+    '<bpmn:message id="A"/><bpmn:message id="B"/>');
+  assert.deepEqual(validateWorkflowBpmn(model), []);
+  let result = await advanceWorkflowBpmn(model, null, {});
+  const a = result.activeActivities.find(item => item.nodeId === 'a');
+  const b = result.activeActivities.find(item => item.nodeId === 'b');
+  assert.ok(a && b);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'a', executionId: a.executionId }]);
+  assert.ok(result.activeActivities.some(item => item.executionId === b.executionId), '首条消息不能取消另一条消息等待');
+  assert.deepEqual(result.jobs.map(item => item.elementId), ['workA']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: { finished: 'A' } }]);
+  assert.equal(result.status, 'waiting');
+  assert.equal(result.jobs.length, 0);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'b', executionId: b.executionId }]);
+  assert.deepEqual(result.jobs.map(item => item.elementId), ['workB']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [{ executionId: result.jobs[0].executionId, output: { finished: 'B' } }]);
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(result.checkpoint.outputs, { workA: { finished: 'A' }, workB: { finished: 'B' } });
+});
+
+test('并行实例化事件网关只接受消息触发，拒绝定时和信号启动', async () => {
+  for (const event of ['<bpmn:timerEventDefinition><bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1S</bpmn:timeDuration></bpmn:timerEventDefinition>', '<bpmn:signalEventDefinition/>']) {
+    const model = await diagram('<bpmn:eventBasedGateway id="start" instantiate="true" eventGatewayType="Parallel"/>' +
+      '<bpmn:intermediateCatchEvent id="a"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>' +
+      '<bpmn:intermediateCatchEvent id="b">' + event + '</bpmn:intermediateCatchEvent><bpmn:endEvent id="end"/>' +
+      flow('start', 'a') + flow('start', 'b') + flow('a', 'end') + flow('b', 'end'));
+    assert.ok(validateWorkflowBpmn(model).some(item => item.code === 'event-gateway-parallel-message'));
+  }
+});
+
+test('多个实例化入口只选择首个触发组，组内剩余消息跨恢复继续等待', async () => {
+  const group = (id) => `<bpmn:eventBasedGateway id="${id}" instantiate="true" eventGatewayType="Parallel"/>` +
+    `<bpmn:intermediateCatchEvent id="${id}a"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>` +
+    `<bpmn:intermediateCatchEvent id="${id}b"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>` +
+    step(id + 'workA') + step(id + 'workB') + flow(id, id + 'a') + flow(id, id + 'b') + flow(id + 'a', id + 'workA') + flow(id + 'b', id + 'workB') +
+    flow(id + 'workA', 'end') + flow(id + 'workB', 'end');
+  const model = await diagram(group('first') + group('other') + '<bpmn:startEvent id="messageStart"><bpmn:messageEventDefinition/></bpmn:startEvent>' + step('startWork') +
+    '<bpmn:endEvent id="end"/>' + flow('messageStart', 'startWork') + flow('startWork', 'end'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  const first = result.activeActivities.find(item => item.nodeId === 'firsta');
+  const other = result.activeActivities.find(item => item.nodeId === 'othera');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [
+    { id: first.nodeId, executionId: first.executionId }, { id: other.nodeId, executionId: other.executionId },
+  ]);
+  assert.deepEqual(result.jobs.map(item => item.elementId), ['firstworkA']);
+  assert.ok(result.unconsumedSignalIds.includes(other.executionId));
+  assert.equal(result.activeActivities.some(item => item.nodeId.startsWith('other') || item.nodeId === 'messageStart'), false);
+  const remaining = result.activeActivities.find(item => item.nodeId === 'firstb');
+  assert.ok(remaining);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: remaining.nodeId, executionId: remaining.executionId }]);
+  assert.deepEqual(result.jobs.map(item => item.elementId).sort(), ['firstworkA', 'firstworkB']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, result.jobs.map(item => ({ executionId: item.executionId, output: {} })));
+  assert.equal(result.status, 'succeeded');
+});
+
+test('消息开始事件获胜后撤销并行实例化组，接收任务也可作为独立启动入口', async () => {
+  for (const entry of ['<bpmn:startEvent id="entry"><bpmn:messageEventDefinition/></bpmn:startEvent>', '<bpmn:receiveTask id="entry" instantiate="true"/>']) {
+    const model = await diagram('<bpmn:eventBasedGateway id="gate" instantiate="true" eventGatewayType="Parallel"/>' +
+      '<bpmn:receiveTask id="a"/><bpmn:receiveTask id="b"/>' + entry + step('work') + '<bpmn:endEvent id="end"/>' +
+      flow('gate', 'a') + flow('gate', 'b') + flow('a', 'end') + flow('b', 'end') + flow('entry', 'work') + flow('work', 'end'));
+    let result = await advanceWorkflowBpmn(model, null, {});
+    const waiting = result.activeActivities.find(item => item.nodeId === 'entry');
+    assert.ok(waiting);
+    result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: waiting.nodeId, executionId: waiting.executionId }]);
+    assert.deepEqual(result.activeActivities.map(item => item.nodeId), ['work']);
+    result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, result.jobs.map(item => ({ executionId: item.executionId, output: {} })));
+    assert.equal(result.status, 'succeeded');
+  }
+});
+
+test('并行实例化网关的接收任务各自完成，不会让流程提前终结', async () => {
+  const model = await diagram('<bpmn:eventBasedGateway id="gate" instantiate="true" eventGatewayType="Parallel"/><bpmn:receiveTask id="a"/><bpmn:receiveTask id="b"/><bpmn:endEvent id="end"/>' +
+    flow('gate', 'a') + flow('gate', 'b') + flow('a', 'end') + flow('b', 'end'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  const first = result.activeActivities.find(item => item.nodeId === 'a');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'a', executionId: first.executionId }]);
+  assert.equal(result.status, 'waiting');
+  assert.deepEqual(result.activeActivities.map(item => item.nodeId), ['b']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'b', executionId: result.activeActivities[0].executionId }]);
+  assert.equal(result.status, 'succeeded');
+});
+
+test('并行子流程的启动入口按作用域隔离，一个实例获胜不会撤销另一个实例', async () => {
+  const model = await diagram('<bpmn:startEvent id="start"/><bpmn:subProcess id="sub">' +
+    '<bpmn:multiInstanceLoopCharacteristics isSequential="false"><bpmn:loopCardinality xsi:type="bpmn:tFormalExpression">2</bpmn:loopCardinality></bpmn:multiInstanceLoopCharacteristics>' +
+    '<bpmn:eventBasedGateway id="gate" instantiate="true" eventGatewayType="Parallel"/>' +
+    '<bpmn:intermediateCatchEvent id="a"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:intermediateCatchEvent id="b"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent>' +
+    '<bpmn:startEvent id="other"><bpmn:messageEventDefinition/></bpmn:startEvent><bpmn:endEvent id="subEnd"/>' +
+    flow('gate', 'a') + flow('gate', 'b') + flow('a', 'subEnd') + flow('b', 'subEnd') + flow('other', 'subEnd') +
+    '</bpmn:subProcess><bpmn:endEvent id="end"/>' + flow('start', 'sub') + flow('sub', 'end'));
+  let result = await advanceWorkflowBpmn(model, null, {});
+  assert.equal(result.activeActivities.filter(item => item.nodeId === 'a').length, 2);
+  assert.equal(result.activeActivities.filter(item => item.nodeId === 'other').length, 2);
+  const first = result.activeActivities.find(item => item.nodeId === 'a');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: first.nodeId, executionId: first.executionId }]);
+  assert.equal(result.activeActivities.filter(item => item.nodeId === 'a').length, 1);
+  assert.equal(result.activeActivities.filter(item => item.nodeId === 'b').length, 2);
+  assert.equal(result.activeActivities.filter(item => item.nodeId === 'other').length, 1);
+  const alternative = result.activeActivities.find(item => item.nodeId === 'other');
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: alternative.nodeId, executionId: alternative.executionId }]);
+  assert.deepEqual(result.activeActivities.map(item => item.nodeId), ['b']);
+  result = await advanceWorkflowBpmn(model, JSON.parse(JSON.stringify(result.checkpoint)), {}, [], [{ id: 'b', executionId: result.activeActivities[0].executionId }]);
+  assert.equal(result.status, 'succeeded');
+});

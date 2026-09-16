@@ -304,6 +304,30 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
+  it('discards an unexecuted catalog-bound draft over real HTTP', async () => {
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '资料库身份不属于治理结果',
+    });
+    const task = service.detail(created.body.data.id);
+    task.metadataIdentity = {
+      provider: 'tmdb', providerId: '222766',
+      providerTitle: '豺狼的日子', releaseYear: 2024,
+    };
+    await request(apiUrl)
+      .get(`/media-governance/tasks/${task.id}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.data.semanticProjection.discardAllowed).toBe(true);
+      });
+    await request(apiUrl)
+      .delete(`/media-governance/tasks/${task.id}`)
+      .query({ expectedRevision: task.revision })
+      .expect(200);
+    await request(apiUrl).get(`/media-governance/tasks/${task.id}`).expect(404);
+  });
+
   it('does not clean failed sources outside the workflow', async () => {
     const created = await createLegacyTask({
       mediaType: 'tv',

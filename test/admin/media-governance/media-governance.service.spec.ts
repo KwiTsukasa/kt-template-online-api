@@ -596,6 +596,24 @@ describe('MediaGovernanceService', () => {
     ).rejects.toThrow(HttpException);
   });
 
+  it.each(['closedAt', 'evidenceSha256', 'localAcceptedAt'] as const)(
+    'preserves a catalog-bound task with actual %s evidence', async (evidence) => {
+      const task = await service.create({ mediaType: 'movie', titleHint: '真实结果仍受保护' });
+      task.metadataIdentity = {
+        provider: 'tmdb', providerId: '100', providerTitle: '作品', releaseYear: 2024,
+      };
+      if (evidence === 'closedAt') task.closedAt = '2026-09-17T00:00:00.000Z';
+      else if (evidence === 'evidenceSha256') task.units[0].evidenceSha256 = 'a'.repeat(64);
+      else task.units[0].localAcceptedAt = '2026-09-17T00:00:00.000Z';
+      await expect(service.discardTask(task.id, { expectedRevision: task.revision }))
+        .rejects.toMatchObject({
+          status: 409,
+          response: { msg: '任务已有治理结果或验收证据，不能删除。' },
+        });
+      expect(service.detail(task.id).id).toBe(task.id);
+    },
+  );
+
   it('does not clean legacy source state outside an owned workflow step', async () => {
     const task = await service.create({
       mediaType: 'tv',

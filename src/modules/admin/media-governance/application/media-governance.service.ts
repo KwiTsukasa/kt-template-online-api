@@ -3413,9 +3413,9 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 返回任务不能删除的首个确定性原因，允许删除时返回空值。
-   * @param task - 用于任务不能删除的首个确定性原因，允许删除时返回空值的领域对象，包含 `stage`、`runState`、`activeRunId`、`payloadSeal` 字段。
-   * @returns 当前状态对应的任务不能删除的首个确定性原因，允许删除时返回空值，取值为 `'仅接收资料阶段且尚未产生载荷的任务可以删除。'`、`'任务已进入执行阶段，不能删除。'`、`'来源运行态仍在精确清理，完成后才能删除任务。'`、`'任务已有治理结果或验收证据，不能删除。'`；无法解析或未命中时为 `null`。
+   * 按实际执行、载荷及验收证据保护任务删除，资料库提供的作品身份不算执行结果。
+   * @param task - 待核对的任务状态、密封载荷、来源和单元验收记录。
+   * @returns 首个不能删除的业务原因；尚未执行且无结果的资料草稿返回空值。
    */
   private getDiscardDisabledReason(task: MediaGovernanceTask) {
     if (
@@ -3435,11 +3435,7 @@ export class MediaGovernanceService implements OnModuleInit {
     if (task.sources.some((source) => source.descriptorTombstonedAt !== null)) {
       return '来源运行态仍在精确清理，完成后才能删除任务。';
     }
-    if (
-      task.closedAt !== null ||
-      task.closedMode !== null ||
-      task.metadataIdentity !== null
-    ) {
+    if (task.closedAt !== null || task.closedMode !== null) {
       return '任务已有治理结果或验收证据，不能删除。';
     }
     if (

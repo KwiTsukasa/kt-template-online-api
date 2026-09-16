@@ -99,9 +99,10 @@ export function evaluateBpmnExpression(expression: BpmnExpression, context: Reco
       throw new Error('BPMN 表达式常量必须是有限数值、文本、布尔值或空值');
     }
     if (!('path' in expression) || typeof expression.path !== 'string' || !/^(input|outputs|variables|content)(\.[A-Za-z0-9_-]+)*$/.test(expression.path)) throw new Error('BPMN 表达式只能读取已声明的上下文路径');
+    const parts = expression.path.split('.');
+    if (parts.some((key) => ['__proto__', 'constructor', 'prototype'].includes(key))) throw new Error('BPMN 表达式路径不允许访问原型');
     let value: unknown = context;
-    for (const key of expression.path.split('.')) {
-      if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('BPMN 表达式路径不允许访问原型');
+    for (const key of parts) {
       if (!value || typeof value !== 'object' || !Object.hasOwn(value, key)) return undefined;
       value = (value as Record<string, unknown>)[key];
     }

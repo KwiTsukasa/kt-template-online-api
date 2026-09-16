@@ -103,3 +103,22 @@ test('过期的完成身份及消息身份不能污染节点输出', async () =>
   assert.equal(result.checkpoint.outputs.Source, undefined);
   assert.deepEqual(result.jobs.map(job => job.elementId), ['Source']);
 });
+
+test('发布拒绝非默认出口的不支持语言、未知运算和非布尔常量，默认出口条件不求值', async () => {
+  const model = await modelFor(human('Source'));
+  for (const invalid of [
+    { ...formal({ value: true }), language: 'javascript' },
+    { ...formal({ value: true }), language: undefined },
+    formal({ op: 'eval', left: { value: 1 }, right: { value: 1 } }),
+    formal({ value: 1 }),
+    formal({ path: 'outputs.Source.constructor' }),
+  ]) {
+    const definition = structuredClone(model.definition);
+    definition.model.rootElements[0].flowElements.find(element => element.id === 'Accepted').conditionExpression = JSON.parse(JSON.stringify(invalid));
+    const invalidModel = await parseWorkflowBpmn(definition);
+    assert.ok(validateWorkflowBpmn(invalidModel).some(issue => issue.nodeId === 'Accepted' && issue.code === 'flow-condition'), JSON.stringify(invalid));
+  }
+  const definition = structuredClone(model.definition);
+  definition.model.rootElements[0].flowElements.find(element => element.id === 'Rejected').conditionExpression = { ...formal({ value: false }), language: 'ignored-default-language' };
+  assert.deepEqual(validateWorkflowBpmn(await parseWorkflowBpmn(definition)), []);
+});

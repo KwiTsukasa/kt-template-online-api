@@ -106,6 +106,13 @@ export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssu
         if (!source.$instanceOf('bpmn:FlowNode') || !target.$instanceOf('bpmn:FlowNode')) report('flow-kind', '顺序流只能连接活动、事件或网关');
         if (source.isForCompensation || target.isForCompensation) report('compensation-flow', '补偿活动不能连接顺序流');
         if (source.$type === 'bpmn:ParallelGateway' && element.conditionExpression) report('parallel-condition', '并行网关不能使用条件顺序流');
+        if (element.conditionExpression && source.default !== element && source.$type !== 'bpmn:ComplexGateway') {
+          try {
+            const condition = element.conditionExpression;
+            if (condition.$type !== 'bpmn:FormalExpression' || condition.language !== KT_BPMN_EXPRESSION || typeof condition.body !== 'string') throw new Error('出口条件必须使用工作流 JSON 语言');
+            if (!['boolean', 'unknown'].includes(bpmnConditionType(JSON.parse(condition.body), {}))) throw new Error('出口条件必须返回布尔值');
+          } catch (error) { report('flow-condition', String(error)); }
+        }
       }
     }
     if (element.$type === 'bpmn:MessageFlow') {

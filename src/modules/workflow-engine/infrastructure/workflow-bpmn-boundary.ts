@@ -1,6 +1,31 @@
-import { Activity, BoundaryEvent } from 'bpmn-elements';
+import { Activity, BoundaryEvent, CompensateEventDefinition } from 'bpmn-elements';
 import { BoundaryEventBehaviour } from 'bpmn-elements/events';
 import { WorkflowConcurrentTaskBehaviour } from './workflow-bpmn-task';
+
+/**
+ * 普通并发任务只补偿成功的业务实例，排除容器完成、错误和撤销，并过滤旧快照中的同类队列记录。
+ * @param activity - 当前捕获或抛出补偿事件的活动。
+ * @param definition - 标准补偿事件定义。
+ * @param context - 活动及补偿关联所在的流程上下文。
+ * @returns 保留原生队列和补偿传播的事件行为。
+ */
+export function WorkflowCompensateEventDefinition(activity: any, definition: any, context: any): any {
+  const source: any = new CompensateEventDefinition(activity, definition, context);
+  if (activity.isThrowing || !activity.attachedTo?.ktConcurrentTask) return source;
+  for (const method of ['_onCollect', '_onCollected']) {
+    const receive = source[method].bind(source);
+    source[method] = (routingKey: string, message: any) => {
+      if (routingKey === 'execute.error') return;
+      if (routingKey === 'execute.completed') {
+        const content = message.content;
+        if (content.ktTaskDiscarded || content.error) return;
+        if (content.isRootScope && content.preventComplete && content.ignoreOutbound) return;
+      }
+      return receive(routingKey, message);
+    };
+  }
+  return source;
+}
 
 /**
  * 排除发给任务的定向办理信号，并按抛出身份去重重复传播，非中断边界再次监听仍只消费一次。

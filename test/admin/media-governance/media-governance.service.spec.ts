@@ -1,5 +1,6 @@
 import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { HttpException } from '@nestjs/common';
+import { isAutomationRejection } from '../../../src/common/automation/validation';
 import {
   MediaGovernanceService,
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
@@ -187,6 +188,41 @@ describe('MediaGovernanceService', () => {
       }),
     ]);
     expect(probeRuntimeSource).not.toHaveBeenCalled();
+    expect(task.activeRunId).toBeNull();
+  });
+
+  it('maps explicit EP filenames within the declared season and excludes unrelated files', async () => {
+    const task = await service.create({ mediaType: 'tv', seasonNumbers: ['S01'], titleHint: '豺狼的日子' });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'burned_in_subtitle_media', expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:343e2e32524edef99920283dd5e713a3a3760d66',
+      seasonNumbers: ['S01'], sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = ['域名找回.txt', '豺狼的日子.2024.EP01.HD1080P.X264.CHS-ENG.mp4', '豺狼的日子.2024.EP02.HD1080P.X264.CHS-ENG.mp4']
+      .map((relativePath, index) => ({ relativePath, index, executable: false, sizeBytes: 1024 }));
+    await service.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' });
+    expect(source.selectedFileIndices).toEqual([1, 2]);
+    expect(source.selectedFileMappings.map(({ episodeNumber, unitId }) => ({ episodeNumber, unitId })))
+      .toEqual([1, 2].map((episodeNumber) => ({ episodeNumber, unitId: task.units[0].id })));
+  });
+
+  it.each([
+    [['S01', 'S02'], ['S01', 'S02'], 'Show.S03E01.mkv'],
+    [['S01', 'S02'], ['S01', 'S02'], 'Show.EP01.mkv'],
+    [['S01'], ['S01'], 'Show.EP01-02.mkv'],
+  ])('rejects unresolvable episode identity as a business failure without modifying selection (%s, %s, %s)', async (seasons, sourceSeasons, filename) => {
+    const task = await service.create({ mediaType: 'tv', seasonNumbers: seasons, titleHint: '映射拒绝测试' });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media', expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:343e2e32524edef99920283dd5e713a3a3760d66',
+      seasonNumbers: sourceSeasons, sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [{ relativePath: filename, index: 0, executable: false, sizeBytes: 1024 }];
+    const outcome = await service.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }).then(() => null, (error: unknown) => error);
+    expect(isAutomationRejection(outcome)).toBe(true);
+    expect(source.selectedFileMappings).toEqual([]);
     expect(task.activeRunId).toBeNull();
   });
 

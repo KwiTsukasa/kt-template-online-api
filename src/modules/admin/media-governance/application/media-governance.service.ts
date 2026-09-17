@@ -9,6 +9,9 @@ import {
   Optional,
 } from '@nestjs/common';
 import { throwVbenError } from '@/common';
+import { requireDefinition } from '@/common/automation/validation';
+import { MEDIA_FILE_SELECTION } from '../constants/file-selection';
+import { resolveMediaFileEpisode } from '../domain/media-file-selection';
 import type {
   WorkflowBusinessIdentity,
   WorkflowCompletionContext,
@@ -3144,13 +3147,15 @@ export class MediaGovernanceService implements OnModuleInit {
     }
     const mappings: MediaGovernanceSourceSelectionDto['fileMappings'] = [];
     if (task.mediaType === 'tv') {
+      const taskUnits = new Map(task.units.map((unit) => [unit.seasonNumber, unit.id]));
+      const sourceUnits = new Map<string, string>();
+      for (const season of source.seasonNumbers) {
+        const unitId = taskUnits.get(season);
+        if (unitId) sourceUnits.set(season, unitId);
+      }
       for (const entry of source.manifest) {
         const role = this.selectedFileRole(entry.relativePath);
-        const episode = this.selectedEpisodeIdentity(
-          entry.relativePath,
-          source,
-          task,
-        );
+        const episode = resolveMediaFileEpisode(entry.relativePath, sourceUnits);
         if (!role || !episode) continue;
         if (role === 'subtitle') {
           const language = this.selectedSubtitleLanguage(entry.relativePath);
@@ -3218,17 +3223,12 @@ export class MediaGovernanceService implements OnModuleInit {
         (mapping) =>
           `${mapping.unitId}:${mapping.episodeNumber}:${mapping.language}`,
       );
-    if (
-      mappings.length === 0 ||
-      !mappings.some((mapping) => mapping.fileRole === 'video') ||
-      new Set(videoKeys).size !== videoKeys.length ||
-      new Set(subtitleKeys).size !== subtitleKeys.length
-    ) {
-      throwVbenError(
-        '来源自动选择存在重复或不完整映射，请手动复核',
-        HttpStatus.CONFLICT,
-      );
-    }
+    requireDefinition(
+      mappings.some((mapping) => mapping.fileRole === 'video') &&
+      new Set(videoKeys).size === videoKeys.length &&
+      new Set(subtitleKeys).size === subtitleKeys.length,
+      MEDIA_FILE_SELECTION.ambiguousMapping,
+    );
     const selectedFileIndices = mappings
       .map((mapping) => mapping.index)
       .toSorted((left, right) => left - right);
@@ -3295,59 +3295,6 @@ export class MediaGovernanceService implements OnModuleInit {
       return 'zh-TW' as const;
     }
     return null;
-  }
-
-  /**
-   * 只接受 SxxExx 或根目录纯数字集号，并将其映射到来源声明范围内的唯一治理单元。
-   * @param relativePath - 来源文件相对路径。
-   * @param source - 声明季范围的来源。
-   * @param task - 提供媒体类型和 Unit 的当前任务。
-   * @returns 唯一单元与正整数集号；任何歧义返回 null。
-   */
-  private selectedEpisodeIdentity(
-    relativePath: string,
-    source: MediaGovernanceSource,
-    task: MediaGovernanceTask,
-  ) {
-    let episodeNumber: null | number = null;
-    let seasonNumber: null | string = null;
-    const explicit = relativePath.match(
-      /(?:^|[^a-z0-9])S(\d{2})E(\d{1,3})(?!\d)/iu,
-    );
-    if (explicit) {
-      seasonNumber = `S${explicit[1]}`;
-      episodeNumber = Number(explicit[2]);
-    } else if (!relativePath.includes('/')) {
-      const brackets = [...relativePath.matchAll(/\[(\d{1,3})\]/gu)];
-      const matched = brackets.at(-1);
-      if (matched) episodeNumber = Number(matched[1]);
-      if (episodeNumber === null) {
-        const delimited = [
-          ...relativePath.matchAll(/(?:^|[._ -])(\d{1,3})(?=$|[._ \[\]()-])/gu),
-        ]
-          .map((candidate) => Number(candidate[1]))
-          .filter((candidate) => candidate > 0);
-        const unique = [...new Set(delimited)];
-        if (unique.length === 1) episodeNumber = unique[0];
-      }
-    }
-    if (!Number.isInteger(episodeNumber) || Number(episodeNumber) < 1) {
-      return null;
-    }
-    let unit: MediaGovernanceUnit | undefined;
-    if (seasonNumber) {
-      unit = task.units.find(
-        (candidate) => candidate.seasonNumber === seasonNumber,
-      );
-    }
-    if (!unit && source.seasonNumbers.length === 1) {
-      unit = task.units.find(
-        (candidate) => candidate.seasonNumber === source.seasonNumbers[0],
-      );
-    }
-    if (!unit && task.units.length === 1) unit = task.units[0];
-    if (!unit) return null;
-    return { episodeNumber: Number(episodeNumber), unitId: unit.id };
   }
 
   /**

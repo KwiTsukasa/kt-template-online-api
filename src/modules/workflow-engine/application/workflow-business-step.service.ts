@@ -1,4 +1,8 @@
-import { requireExecutionState } from '@/common/automation/validation';
+import {
+  AutomationValidationError,
+  isAutomationRejection,
+  requireExecutionState,
+} from '@/common/automation/validation';
 import {
   finishWorkflowActivity,
   workflowActivityExecutionKey,
@@ -23,7 +27,6 @@ import type {
 import { bindWorkflowValues } from '../domain/workflow-value-binding.policy';
 import { WorkflowProcessRegistry } from './workflow-process.registry';
 import { WorkflowScriptExecutionService } from './workflow-script-execution.service';
-import { isAutomationRejection } from '@/common/automation/validation';
 
 export class WorkflowBusinessStepService {
   constructor(
@@ -179,6 +182,8 @@ export class WorkflowBusinessStepService {
         state.finishedAt = new Date();
         state.wakeAt = null;
         state.errorMessage = WORKFLOW_EXECUTION_ERROR.businessRejected;
+        if (error instanceof AutomationValidationError)
+          state.errorMessage = error.message;
         return;
       }
       state.status = RUN_STATUS.waiting;

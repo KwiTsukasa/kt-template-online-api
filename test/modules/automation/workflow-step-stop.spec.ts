@@ -76,6 +76,16 @@ const fixture = () => {
 };
 
 describe('业务步骤停止与恢复', () => {
+  it('准备阶段的确定映射拒绝进入失败终态，不循环等待或启动脚本', async () => {
+    const item = fixture();
+    item.process.prepareStep.mockRejectedValue(new AutomationValidationError('来源映射需要复核'));
+    await item.advance();
+    expect(item.state.status).toBe('failed');
+    expect(item.state.wakeAt).toBeNull();
+    expect(item.state.errorMessage).toBe('来源映射需要复核');
+    expect(item.scripts.advance).not.toHaveBeenCalled();
+    expect(item.process.stopStep).not.toHaveBeenCalled();
+  });
   it('准备后的准入状态读取失败保持待恢复，不能误释放业务占用', async () => {
     const item = fixture();
     const failure = new Error('control state unavailable');

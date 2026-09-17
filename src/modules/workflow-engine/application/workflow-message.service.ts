@@ -1,10 +1,13 @@
+import { WORKFLOW_BPMN_LIMITS } from '../constants/bpmn';
 import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { createHash } from 'node:crypto';
+  requireRequest,
+  requireFound,
+  requireConsistent,
+} from '@/common/automation/validation';
+import { workflowAllowsDispatch } from '../domain/workflow-execution-control.policy';
+import { automationDigest } from '@/common/automation/content-digest';
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
+import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { withWorkflowRunLock } from '../infrastructure/workflow-run-lock';
 import { definitionRecord } from '@/common/automation/definition.types';
@@ -87,20 +90,24 @@ export class WorkflowMessageService {
     const identityKeys = ['deliveryId', 'senderId'];
     if (!ingress) identityKeys.push('nodeId', 'executionId');
     for (const key of identityKeys) {
-      if (
-        typeof envelope[key] !== 'string' ||
-        !envelope[key].trim() ||
-        envelope[key].length > 191
-      )
-        throw new BadRequestException('消息投递身份不能为空或超过 191 个字符');
+      let limit: number = WORKFLOW_BPMN_LIMITS.modelIdentityLength;
+      if (key === 'executionId')
+        limit = WORKFLOW_BPMN_LIMITS.executionIdentityLength;
+      requireRequest(
+        typeof envelope[key] === 'string' &&
+          envelope[key].trim() &&
+          Array.from(envelope[key]).length <= limit,
+        `消息投递身份 ${key} 需要 1 至 ${limit} 个字符`,
+      );
     }
-    if (
-      delivery.messageId !== null &&
-      (typeof delivery.messageId !== 'string' ||
-        !delivery.messageId ||
-        delivery.messageId.length > 191)
-    )
-      throw new BadRequestException('消息类型标识无效');
+    requireRequest(
+      delivery.messageId === null ||
+        (typeof delivery.messageId === 'string' &&
+          delivery.messageId &&
+          Array.from(delivery.messageId).length <=
+            WORKFLOW_BPMN_LIMITS.modelIdentityLength),
+      '消息类型标识无效',
+    );
     const values = validateDefinitionInput(() =>
       normalizeMessageValue(definitionRecord(delivery.values)),
     ) as Record<string, unknown>;
@@ -111,9 +118,11 @@ export class WorkflowMessageService {
       senderId: delivery.senderId,
       values,
     });
-    if (Buffer.byteLength(serialized) > 64 * 1024)
-      throw new BadRequestException('单条工作流消息不能超过 64 KiB');
-    let hash = createHash('sha256').update(serialized).digest('hex');
+    requireRequest(
+      Buffer.byteLength(serialized) <= 64 * 1024,
+      '单条工作流消息不能超过 64 KiB',
+    );
+    let hash = automationDigest(serialized);
     if (ingress) hash = ingress.ingressHash;
     const locked = await withWorkflowRunLock(
       this.database,
@@ -125,15 +134,17 @@ export class WorkflowMessageService {
             where: { id: runId },
             lock: { mode: 'pessimistic_write' },
           });
-          if (!run) throw new NotFoundException('工作流实例不存在');
+          requireFound(run, '工作流实例不存在');
           const messages = run.bpmnState?.messages ?? [];
           const previous = messages.find((item) => {
             if (ingress) return item.ingressKey === ingress.ingressKey;
             return item.deliveryId === delivery.deliveryId && !item.ingressKey;
           });
           if (previous) {
-            if (previous.hash !== hash)
-              throw new ConflictException('同一投递标识已经接收了不同消息');
+            requireConsistent(
+              previous.hash === hash,
+              '同一投递标识已经接收了不同消息',
+            );
             return {
               deliveryId: previous.deliveryId,
               nodeId: previous.nodeId,
@@ -143,14 +154,10 @@ export class WorkflowMessageService {
               deliveredAt: previous.deliveredAt,
             };
           }
-          if (
-            !run.bpmnState ||
-            run.cancelRequested ||
-            run.errorMessage ||
-            !['pending', 'running', 'waiting'].includes(run.status) ||
-            new Date(run.deadlineAt).getTime() <= Date.now()
-          )
-            throw new ConflictException('工作流实例已经停止接收消息');
+          requireConsistent(
+            run.bpmnState && workflowAllowsDispatch(run),
+            '工作流实例已经停止接收消息',
+          );
           const model = await parseWorkflowBpmn(
             await this.definitions.resolve({
               id: run.workflowId,
@@ -177,10 +184,10 @@ export class WorkflowMessageService {
                 }
               },
             );
-            if (matches.length !== 1)
-              throw new ConflictException(
-                '业务消息没有唯一且关联匹配的活动等待',
-              );
+            requireConsistent(
+              matches.length === 1,
+              '业务消息没有唯一且关联匹配的活动等待',
+            );
             delivery = {
               ...delivery,
               nodeId: matches[0].nodeId,
@@ -192,25 +199,30 @@ export class WorkflowMessageService {
               item.nodeId === delivery.nodeId &&
               item.executionId === delivery.executionId,
           );
-          if (!waiting) throw new ConflictException('消息等待实例已经失效');
-          if (
-            messages.length >= 4096 ||
-            messages.filter((item) => item.status === 'pending').length >= 128
-          )
-            throw new ConflictException('当前流程的消息回执或等待队列达到上限');
-          if (
-            messages.some(
+          requireConsistent(waiting, '消息等待实例已经失效');
+          requireConsistent(
+            messages.length < 4096 &&
+              messages.filter((item) => item.status === RUN_STATUS.pending)
+                .length < 128,
+            '当前流程的消息回执或等待队列达到上限',
+          );
+          requireConsistent(
+            !messages.some(
               (item) =>
                 item.executionId === delivery.executionId &&
-                item.status === 'pending',
-            )
-          )
-            throw new ConflictException('该活动实例已经接收消息');
+                item.status === RUN_STATUS.pending,
+            ),
+            '该活动实例已经接收消息',
+          );
           const declaredMessageId = declaredBpmnMessage(model, waiting);
-          if (declaredMessageId === undefined)
-            throw new BadRequestException('目标活动不是消息捕获事件或接收任务');
-          if (delivery.messageId !== declaredMessageId)
-            throw new BadRequestException('消息类型与当前等待声明不一致');
+          requireRequest(
+            declaredMessageId !== undefined,
+            '目标活动不是消息捕获事件或接收任务',
+          );
+          requireRequest(
+            delivery.messageId === declaredMessageId,
+            '消息类型与当前等待声明不一致',
+          );
           const correlation = validateDefinitionInput(() =>
             messageCorrelation(
               model,
@@ -225,7 +237,7 @@ export class WorkflowMessageService {
             deliveryId: delivery.deliveryId,
             nodeId: delivery.nodeId,
             executionId: delivery.executionId,
-            status: 'pending',
+            status: RUN_STATUS.pending,
             receivedAt: new Date().toISOString(),
             deliveredAt: null,
           };
@@ -248,8 +260,7 @@ export class WorkflowMessageService {
           return receipt;
         }),
     );
-    if (!locked.acquired)
-      throw new ConflictException('流程正在推进，请稍后投递');
+    requireConsistent(locked.acquired, '流程正在推进，请稍后投递');
     return locked.value;
   }
 }

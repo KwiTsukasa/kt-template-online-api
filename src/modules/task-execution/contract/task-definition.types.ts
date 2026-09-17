@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { TaskHandlerReference } from './task-handler.port';
 import type { DataSchema } from '@/common/automation/data-schema';
 
@@ -15,11 +16,11 @@ export type AtomicTaskDefinition = {
   retryBackoffMs: number;
 };
 export type AtomicRunStatus =
-  | 'pending'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  | typeof RUN_STATUS.pending
+  | typeof RUN_STATUS.running
+  | typeof RUN_STATUS.succeeded
+  | typeof RUN_STATUS.failed
+  | typeof RUN_STATUS.cancelled;
 export type AtomicRunView = {
   runId: string;
   taskId: string;

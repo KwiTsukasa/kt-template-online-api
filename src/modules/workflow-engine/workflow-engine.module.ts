@@ -16,11 +16,7 @@ import {
   WorkflowDraft,
   WorkflowRevision,
 } from './infrastructure/persistence/workflow.entities';
-import {
-  WorkflowNodeRun,
-  WorkflowNodeVisit,
-  WorkflowRun,
-} from './infrastructure/persistence/workflow-run.entities';
+import { WorkflowRun } from './infrastructure/persistence/workflow-run.entities';
 import { WorkflowExecutionService } from './application/workflow-execution.service';
 import { WorkflowExecutionWorker } from './infrastructure/workflow-execution.worker';
 import { WORKFLOW_EXECUTION } from './contract/workflow.types';
@@ -59,8 +55,6 @@ export class WorkflowEngineModule {
           WorkflowDraft,
           WorkflowRevision,
           WorkflowRun,
-          WorkflowNodeRun,
-          WorkflowNodeVisit,
           WorkflowBusinessBinding,
           WorkflowScriptAsset,
           WorkflowBpmnActivity,
@@ -70,14 +64,20 @@ export class WorkflowEngineModule {
       controllers: [WorkflowController],
       providers: [
         WorkflowDefinitionService,
-        { provide: WORKFLOW_DEFINITIONS, useExisting: WorkflowDefinitionService },
+        {
+          provide: WORKFLOW_DEFINITIONS,
+          useExisting: WorkflowDefinitionService,
+        },
         WorkflowProcessRegistry,
         WorkflowBusinessService,
         WorkflowScriptRegistry,
         WorkflowScriptExecutionService,
         WorkflowScriptRunner,
         WorkflowScriptAssetsService,
-        { provide: WORKFLOW_SCRIPT_ASSETS, useExisting: WorkflowScriptAssetsService },
+        {
+          provide: WORKFLOW_SCRIPT_ASSETS,
+          useExisting: WorkflowScriptAssetsService,
+        },
         { provide: WORKFLOW_PROCESSES, useExisting: WorkflowProcessRegistry },
         { provide: WORKFLOW_BUSINESSES, useExisting: WorkflowBusinessService },
         WorkflowExecutionService,

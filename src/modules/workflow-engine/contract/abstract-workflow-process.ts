@@ -1,4 +1,10 @@
-import { BadRequestException } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { WORKFLOW_EXECUTION_KEY_PATTERN } from '../constants/execution';
+import {
+  RUN_STATUS,
+  RUN_STATUS_GROUP,
+} from '@/common/automation/constants/run-status';
+
 import {
   validateDataValues,
   type DataSchema,
@@ -44,8 +50,10 @@ export abstract class AbstractWorkflowProcess implements WorkflowProcess {
     invocation: WorkflowStepInvocation,
   ): Promise<Record<string, unknown>> {
     const step = this.step(invocation);
-    if (invocation.stopRequested)
-      throw new BadRequestException('步骤已经请求停止，禁止准备新的执行');
+    requireRequest(
+      !invocation.stopRequested,
+      '步骤已经请求停止，禁止准备新的执行',
+    );
     invocation.signal.throwIfAborted();
     const input = validateDefinitionInput(() =>
       validateDataValues(step.inputSchema, invocation.input),
@@ -64,16 +72,16 @@ export abstract class AbstractWorkflowProcess implements WorkflowProcess {
     acceptance: WorkflowStepAcceptance,
   ): Promise<Record<string, unknown>> {
     const step = this.step(acceptance.invocation);
-    if (
-      !acceptance.results.length ||
-      acceptance.results.some(
-        (result) =>
-          result.status !== 'succeeded' ||
-          !result.executionId ||
-          result.exitCode !== 0,
-      )
-    )
-      throw new BadRequestException('业务验收必须使用全部脚本的真实成功回执');
+    requireRequest(
+      acceptance.results.length &&
+        !acceptance.results.some(
+          (result) =>
+            result.status !== RUN_STATUS.succeeded ||
+            !result.executionId ||
+            result.exitCode !== 0,
+        ),
+      '业务验收必须使用全部脚本的真实成功回执',
+    );
     const output = await this.verifyStep(acceptance);
     return validateDefinitionInput(() =>
       validateDataValues(step.outputSchema, output),
@@ -87,9 +95,12 @@ export abstract class AbstractWorkflowProcess implements WorkflowProcess {
    */
   async stopStep(context: WorkflowStepStop): Promise<void> {
     this.step(context.invocation);
-    if (context.attempts.some((attempt) =>
-      ['running', 'unconfirmed'].includes(attempt.status),
-    )) throw new BadRequestException('脚本尚未确认停止，禁止释放业务占用');
+    requireRequest(
+      !context.attempts.some((attempt) =>
+        RUN_STATUS_GROUP.executingScript.includes(attempt.status),
+      ),
+      '脚本尚未确认停止，禁止释放业务占用',
+    );
     await this.releaseStep(context);
   }
 
@@ -148,16 +159,18 @@ export abstract class AbstractWorkflowProcess implements WorkflowProcess {
     const step = this.steps.find(
       (candidate) => candidate.key === invocation.stepKey,
     );
-    if (!step) throw new BadRequestException('业务未实现此工作流步骤');
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{7,190}$/.test(invocation.executionKey))
-      throw new BadRequestException('工作流步骤执行键无效');
-    if (
-      !invocation.business.scopeId ||
-      !invocation.business.subjectId ||
-      !Number.isSafeInteger(invocation.business.revision) ||
-      invocation.business.revision < 1
-    )
-      throw new BadRequestException('工作流业务身份或修订无效');
+    requireRequest(step, '业务未实现此工作流步骤');
+    requireRequest(
+      WORKFLOW_EXECUTION_KEY_PATTERN.test(invocation.executionKey),
+      '工作流步骤执行键无效',
+    );
+    requireRequest(
+      invocation.business.scopeId &&
+        invocation.business.subjectId &&
+        Number.isSafeInteger(invocation.business.revision) &&
+        invocation.business.revision >= 1,
+      '工作流业务身份或修订无效',
+    );
     return step;
   }
 }

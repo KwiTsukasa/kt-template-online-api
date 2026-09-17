@@ -1,7 +1,5 @@
-export const WORKFLOW_BPMN_LIMITS = Object.freeze({
-  maxInstances: 1000,
-  synchronousTransitions: 10000,
-});
+import { requireDefinition } from '@/common/automation/validation';
+import { WORKFLOW_BPMN_LIMITS } from '../constants/bpmn';
 
 /**
  * 让发布校验和实际展开使用同一数量边界，动态业务输入不能绕过静态模型校验。
@@ -10,13 +8,12 @@ export const WORKFLOW_BPMN_LIMITS = Object.freeze({
  * @throws 数量不是安全整数或超过工作流实例上限时拒绝展开。
  */
 export function requireBpmnInstanceCount(value: unknown): number {
-  if (
-    typeof value !== 'number' ||
-    !Number.isSafeInteger(value) ||
-    value < 0 ||
-    value > WORKFLOW_BPMN_LIMITS.maxInstances
-  ) {
-    throw new Error('多实例数量必须为零至一千的整数');
-  }
+  requireDefinition(
+    typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value >= 0 &&
+      value <= WORKFLOW_BPMN_LIMITS.maxInstances,
+    '多实例数量必须为零至一千的整数',
+  );
   return value;
 }

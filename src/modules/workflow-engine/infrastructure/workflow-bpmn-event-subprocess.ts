@@ -1,6 +1,8 @@
+import { BPMN_EXCHANGE, BPMN_ROUTING } from '../constants/bpmn-runtime';
 import { randomUUID } from 'node:crypto';
 import { workflowBpmnChildParent } from './workflow-bpmn-scope';
 import { SubProcess, SubProcessBehaviour } from 'bpmn-elements/tasks';
+import { WorkflowCompensatableSubProcess } from './workflow-bpmn-compensation-scope';
 
 /**
  * 保留普通子流程行为，为事件触发的子流程在同一活动内建立独立、可恢复的处理实例。
@@ -10,7 +12,7 @@ import { SubProcess, SubProcessBehaviour } from 'bpmn-elements/tasks';
  */
 export function WorkflowEventSubProcess(definition: any, context: any) {
   if (!definition.behaviour?.triggeredByEvent)
-    return SubProcess(definition, context);
+    return WorkflowCompensatableSubProcess(definition, context);
   const activity: any = SubProcess(
     definition,
     context,
@@ -18,6 +20,11 @@ export function WorkflowEventSubProcess(definition: any, context: any) {
   );
   const run = activity.run.bind(activity);
   activity.run = (content) => {
+    if (
+      activity.environment.variables.ktCompensationScope?.handlerId ===
+      activity.id
+    )
+      return run(content);
     // 父作用域的正常令牌耗尽后只等待已有处理实例，不能由处理器自身再启动一轮。
     if (
       !context
@@ -44,6 +51,11 @@ class WorkflowEventSubProcessBehaviour extends (SubProcessBehaviour as any) {
 
   constructor(activity: any, context: any) {
     super(activity, context);
+    if (
+      activity.environment.variables.ktCompensationScope?.handlerId ===
+      activity.id
+    )
+      return;
     // 使用引擎已有的多执行作用域保存与清理能力，事件次数由触发决定，不生成伪循环模型。
     this.loopCharacteristics = {
       execute: (message: any) => {
@@ -56,10 +68,14 @@ class WorkflowEventSubProcessBehaviour extends (SubProcessBehaviour as any) {
           )
         ) {
           // 旧快照直接以活动根身份执行子流程，恢复时保留该身份和内部待办。
-          this.broker.publish('execution', 'execute.legacy.running', {
-            ...message.content,
-            preventComplete: true,
-          });
+          this.broker.publish(
+            BPMN_EXCHANGE.execution,
+            BPMN_ROUTING.executeLegacyRunning,
+            {
+              ...message.content,
+              preventComplete: true,
+            },
+          );
           super.execute({
             ...message,
             content: { ...message.content, isRootScope: false },
@@ -77,7 +93,7 @@ class WorkflowEventSubProcessBehaviour extends (SubProcessBehaviour as any) {
   _completeExecution(routingKey: string, content: any): void {
     if (
       content.executionId === this.rootContent?.executionId &&
-      routingKey === 'execute.completed'
+      routingKey === BPMN_ROUTING.executeCompleted
     ) {
       if (
         this.executions.some(
@@ -86,7 +102,7 @@ class WorkflowEventSubProcessBehaviour extends (SubProcessBehaviour as any) {
             !execution.completed,
         )
       ) {
-        super._completeExecution('execute.legacy.completed', {
+        super._completeExecution(BPMN_ROUTING.executeLegacyCompleted, {
           ...content,
           isRootScope: true,
           preventComplete: false,
@@ -100,15 +116,15 @@ class WorkflowEventSubProcessBehaviour extends (SubProcessBehaviour as any) {
   }
 
   /**
-   * 为本次事件建立独立执行身份，内部活动使用各自的子流程上下文。
+   * 为事件建立独立实例，载荷写入消息域，内部活动继承既有业务输入与父作用域。
    * @param input - 此次触发的事件数据；不允许改变标准活动身份和父作用域。
    */
   trigger(input: Record<string, unknown>): void {
     const root = this.rootContent;
     const parent = workflowBpmnChildParent(root);
-    this.broker.publish('execution', 'execute.start', {
+    this.broker.publish(BPMN_EXCHANGE.execution, BPMN_ROUTING.executeStart, {
       ...root,
-      input,
+      message: input,
       executionId: `${root.executionId}_${randomUUID()}`,
       isRootScope: false,
       parent,

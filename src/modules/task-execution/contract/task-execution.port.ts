@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { DataSchema } from '@/common/automation/data-schema';
 import type { PublishedReference } from '@/common/automation/definition.types';
 import type { AtomicRunView } from './task-definition.types';
@@ -24,7 +25,10 @@ export type TaskExecutionRequest = {
 };
 export type AtomicTaskResult = {
   runId: string;
-  status: 'failed' | 'succeeded' | 'skipped';
+  status:
+    | typeof RUN_STATUS.failed
+    | typeof RUN_STATUS.succeeded
+    | typeof RUN_STATUS.skipped;
   output: Record<string, unknown>;
   error?: string;
 };

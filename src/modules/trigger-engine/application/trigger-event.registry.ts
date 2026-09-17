@@ -1,3 +1,4 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import { Injectable } from '@nestjs/common';
 import { normalizeDataSchema } from '@/common/automation/data-schema';
 import type {
@@ -16,20 +17,20 @@ export class TriggerEventRegistry implements TriggerEventRegistryPort {
    * @throws 事件身份、字段契约非法或同版本重复时拒绝注册。
    */
   register(source: TriggerEventSource): () => void {
-    if (
-      !/^[a-z][a-z0-9_.-]{2,127}$/.test(source.key) ||
-      !Number.isSafeInteger(source.version) ||
-      source.version < 1
-    )
-      throw new Error('事件源身份不合法');
-    if (
-      typeof source.name !== 'string' ||
-      !source.name.trim() ||
-      source.name.length > 128
-    )
-      throw new Error('事件源名称不合法');
+    requireExecutionState(
+      /^[a-z][a-z0-9_.-]{2,127}$/.test(source.key) &&
+        Number.isSafeInteger(source.version) &&
+        !(source.version < 1),
+      '事件源身份不合法',
+    );
+    requireExecutionState(
+      typeof source.name === 'string' &&
+        source.name.trim() &&
+        !(source.name.length > 128),
+      '事件源名称不合法',
+    );
     const key = `${source.key}@${source.version}`;
-    if (this.sources.has(key)) throw new Error('事件源版本重复注册');
+    requireExecutionState(!this.sources.has(key), '事件源版本重复注册');
     const saved = {
       ...source,
       payloadSchema: normalizeDataSchema(source.payloadSchema),

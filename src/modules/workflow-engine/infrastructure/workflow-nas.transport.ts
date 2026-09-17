@@ -1,8 +1,12 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import { workflowRuntimeAsset } from './workflow-runtime-assets';
+
+import { SCRIPT_LIMITS, SCRIPT_PATTERN } from '../constants/script';
 
 /**
  * 把固定命令参数编码为一个 POSIX shell 参数，业务输入只通过标准输入传输。
@@ -34,35 +38,39 @@ export class WorkflowNasTransport {
     const root = this.config.get<string>('WORKFLOW_NAS_STATE_ROOT') || '';
     const node = this.config.get<string>('WORKFLOW_NAS_NODE_BINARY') || '';
     const sshConfig = this.config.get<string>('WORKFLOW_NAS_SSH_CONFIG') || '';
-    if (
-      !/^[a-zA-Z0-9][a-zA-Z0-9._@-]*$/.test(host) ||
-      !path.posix.isAbsolute(root) ||
-      root === '/' ||
-      !path.posix.isAbsolute(node) ||
-      !/^[a-f0-9]{64}$/.test(executionId)
-    )
-      throw new Error('工作流 NAS 主机、状态目录或解释器尚未配置');
+    requireExecutionState(
+      /^[a-zA-Z0-9][a-zA-Z0-9._@-]*$/.test(host) &&
+        path.posix.isAbsolute(root) &&
+        root !== '/' &&
+        path.posix.isAbsolute(node) &&
+        SCRIPT_PATTERN.sha256.test(executionId),
+      '工作流 NAS 主机、状态目录或解释器尚未配置',
+    );
     const sshArguments: string[] = [];
     if (sshConfig) {
-      if (!path.isAbsolute(sshConfig))
-        throw new Error('工作流 SSH 配置必须使用绝对路径');
+      requireExecutionState(
+        path.isAbsolute(sshConfig),
+        '工作流 SSH 配置必须使用绝对路径',
+      );
       await access(sshConfig);
       sshArguments.push('-F', sshConfig);
     }
     const helper = await readFile(
-      path.resolve('scripts/workflow/remote-control.cjs'),
+      workflowRuntimeAsset('remote-control.cjs'),
       'utf8',
     );
     const command = `${shellArgument(node)} -e ${shellArgument(helper)}`;
     const input = JSON.stringify({
+      ...payload,
       operation,
       executionId,
       root,
       nodeBinary: node,
-      ...payload,
     });
-    if (Buffer.byteLength(input) > 2 * 1024 * 1024)
-      throw new Error('工作流 NAS 输入超过传输限制');
+    requireExecutionState(
+      !(Buffer.byteLength(input) > SCRIPT_LIMITS.controlEnvelopeBytes),
+      '工作流 NAS 输入超过传输限制',
+    );
     const raw = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         'ssh',
@@ -81,6 +89,7 @@ export class WorkflowNasTransport {
         { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
       );
       let output = '';
+      let outputBytes = 0;
       let settled = false;
       const fail = (error: Error) => {
         if (settled) return;
@@ -91,15 +100,16 @@ export class WorkflowNasTransport {
       };
       const timeout = setTimeout(
         () => fail(new Error('工作流 NAS 控制请求超时，执行状态待核对')),
-        30000,
+        SCRIPT_LIMITS.controlTimeoutMs,
       );
       child.on('error', () => fail(new Error('工作流 NAS SSH 无法启动')));
       child.stdin.on('error', () => fail(new Error('工作流 NAS 输入传输中断')));
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (part: string) => {
+        outputBytes += Buffer.byteLength(part);
+        if (outputBytes > SCRIPT_LIMITS.controlEnvelopeBytes)
+          return fail(new Error('工作流 NAS 回执超过限制'));
         output += part;
-        if (Buffer.byteLength(output) > 1024 * 1024)
-          fail(new Error('工作流 NAS 回执超过限制'));
       });
       child.stderr.resume();
       child.on('close', (code) => {
@@ -116,8 +126,10 @@ export class WorkflowNasTransport {
       executionId?: string;
       value?: unknown;
     };
-    if (response.executionId !== executionId)
-      throw new Error('工作流 NAS 回执身份不匹配');
+    requireExecutionState(
+      response.executionId === executionId,
+      '工作流 NAS 回执身份不匹配',
+    );
     return response.value;
   }
 }

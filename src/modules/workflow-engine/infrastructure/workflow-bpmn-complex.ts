@@ -1,5 +1,12 @@
+import { requireExecutionState } from '@/common/automation/validation';
+import {
+  BPMN_EXCHANGE,
+  BPMN_ROUTING,
+  BPMN_QUEUE,
+} from '../constants/bpmn-runtime';
+import { WORKFLOW_BPMN_LIMITS } from '@/modules/workflow-engine/constants/bpmn';
 import { Activity } from 'bpmn-elements';
-import { WORKFLOW_BPMN_LIMITS } from '../domain/workflow-bpmn-limits';
+
 import { WorkflowBpmnFlowIndex } from './workflow-bpmn-flow-index';
 
 interface ComplexState {
@@ -58,12 +65,17 @@ class WorkflowComplexGatewayBehaviour {
       .getActivities(this.activity.parent.id)
       .filter((peer: any) => peer.id !== this.activity.id);
     for (const peer of this.peers)
-      peer.broker.subscribeTmp('event', 'activity.#', () => this.schedule(), {
-        noAck: true,
-        consumerTag: `_kt-complex-${this.activity.id}`,
-      });
+      peer.broker.subscribeTmp(
+        BPMN_EXCHANGE.event,
+        BPMN_ROUTING.activityAll,
+        () => this.schedule(),
+        {
+          noAck: true,
+          consumerTag: `_kt-complex-${this.activity.id}`,
+        },
+      );
     broker.subscribeTmp(
-      'api',
+      BPMN_EXCHANGE.api,
       `activity.*.${message.content.executionId}`,
       (_: string, incoming: any) => {
         if (['stop', 'discard', 'cancel'].includes(incoming.properties.type))
@@ -71,7 +83,7 @@ class WorkflowComplexGatewayBehaviour {
       },
       { noAck: true, consumerTag: '_kt-complex-api', priority: 300 },
     );
-    broker.getQueue('inbound-q').consume(
+    broker.getQueue(BPMN_QUEUE.inbound).consume(
       (_: string, inbound: any) => {
         this.receive(inbound.content.id);
         (this.state.arrivals ??= []).push(structuredClone(inbound.content));
@@ -120,10 +132,14 @@ class WorkflowComplexGatewayBehaviour {
         this.advance();
       } catch (error) {
         this.stop();
-        this.activity.broker.publish('execution', 'execute.error', {
-          ...this.message.content,
-          error,
-        });
+        this.activity.broker.publish(
+          BPMN_EXCHANGE.execution,
+          BPMN_ROUTING.executeError,
+          {
+            ...this.message.content,
+            error,
+          },
+        );
       }
     });
   }
@@ -152,10 +168,14 @@ class WorkflowComplexGatewayBehaviour {
       const inbound = this.state.arrivals;
       this.state.arrivals = [];
       // 入口已转交给此活动；同步流传播结束后通知父流程移除对应的在途令牌。
-      this.activity.broker.publish('event', 'activity.enter', {
-        ...this.message.content,
-        inbound,
-      });
+      this.activity.broker.publish(
+        BPMN_EXCHANGE.event,
+        BPMN_ROUTING.activityEnter,
+        {
+          ...this.message.content,
+          inbound,
+        },
+      );
     }
     for (
       let cycle = 0;
@@ -163,35 +183,39 @@ class WorkflowComplexGatewayBehaviour {
       cycle += 1
     ) {
       const phase = this.phaseMessage();
-      if (this.state.waitingForStart) {
-        if (!Object.values(this.state.tokens).some((count) => count > 0)) {
-          this.complete();
-          return;
-        }
-        const active = this.activity.environment.resolveExpression(
-          this.activity.behaviour.activationCondition.body,
-          phase,
-        );
-        if (typeof active !== 'boolean')
-          throw new Error('复杂网关激活条件必须返回布尔值');
-        if (!active) return;
-        this.state.consumed = Object.keys(this.state.tokens).filter(
-          (id) => this.state.tokens[id] > 0,
-        );
-        for (const id of this.state.consumed) this.state.tokens[id] -= 1;
-        this.state.waitingForStart = false;
-        this.send(phase, true);
-      } else {
+      if (!this.state.waitingForStart) {
         if (!this.canReset()) return;
-        for (const id of Object.keys(this.state.tokens))
-          if (!this.state.consumed.includes(id) && this.state.tokens[id] > 0)
-            this.state.tokens[id] -= 1;
+        const consumed = new Set(this.state.consumed);
+        for (const [id, count] of Object.entries(this.state.tokens)) {
+          if (consumed.has(id) || count <= 0) continue;
+          this.state.tokens[id] -= 1;
+        }
         this.state.consumed = [];
         this.state.waitingForStart = true;
         this.send(phase, false);
+        continue;
       }
+      if (!Object.values(this.state.tokens).some((count) => count > 0)) {
+        this.complete();
+        return;
+      }
+      const active = this.activity.environment.resolveExpression(
+        this.activity.behaviour.activationCondition.body,
+        phase,
+      );
+      requireExecutionState(
+        typeof active === 'boolean',
+        '复杂网关激活条件必须返回布尔值',
+      );
+      if (!active) return;
+      this.state.consumed = Object.keys(this.state.tokens).filter(
+        (id) => this.state.tokens[id] > 0,
+      );
+      for (const id of this.state.consumed) this.state.tokens[id] -= 1;
+      this.state.waitingForStart = false;
+      this.send(phase, true);
     }
-    if (this.running) throw new Error('复杂网关同步推进超过安全上限');
+    requireExecutionState(!this.running, '复杂网关同步推进超过安全上限');
   }
 
   /**
@@ -206,18 +230,22 @@ class WorkflowComplexGatewayBehaviour {
       (flow: any) => !received.has(flow.id),
     );
     if (!missing.length) return true;
+    const missingOrigins = this.flows.originsBefore(
+      this.activity.id,
+      missing.map((flow: any) => flow.id),
+    );
+    const receivedOrigins = this.flows.originsBefore(
+      this.activity.id,
+      received,
+    );
     for (const peer of this.peers) {
       if (
         !peer.status &&
         !peer.initialized &&
-        !peer.broker.getQueue('inbound-q')?.messageCount
+        !peer.broker.getQueue(BPMN_QUEUE.inbound)?.messageCount
       )
         continue;
-      const reachable = this.flows.incomingBefore(peer.id, this.activity.id);
-      if (
-        missing.some((flow: any) => reachable.has(flow.id)) &&
-        ![...received].some((id) => reachable.has(id))
-      )
+      if (missingOrigins.has(peer.id) && !receivedOrigins.has(peer.id))
         return false;
     }
     return true;
@@ -229,20 +257,28 @@ class WorkflowComplexGatewayBehaviour {
    * @param requireOutbound - 只有激活阶段强制至少一个出口成立。
    */
   private send(phase: any, requireOutbound: boolean): void {
-    this.activity.broker.publish('execution', 'execute.outbound.take', {
-      ...phase.content,
-      requireOutbound,
-      outbound: undefined,
-    });
+    this.activity.broker.publish(
+      BPMN_EXCHANGE.execution,
+      BPMN_ROUTING.executeOutboundTake,
+      {
+        ...phase.content,
+        requireOutbound,
+        outbound: undefined,
+      },
+    );
   }
 
   /** 将已重置且无剩余令牌的网关标记为结束，并阻止活动离开时再次发送出口。 */
   private complete(): void {
     this.stop();
-    this.activity.broker.publish('execution', 'execute.completed', {
-      ...this.message.content,
-      ignoreOutbound: true,
-    });
+    this.activity.broker.publish(
+      BPMN_EXCHANGE.execution,
+      BPMN_ROUTING.executeCompleted,
+      {
+        ...this.message.content,
+        ignoreOutbound: true,
+      },
+    );
   }
 
   /** 停止本实例的入口及同作用域监听，保留持久状态供恢复，不影响其他网关。 */

@@ -1,3 +1,8 @@
+import {
+  rejectDefinition,
+  requireDefinition,
+} from '@/common/automation/validation';
+
 import { parseExpression } from 'cron-parser';
 import { definitionRecord } from '@/common/automation/definition.types';
 import { normalizeDataSchema } from '@/common/automation/data-schema';
@@ -22,50 +27,48 @@ export function normalizeTriggerConfiguration(
       .trim()
       .replace(/\s+/g, ' ');
     const timezone = String(value.timezone || 'Asia/Shanghai');
-    if (
-      expression.split(' ').length !== 5 ||
-      expression.length > 64 ||
-      !/^[\d*/ ,\-]+$/.test(expression)
-    ) {
-      throw new Error('Cron 必须是合法的五段表达式');
-    }
+    requireDefinition(
+      expression.split(' ').length === 5 &&
+        expression.length <= 64 &&
+        /^[\d*/ ,\-]+$/.test(expression),
+      'Cron 必须是合法的五段表达式',
+    );
     new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
     parseExpression(expression, { tz: timezone }).next();
     return { type: 'cron', expression, timezone };
   }
   if (value.type === 'interval') {
     const everyMs = value.everyMs;
-    if (
-      typeof everyMs !== 'number' ||
-      !Number.isInteger(everyMs) ||
-      everyMs < 1000 ||
-      everyMs > 30 * 86400000
-    ) {
-      throw new Error('间隔必须是 1 秒至 30 天的整数毫秒');
-    }
+    requireDefinition(
+      typeof everyMs === 'number' &&
+        Number.isInteger(everyMs) &&
+        everyMs >= 1000 &&
+        everyMs <= 30 * 86400000,
+      '间隔必须是 1 秒至 30 天的整数毫秒',
+    );
     return { type: 'interval', everyMs };
   }
   if (value.type === 'once') {
     const at = String(value.at || '');
-    if (
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(
+    requireDefinition(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(
         at,
-      ) ||
-      !Number.isFinite(Date.parse(at))
-    ) {
-      throw new Error('一次性任务时间必须包含明确时区');
-    }
+      ) && Number.isFinite(Date.parse(at)),
+      '一次性任务时间必须包含明确时区',
+    );
     return { type: 'once', at: new Date(at).toISOString() };
   }
   if (value.type === 'event') {
     const eventKey = String(value.eventKey || '');
-    if (!/^[a-z][a-z0-9_.-]{2,127}$/.test(eventKey))
-      throw new Error('事件名不符合任务契约');
-    if (
-      !Number.isSafeInteger(value.eventVersion) ||
-      Number(value.eventVersion) < 1
-    )
-      throw new Error('必须选择明确的事件源版本');
+    requireDefinition(
+      /^[a-z][a-z0-9_.-]{2,127}$/.test(eventKey),
+      '事件名不符合任务契约',
+    );
+    requireDefinition(
+      Number.isSafeInteger(value.eventVersion) &&
+        Number(value.eventVersion) >= 1,
+      '必须选择明确的事件源版本',
+    );
     return {
       type: 'event',
       eventKey,
@@ -73,7 +76,7 @@ export function normalizeTriggerConfiguration(
       payloadSchema: normalizeDataSchema(value.payloadSchema),
     };
   }
-  throw new Error('未知的任务触发器类型');
+  rejectDefinition('未知的任务触发器类型');
 }
 
 /**
@@ -110,7 +113,7 @@ export function nextTriggerAt(
  */
 export function normalizeTriggerDefinition(input: unknown): TriggerDefinition {
   const value = definitionRecord(input);
-  if (value.schemaVersion !== 1) throw new Error('触发器结构版本不支持');
+  requireDefinition(value.schemaVersion === 1, '触发器结构版本不支持');
   return {
     schemaVersion: 1,
     trigger: normalizeTriggerConfiguration(value.trigger),

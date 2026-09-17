@@ -1,4 +1,5 @@
-import { SubProcess, SubProcessBehaviour } from 'bpmn-elements/tasks';
+import { BPMN_ROUTING } from '../constants/bpmn-runtime';
+import { SubProcessBehaviour } from 'bpmn-elements/tasks';
 import type {
   Activity,
   ActivityDefinition,
@@ -12,6 +13,10 @@ import type {
 import type { ConsumeMessage, MessageProperties } from 'smqp';
 import { configureWorkflowCompensationThrow } from './workflow-bpmn-compensation';
 import { workflowBpmnChildParent } from './workflow-bpmn-scope';
+import {
+  CompensationScopeBehaviour,
+  WorkflowCompensatableSubProcess,
+} from './workflow-bpmn-compensation-scope';
 
 // 18.0.27 的事务取消未公开扩展钩子；内部方法和符号集中声明，由消融与旧快照恢复用例保护。
 const executionStatus: unique symbol = Symbol.for('status');
@@ -44,7 +49,7 @@ interface NativeTransactionBehaviour extends Omit<
 }
 
 // 上游声明将实际单对象/循环对象误写成数组；这里只校正适配边界，不改变持久化结构。
-const NativeSubProcess = SubProcessBehaviour as unknown as new (
+const NativeSubProcess = CompensationScopeBehaviour as unknown as new (
   activity: Activity,
   context: ContextInstance,
 ) => NativeTransactionBehaviour;
@@ -59,7 +64,7 @@ export function WorkflowTransaction(
   definition: ActivityDefinition,
   context: ContextInstance,
 ): Activity {
-  return SubProcess(
+  return WorkflowCompensatableSubProcess(
     { ...definition, isTransaction: true },
     context,
     WorkflowTransactionBehaviour,
@@ -87,10 +92,9 @@ class WorkflowTransactionBehaviour extends NativeSubProcess {
     if (!state) return;
     let states = [state as TransactionState];
     if ('executions' in state) states = state.executions;
+    const byExecution = new Map(states.map((item) => [item.executionId, item]));
     for (const execution of this.executions) {
-      const saved = states.find(
-        (item) => item.executionId === execution.executionId,
-      );
+      const saved = byExecution.get(execution.executionId);
       configureTransactionCompensation(execution, saved?.ktCompensation);
     }
   }
@@ -119,13 +123,22 @@ function configureTransactionCompensation(
       state = undefined;
       execution[executionStatus] = 'error';
     }
+    if (
+      type === 'completed' &&
+      execution.status === 'cancel' &&
+      (state || starting)
+    )
+      return;
     return nativeComplete(type, content);
   };
   const handlers = execution[messageHandlers];
   const childMessage = handlers.onChildMessage;
   handlers.onChildMessage = (routingKey, message) => {
     // 两个补偿阶段之间仍有待补偿边界，不能让原生的“仅剩脱离活动”清理提前结束事务。
-    if (routingKey === 'execution.discard.detached' && (state || starting))
+    if (
+      routingKey === BPMN_ROUTING.executionDiscardDetached &&
+      (state || starting)
+    )
       return message.ack();
     return childMessage(routingKey, message);
   };
@@ -140,18 +153,25 @@ function configureTransactionCompensation(
         ) => {
           if (
             exchange === 'execution' &&
-            routingKey === 'execute.compensating'
+            routingKey === BPMN_ROUTING.executeCompensating
           ) {
             state = structuredClone(content);
             return;
           }
-          if (exchange === 'execution' && routingKey === 'execute.completed') {
-            state = undefined;
+          if (
+            exchange === 'execution' &&
+            routingKey === BPMN_ROUTING.executeCompleted
+          ) {
             for (const api of execution.getPostponed())
               if (api.content.expect === 'compensate') api.discard();
+            state = undefined;
+            nativeComplete('completed', undefined);
             return;
           }
-          if (exchange === 'event' && routingKey === 'activity.compensate')
+          if (
+            exchange === 'event' &&
+            routingKey === BPMN_ROUTING.activityCompensate
+          )
             return;
           return target.publish(exchange, routingKey, content, properties);
         };

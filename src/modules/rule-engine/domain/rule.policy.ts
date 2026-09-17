@@ -1,7 +1,24 @@
-import { normalizeDataSchema, validateDataValues } from '@/common/automation/data-schema';
+import {
+  rejectDefinition,
+  requireDefinition,
+} from '@/common/automation/validation';
+
+import {
+  normalizeDataSchema,
+  validateDataValues,
+  type DataField,
+} from '@/common/automation/data-schema';
 import { definitionRecord } from '@/common/automation/definition.types';
-import type { RuleCondition, RuleDefinition, RuleEvaluation, RuleScalar } from '../contract/rule.types';
-import { explainRuleCondition, normalizeRuleCondition } from './condition.policy';
+import type {
+  RuleCondition,
+  RuleDefinition,
+  RuleEvaluation,
+  RuleScalar,
+} from '../contract/rule.types';
+import {
+  explainRuleCondition,
+  normalizeRuleCondition,
+} from './condition.policy';
 
 /**
  * 限制决策结果为有界标量，确保持久版本不包含可执行对象。
@@ -13,34 +30,48 @@ function decisionValue(value: unknown): RuleScalar {
   if (value === null || typeof value === 'boolean') return value as RuleScalar;
   if (typeof value === 'string' && value.length <= 2048) return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  throw new Error('决策结果必须是有界标量');
+  rejectDefinition('决策结果必须是有界标量');
 }
 
 /**
  * 约束条件只能引用事实目录中声明的字段，并使用该字段支持的运算符。
  * @param rule - 经过语法规范化的条件树。
- * @param definition - 提供事实字段结构的规则定义。
+ * @param fields - 当前规则整批校验共用的事实字段索引。
  * @throws 条件引用未知字段或运算符与字段类型不相容时拒绝保存。
  */
-function validateConditionFacts(rule: RuleCondition, definition: Pick<RuleDefinition, 'factSchema'>): void {
+function validateConditionFacts(
+  rule: RuleCondition,
+  fields: ReadonlyMap<string, DataField>,
+): void {
   if (rule.type === 'all' || rule.type === 'any') {
-    for (const child of rule.rules) validateConditionFacts(child, definition);
+    for (const child of rule.rules) validateConditionFacts(child, fields);
     return;
   }
   if (rule.type === 'not') {
-    validateConditionFacts(rule.rule, definition);
+    validateConditionFacts(rule.rule, fields);
     return;
   }
   if (rule.type !== 'compare') return;
-  const field = definition.factSchema.fields.find((candidate) => candidate.key === rule.path);
-  if (!field) throw new Error(`条件引用了未声明的事实：${rule.path}`);
-  if (['gt', 'gte', 'lt', 'lte'].includes(rule.operator) && field.type !== 'number' && field.type !== 'integer') throw new Error(`${field.label}：大小比较要求数字字段`);
-  if (rule.operator === 'contains' && field.type !== 'string') throw new Error(`${field.label}：包含运算要求文本字段`);
+  const field = fields.get(rule.path);
+  requireDefinition(field, `条件引用了未声明的事实：${rule.path}`);
+  requireDefinition(
+    !['gt', 'gte', 'lt', 'lte'].includes(rule.operator) ||
+      field.type === 'number' ||
+      field.type === 'integer',
+    `${field.label}：大小比较要求数字字段`,
+  );
+  requireDefinition(
+    rule.operator !== 'contains' || field.type === 'string',
+    `${field.label}：包含运算要求文本字段`,
+  );
   if (rule.operator === 'exists') return;
   const expectedType = field.type.replace('integer', 'number');
   let values = [rule.value];
   if (Array.isArray(rule.value)) values = rule.value;
-  if (values.some((value) => typeof value !== expectedType)) throw new Error(`${field.label}：比较值类型与事实不一致`);
+  requireDefinition(
+    !values.some((value) => typeof value !== expectedType),
+    `${field.label}：比较值类型与事实不一致`,
+  );
 }
 
 /**
@@ -51,34 +82,65 @@ function validateConditionFacts(rule: RuleCondition, definition: Pick<RuleDefini
  */
 export function normalizeRuleDefinition(input: unknown): RuleDefinition {
   const source = definitionRecord(input);
-  if (source.schemaVersion !== 1) throw new Error('规则结构版本不支持');
+  requireDefinition(source.schemaVersion === 1, '规则结构版本不支持');
   const factSchema = normalizeDataSchema(source.factSchema);
-  if (!Array.isArray(source.testCases) || source.testCases.length > 32) throw new Error('规则测试用例最多 32 个');
+  const fields = new Map(factSchema.fields.map((field) => [field.key, field]));
+  requireDefinition(
+    Array.isArray(source.testCases) && source.testCases.length <= 32,
+    '规则测试用例最多 32 个',
+  );
   const testCases = source.testCases.map((raw) => {
     const item = definitionRecord(raw);
-    if (typeof item.name !== 'string' || !item.name.trim() || item.name.length > 128) throw new Error('测试用例名称不合法');
-    return { name: item.name.trim(), facts: validateDataValues(factSchema, item.facts), expected: decisionValue(item.expected) };
+    requireDefinition(
+      typeof item.name === 'string' &&
+        item.name.trim() &&
+        item.name.length <= 128,
+      '测试用例名称不合法',
+    );
+    return {
+      name: item.name.trim(),
+      facts: validateDataValues(factSchema, item.facts),
+      expected: decisionValue(item.expected),
+    };
   });
   const common = { schemaVersion: 1 as const, factSchema, testCases };
   if (source.mode === 'condition') {
     const condition = normalizeRuleCondition(source.condition);
-    if (!condition) throw new Error('条件规则不能为空');
-    validateConditionFacts(condition, common);
-    if (testCases.some((item) => typeof item.expected !== 'boolean')) throw new Error('条件规则的测试结果必须是布尔值');
+    requireDefinition(condition, '条件规则不能为空');
+    validateConditionFacts(condition, fields);
+    requireDefinition(
+      !testCases.some((item) => typeof item.expected !== 'boolean'),
+      '条件规则的测试结果必须是布尔值',
+    );
     return { ...common, mode: 'condition', condition };
   }
-  if (source.mode !== 'decision-table' || !Array.isArray(source.rows) || source.rows.length < 1 || source.rows.length > 64) throw new Error('决策表需要 1 至 64 行');
+  requireDefinition(
+    source.mode === 'decision-table' &&
+      Array.isArray(source.rows) &&
+      source.rows.length >= 1 &&
+      source.rows.length <= 64,
+    '决策表需要 1 至 64 行',
+  );
   const defaultResult = decisionValue(source.defaultResult);
   const ids = new Set<string>();
   const rows = source.rows.map((raw) => {
     const row = definitionRecord(raw);
-    if (typeof row.id !== 'string' || !/^[a-zA-Z][\w-]{0,63}$/.test(row.id) || ids.has(row.id)) throw new Error('决策行标识不合法或重复');
+    requireDefinition(
+      typeof row.id === 'string' &&
+        /^[a-zA-Z][\w-]{0,63}$/.test(row.id) &&
+        !ids.has(row.id),
+      '决策行标识不合法或重复',
+    );
     ids.add(row.id);
     const condition = normalizeRuleCondition(row.condition);
-    if (!condition) throw new Error('决策行条件不能为空');
-    validateConditionFacts(condition, common);
+    requireDefinition(condition, '决策行条件不能为空');
+    validateConditionFacts(condition, fields);
     const result = decisionValue(row.result);
-    if (typeof result !== typeof defaultResult || (result === null) !== (defaultResult === null)) throw new Error('决策表各分支必须输出相同类型');
+    requireDefinition(
+      typeof result === typeof defaultResult &&
+        (result === null) === (defaultResult === null),
+      '决策表各分支必须输出相同类型',
+    );
     return { id: row.id, condition, result };
   });
   return { ...common, mode: 'decision-table', rows, defaultResult };
@@ -90,17 +152,33 @@ export function normalizeRuleDefinition(input: unknown): RuleDefinition {
  * @param input - 调用方提供的事实值。
  * @returns 决策值、命中的决策行及已判断条件的解释，不执行业务动作或暴露事实值。
  */
-export function evaluateRuleDefinition(definition: RuleDefinition, input: unknown): RuleEvaluation {
+export function evaluateRuleDefinition(
+  definition: RuleDefinition,
+  input: unknown,
+): RuleEvaluation {
   const facts = validateDataValues(definition.factSchema, input);
   if (definition.mode === 'condition') {
-    const evaluated = explainRuleCondition(definition.condition, facts, 'condition');
-    return { result: evaluated.matched, matchedRowId: null, trace: evaluated.trace };
+    const evaluated = explainRuleCondition(
+      definition.condition,
+      facts,
+      'condition',
+    );
+    return {
+      result: evaluated.matched,
+      matchedRowId: null,
+      trace: evaluated.trace,
+    };
   }
   const trace: RuleEvaluation['trace'] = [];
   for (const row of definition.rows) {
-    const evaluated = explainRuleCondition(row.condition, facts, `rows.${row.id}`);
+    const evaluated = explainRuleCondition(
+      row.condition,
+      facts,
+      `rows.${row.id}`,
+    );
     trace.push(...evaluated.trace);
-    if (evaluated.matched) return { result: row.result, matchedRowId: row.id, trace };
+    if (evaluated.matched)
+      return { result: row.result, matchedRowId: row.id, trace };
   }
   return { result: definition.defaultResult, matchedRowId: null, trace };
 }

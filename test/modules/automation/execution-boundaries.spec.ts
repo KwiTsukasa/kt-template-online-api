@@ -1,12 +1,8 @@
 import { TaskHandlerRegistry } from '@/modules/task-execution/application/task-handler.registry';
 import { TaskDefinitionService } from '@/modules/task-execution/application/task-definition.service';
 import { normalizeAtomicTaskDefinition } from '@/modules/task-execution/domain/task-definition.policy';
-import {
-  bindWorkflowValues,
-  nodeReadiness,
-} from '@/modules/workflow-engine/domain/workflow-execution.policy';
-import type { NodeProgress } from '@/modules/workflow-engine/domain/workflow-execution.policy';
-import type { WorkflowEdge } from '@/modules/workflow-engine/contract/workflow.types';
+import { bindWorkflowValues } from '@/modules/workflow-engine/domain/workflow-value-binding.policy';
+import type { WorkflowNodeProgress } from '@/modules/workflow-engine/contract/workflow-activity.types';
 
 const schema = {
   fields: [
@@ -79,48 +75,10 @@ describe('原子执行契约', () => {
   });
 });
 
-describe('工作流纯控制状态', () => {
-  const edges: WorkflowEdge[] = ['a', 'b'].map((source) => ({
-    id: source,
-    source,
-    sourcePort: 'out',
-    target: 'join',
-    targetPort: 'in',
-  }));
-  it('全部汇合必须等待活跃并行分支，未选分支完成跳过后可释放汇合', () => {
-    const progress = new Map<string, NodeProgress>([
-      ['a', { status: 'succeeded', selectedPorts: ['out'], output: {} }],
-      ['b', { status: 'waiting', selectedPorts: [], output: {} }],
-    ]);
-    expect(nodeReadiness(edges, progress)).toBe('wait');
-    progress.set('b', { status: 'skipped', selectedPorts: [], output: {} });
-    expect(nodeReadiness(edges, progress)).toBe('ready');
-    progress.set('a', { status: 'skipped', selectedPorts: [], output: {} });
-    expect(nodeReadiness(edges, progress)).toBe('skip');
-  });
-  it('规则只激活选中端口，其他路径传递跳过状态', () => {
-    const progress = new Map<string, NodeProgress>([
-      ['rule', { status: 'succeeded', selectedPorts: ['yes'], output: {} }],
-    ]);
-    expect(
-      nodeReadiness(
-        [{ ...edges[0], source: 'rule', sourcePort: 'no' }],
-        progress,
-      ),
-    ).toBe('skip');
-    expect(
-      nodeReadiness(
-        [{ ...edges[0], source: 'rule', sourcePort: 'yes' }],
-        progress,
-      ),
-    ).toBe('ready');
-  });
+describe('工作流字段映射', () => {
   it('变量只读取成功节点的自身字段，不从原型或未执行路径补值', () => {
-    const progress = new Map<string, NodeProgress>([
-      [
-        'a',
-        { status: 'succeeded', selectedPorts: ['out'], output: { amount: 10 } },
-      ],
+    const progress = new Map<string, WorkflowNodeProgress>([
+      ['a', { status: 'succeeded', output: { amount: 10 } }],
     ]);
     expect(
       bindWorkflowValues(

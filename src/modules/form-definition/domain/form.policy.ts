@@ -4,6 +4,17 @@ import {
   validateFieldValue,
 } from '@/common/automation/data-schema';
 import { definitionRecord } from '@/common/automation/definition.types';
+import {
+  definitionInteger,
+  requireDefinition,
+} from '@/common/automation/validation';
+import type { DataField } from '@/common/automation/data-schema';
+import {
+  FORM_CONTROLS,
+  FORM_ERROR,
+  FORM_LIMIT,
+  FORM_SCHEMA_VERSION,
+} from '../constants/form';
 import type {
   FormControl,
   FormDefinition,
@@ -18,62 +29,62 @@ import type {
  */
 export function normalizeFormDefinition(input: unknown): FormDefinition {
   const source = definitionRecord(input);
-  if (source.schemaVersion !== 1) throw new Error('表单结构版本不支持');
+  requireDefinition(
+    source.schemaVersion === FORM_SCHEMA_VERSION,
+    FORM_ERROR.version,
+  );
   const dataSchema = normalizeDataSchema(source.dataSchema);
+  const fieldsByKey = new Map(
+    dataSchema.fields.map((field) => [field.key, field]),
+  );
   const ui = definitionRecord(source.uiSchema);
-  if (ui.columns !== 1 && ui.columns !== 2 && ui.columns !== 3)
-    throw new Error('布局仅支持 1 至 3 列');
-  const columns = ui.columns;
-  if (
-    !Array.isArray(ui.fields) ||
-    ui.fields.length !== dataSchema.fields.length
-  )
-    throw new Error('每个数据字段必须有且只有一项展示定义');
+  const columns = definitionInteger(
+    ui.columns,
+    1,
+    FORM_LIMIT.columns,
+    FORM_ERROR.columns,
+  ) as FormDefinition['uiSchema']['columns'];
+  requireDefinition(
+    Array.isArray(ui.fields) && ui.fields.length === dataSchema.fields.length,
+    FORM_ERROR.fieldCount,
+  );
   const used = new Set<string>();
   const fields = ui.fields.map((raw) => {
     const item = definitionRecord(raw);
-    const field = dataSchema.fields.find(
-      (candidate) => candidate.key === item.key,
-    );
-    if (!field || used.has(field.key))
-      throw new Error('表单布局引用了不存在或重复的字段');
+    requireDefinition(typeof item.key === 'string', FORM_ERROR.fieldReference);
+    const field = fieldsByKey.get(item.key);
+    requireDefinition(field && !used.has(field.key), FORM_ERROR.fieldReference);
     used.add(field.key);
-    const allowed: FormControl[] = [];
-    if (field.type === 'boolean') allowed.push('Switch');
-    else if (field.options) allowed.push('Select', 'RadioGroup');
-    else if (field.format) allowed.push('DatePicker');
-    else if (field.type === 'number' || field.type === 'integer')
-      allowed.push('InputNumber');
-    else allowed.push('Input', 'Textarea');
-    if (!allowed.includes(item.component as FormControl))
-      throw new Error(`${field.label}：控件不支持该字段类型`);
-    if (
-      !Number.isInteger(item.span) ||
-      Number(item.span) < 1 ||
-      Number(item.span) > columns
-    )
-      throw new Error('字段跨列数超出布局');
-    if (
-      typeof item.placeholder !== 'string' ||
-      item.placeholder.length > 160 ||
-      typeof item.help !== 'string' ||
-      item.help.length > 512
-    )
-      throw new Error('字段提示或帮助文字不合法');
+    requireDefinition(
+      allowedFormControls(field).includes(item.component as FormControl),
+      `${field.label}：控件不支持该字段类型`,
+    );
+    const span = definitionInteger(item.span, 1, columns, FORM_ERROR.span);
+    requireDefinition(
+      typeof item.placeholder === 'string' &&
+        item.placeholder.length <= FORM_LIMIT.placeholderLength &&
+        typeof item.help === 'string' &&
+        item.help.length <= FORM_LIMIT.helpLength,
+      FORM_ERROR.help,
+    );
     const layout: FormFieldLayout = {
       key: field.key,
       component: item.component as FormControl,
-      span: Number(item.span),
+      span,
       placeholder: item.placeholder,
       help: item.help,
     };
     if (item.requiredWhen !== undefined) {
       const condition = definitionRecord(item.requiredWhen);
-      const dependency = dataSchema.fields.find(
-        (candidate) => candidate.key === condition.field,
+      requireDefinition(
+        typeof condition.field === 'string',
+        `${field.label}：条件必填必须引用其他已声明字段`,
       );
-      if (!dependency || dependency.key === field.key)
-        throw new Error(`${field.label}：条件必填必须引用其他已声明字段`);
+      const dependency = fieldsByKey.get(condition.field);
+      requireDefinition(
+        dependency && dependency.key !== field.key,
+        `${field.label}：条件必填必须引用其他已声明字段`,
+      );
       validateFieldValue({ ...dependency, required: false }, condition.equals);
       layout.requiredWhen = {
         field: dependency.key,
@@ -82,7 +93,25 @@ export function normalizeFormDefinition(input: unknown): FormDefinition {
     }
     return layout;
   });
-  return { schemaVersion: 1, dataSchema, uiSchema: { columns, fields } };
+  return {
+    schemaVersion: FORM_SCHEMA_VERSION,
+    dataSchema,
+    uiSchema: { columns, fields },
+  };
+}
+
+/**
+ * 按字段的选择、日期和数值约束取得合法控件，保持类型优先级固定。
+ * @param field - 已通过数据契约校验的字段。
+ * @returns 该字段可使用的控件集合。
+ */
+function allowedFormControls(field: DataField): readonly FormControl[] {
+  if (field.type === 'boolean') return FORM_CONTROLS.boolean;
+  if (field.options) return FORM_CONTROLS.options;
+  if (field.format) return FORM_CONTROLS.date;
+  if (field.type === 'number' || field.type === 'integer')
+    return FORM_CONTROLS.numeric;
+  return FORM_CONTROLS.text;
 }
 
 /**

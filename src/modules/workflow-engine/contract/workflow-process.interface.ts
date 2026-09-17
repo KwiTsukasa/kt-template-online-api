@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { DataSchema } from '@/common/automation/data-schema';
 import type { EntityManager } from 'typeorm';
 import type { PublishedReference } from '@/common/automation/definition.types';
@@ -50,7 +51,12 @@ export interface WorkflowBusinessPort {
     context: WorkflowLaunchContext,
     message: WorkflowBusinessMessage,
   ) => Promise<{ runId: string }>;
-  assertIdle: (processRef: WorkflowProcessReference, scopeId: string, subjectId: string, manager: EntityManager) => Promise<void>;
+  assertIdle: (
+    processRef: WorkflowProcessReference,
+    scopeId: string,
+    subjectId: string,
+    manager: EntityManager,
+  ) => Promise<void>;
   latest: (
     processRef: WorkflowProcessReference,
     scopeId: string,
@@ -103,7 +109,7 @@ export type WorkflowStepAcceptance = {
 export type WorkflowStepStop = {
   invocation: WorkflowStepInvocation;
   prepared: Record<string, unknown>;
-  status: 'failed' | 'cancelled';
+  status: typeof RUN_STATUS.failed | typeof RUN_STATUS.cancelled;
   attempts: WorkflowScriptAttempt[];
 };
 
@@ -122,7 +128,9 @@ export interface WorkflowProcess extends WorkflowProcessReference {
    * @param context - 已鉴权的待办身份、表单值和同一结果保存事务。
    * @returns 可映射到后继节点的业务事实，不能把页面提交的身份当作权威身份。
    */
-  acceptHumanStep?(context: WorkflowHumanStepAcceptance): Promise<Record<string, unknown>>;
+  acceptHumanStep?(
+    context: WorkflowHumanStepAcceptance,
+  ): Promise<Record<string, unknown>>;
 
   /*
    * 核验业务对象、归属、修订和准入条件，产生可密封的输入，不启动任何业务操作。

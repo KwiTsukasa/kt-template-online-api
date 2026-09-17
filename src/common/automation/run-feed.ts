@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
 
 export type RunKind = 'task' | 'workflow' | 'schedule';
 export type RunPhase =
@@ -40,32 +40,33 @@ export function normalizeRunFeedQuery(
   input: Record<string, unknown>,
 ): RunFeedQuery {
   const limit = Number(input.limit ?? 30);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-    throw new BadRequestException('每页记录数必须为 1 至 100');
+  requireRequest(
+    Number.isInteger(limit) && limit >= 1 && limit <= 100,
+    '每页记录数必须为 1 至 100',
+  );
   const result: RunFeedQuery = { limit };
   if (input.beforeId !== undefined) {
-    if (
-      typeof input.beforeId !== 'string' ||
-      !/^[1-9]\d{0,18}$/.test(input.beforeId) ||
-      BigInt(input.beforeId) > 9223372036854775807n
-    )
-      throw new BadRequestException('运行游标无效');
+    requireRequest(
+      typeof input.beforeId === 'string' &&
+        /^[1-9]\d{0,18}$/.test(input.beforeId) &&
+        BigInt(input.beforeId) <= 9223372036854775807n,
+      '运行游标无效',
+    );
     result.beforeId = input.beforeId;
   }
   if (input.phase !== undefined) {
-    if (typeof input.phase !== 'string')
-      throw new BadRequestException('运行阶段无效');
-    if (
-      ![
+    requireRequest(typeof input.phase === 'string', '运行阶段无效');
+    requireRequest(
+      [
         'pending',
         'active',
         'succeeded',
         'failed',
         'cancelled',
         'skipped',
-      ].includes(String(input.phase))
-    )
-      throw new BadRequestException('运行阶段无效');
+      ].includes(String(input.phase)),
+      '运行阶段无效',
+    );
     result.phase = input.phase as RunPhase;
   }
   return result;

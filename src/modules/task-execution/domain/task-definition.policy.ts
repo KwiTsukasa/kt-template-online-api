@@ -1,3 +1,4 @@
+import { requireDefinition } from '@/common/automation/validation';
 import { definitionRecord } from '@/common/automation/definition.types';
 import { normalizeDataSchema } from '@/common/automation/data-schema';
 import type { AtomicTaskDefinition } from '../contract/task-definition.types';
@@ -14,31 +15,31 @@ export function normalizeAtomicTaskDefinition(
   const source = definitionRecord(input);
   const handler = definitionRecord(source.handler);
   const contract = definitionRecord(source.contract);
-  if (
-    typeof contract.idempotent !== 'boolean' ||
-    typeof contract.ownerKind !== 'string' ||
-    !/^[a-z][a-z0-9-]{1,31}$/.test(contract.ownerKind)
-  )
-    throw new Error('处理器契约不合法');
-  if (
-    source.schemaVersion !== 1 ||
-    typeof handler.key !== 'string' ||
-    !/^[a-z][a-z0-9_.:-]{2,190}$/.test(handler.key) ||
-    !Number.isSafeInteger(handler.version) ||
-    Number(handler.version) < 1
-  )
-    throw new Error('任务处理器身份或版本不合法');
+  requireDefinition(
+    typeof contract.idempotent === 'boolean' &&
+      typeof contract.ownerKind === 'string' &&
+      /^[a-z][a-z0-9-]{1,31}$/.test(contract.ownerKind),
+    '处理器契约不合法',
+  );
+  requireDefinition(
+    source.schemaVersion === 1 &&
+      typeof handler.key === 'string' &&
+      /^[a-z][a-z0-9_.:-]{2,190}$/.test(handler.key) &&
+      Number.isSafeInteger(handler.version) &&
+      Number(handler.version) >= 1,
+    '任务处理器身份或版本不合法',
+  );
   for (const [key, minimum, maximum] of [
     ['timeoutMs', 1000, 3600000],
     ['maxAttempts', 1, 5],
     ['retryBackoffMs', 1000, 3600000],
   ] as const) {
-    if (
-      !Number.isSafeInteger(source[key]) ||
-      Number(source[key]) < minimum ||
-      Number(source[key]) > maximum
-    )
-      throw new Error(`${key} 超出允许范围`);
+    requireDefinition(
+      Number.isSafeInteger(source[key]) &&
+        Number(source[key]) >= minimum &&
+        Number(source[key]) <= maximum,
+      `${key} 超出允许范围`,
+    );
   }
   const allowed = new Set([
     'schemaVersion',
@@ -48,8 +49,10 @@ export function normalizeAtomicTaskDefinition(
     'maxAttempts',
     'retryBackoffMs',
   ]);
-  if (Object.keys(source).some((key) => !allowed.has(key)))
-    throw new Error('原子任务不接受规则、触发器或流程配置');
+  requireDefinition(
+    !Object.keys(source).some((key) => !allowed.has(key)),
+    '原子任务不接受规则、触发器或流程配置',
+  );
   return {
     schemaVersion: 1,
     handler: { key: handler.key, version: Number(handler.version) },

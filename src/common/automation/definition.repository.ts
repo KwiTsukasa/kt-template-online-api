@@ -1,9 +1,16 @@
 import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
-import { DataSource, type EntityManager, type EntityTarget, Like } from 'typeorm';
+  rejectDefinitionInput,
+  requireRequest,
+  requireConsistent,
+  requireFound,
+} from '@/common/automation/validation';
+
+import {
+  DataSource,
+  type EntityManager,
+  type EntityTarget,
+  Like,
+} from 'typeorm';
 import { createSnowflakeId } from '../snowflake/snowflake-id';
 import {
   DefinitionDraftRow,
@@ -15,6 +22,7 @@ import type {
   PublishedReference,
 } from './definition.types';
 import type { DefinitionProvision } from './definition-provision.port';
+import { isAutomationUniqueConflict } from './database-error';
 
 /**
  * 将纯领域校验失败转换为明确的请求错误，不把数据库或执行异常吞成校验通过。
@@ -26,8 +34,7 @@ export function validateDefinitionInput<T>(action: () => T): T {
   try {
     return action();
   } catch (error) {
-    if (error instanceof Error) throw new BadRequestException(error.message);
-    throw new BadRequestException('定义数据不合法');
+    rejectDefinitionInput(error);
   }
 }
 
@@ -37,7 +44,11 @@ export class DefinitionRepository<T> {
     private readonly draftEntity: EntityTarget<DefinitionDraftRow>,
     private readonly revisionEntity: EntityTarget<DefinitionRevisionRow>,
     private readonly normalize: (definition: unknown) => T | Promise<T>,
-    private readonly onPublish?: (definition: T, reference: PublishedReference, manager: EntityManager) => Promise<void>,
+    private readonly onPublish?: (
+      definition: T,
+      reference: PublishedReference,
+      manager: EntityManager,
+    ) => Promise<void>,
   ) {}
 
   /**
@@ -51,24 +62,26 @@ export class DefinitionRepository<T> {
     input: DefinitionProvision<T>,
     checkReferences: (definition: T) => Promise<void>,
   ) {
-    if (
-      typeof input.sourceKey !== 'string' ||
-      !/^[a-z][a-z0-9_.:-]{2,190}$/.test(input.sourceKey)
-    )
-      throw new BadRequestException('资源来源键无效');
+    requireRequest(
+      typeof input.sourceKey === 'string' &&
+        /^[a-z][a-z0-9_.:-]{2,190}$/.test(input.sourceKey),
+      '资源来源键无效',
+    );
     if (input.preferredId !== undefined) {
-      if (
-        typeof input.preferredId !== 'string' ||
-        !/^[1-9]\d{0,18}$/.test(input.preferredId) ||
-        BigInt(input.preferredId) > 9223372036854775807n
-      )
-        throw new BadRequestException('迁移资源身份无效');
+      requireRequest(
+        typeof input.preferredId === 'string' &&
+          /^[1-9]\d{0,18}$/.test(input.preferredId) &&
+          BigInt(input.preferredId) <= 9223372036854775807n,
+        '迁移资源身份无效',
+      );
     }
     const repository = this.database.getRepository(this.draftEntity);
     const existing = await repository.findOneBy({ sourceKey: input.sourceKey });
     if (existing) {
-      if (input.preferredId && existing.id !== input.preferredId)
-        throw new ConflictException('来源键已关联其他资源身份');
+      requireConsistent(
+        !input.preferredId || existing.id === input.preferredId,
+        '来源键已关联其他资源身份',
+      );
       return { document: existing as DefinitionDocument<T>, created: false };
     }
     const metadata = this.metadata(input);
@@ -95,18 +108,15 @@ export class DefinitionRepository<T> {
       });
       return { document: await this.detail(id), created: true };
     } catch (error) {
-      if (
-        (error as { driverError?: { code?: string } })?.driverError?.code !==
-        'ER_DUP_ENTRY'
-      )
-        throw error;
+      if (!isAutomationUniqueConflict(error)) throw error;
       const concurrent = await repository.findOneBy({
         sourceKey: input.sourceKey,
       });
-      if (!concurrent)
-        throw new ConflictException('待迁移身份已被其他资源占用');
-      if (input.preferredId && concurrent.id !== input.preferredId)
-        throw new ConflictException('来源键已关联其他资源身份');
+      requireConsistent(concurrent, '待迁移身份已被其他资源占用');
+      requireConsistent(
+        !input.preferredId || concurrent.id === input.preferredId,
+        '来源键已关联其他资源身份',
+      );
       return { document: concurrent as DefinitionDocument<T>, created: false };
     }
   }
@@ -146,7 +156,7 @@ export class DefinitionRepository<T> {
     const row = await this.database
       .getRepository(this.draftEntity)
       .findOneBy({ id });
-    if (!row) throw new NotFoundException('定义不存在');
+    requireFound(row, '定义不存在');
     return row as DefinitionDocument<T>;
   }
 
@@ -192,8 +202,7 @@ export class DefinitionRepository<T> {
         revision: body.expectedRevision + 1,
       },
     );
-    if (changed.affected !== 1)
-      throw new ConflictException('草稿已变化，请刷新后编辑');
+    requireConsistent(changed.affected === 1, '草稿已变化，请刷新后编辑');
     return this.detail(id);
   }
 
@@ -217,9 +226,11 @@ export class DefinitionRepository<T> {
         where: { id },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!row) throw new NotFoundException('定义不存在');
-      if (row.revision !== expectedRevision)
-        throw new ConflictException('草稿已变化，请刷新后发布');
+      requireFound(row, '定义不存在');
+      requireConsistent(
+        row.revision === expectedRevision,
+        '草稿已变化，请刷新后发布',
+      );
       const definition = await this.normalizeInput(row.definition);
       await checkReferences(definition);
       const version = (row.publishedVersion || 0) + 1;
@@ -264,7 +275,7 @@ export class DefinitionRepository<T> {
     const row = await this.database
       .getRepository(this.revisionEntity)
       .findOneBy({ definitionId: reference.id, version: reference.version });
-    if (!row) throw new NotFoundException('引用的发布版本不存在');
+    requireFound(row, '引用的发布版本不存在');
     return row.definition as T;
   }
 
@@ -275,18 +286,19 @@ export class DefinitionRepository<T> {
    * @throws 名称或说明类型及长度非法时返回 HTTP 400。
    */
   private metadata(body: DefinitionWrite) {
-    if (
-      !body ||
-      typeof body.name !== 'string' ||
-      !body.name.trim() ||
-      body.name.trim().length > 128
-    )
-      throw new BadRequestException('名称需要 1 至 128 个字符');
-    if (
-      body.description !== undefined &&
-      (typeof body.description !== 'string' || body.description.length > 2048)
-    )
-      throw new BadRequestException('说明最多 2048 个字符');
+    requireRequest(
+      body &&
+        typeof body.name === 'string' &&
+        body.name.trim() &&
+        body.name.trim().length <= 128,
+      '名称需要 1 至 128 个字符',
+    );
+    requireRequest(
+      body.description === undefined ||
+        (typeof body.description === 'string' &&
+          body.description.length <= 2048),
+      '说明最多 2048 个字符',
+    );
     return { name: body.name.trim(), description: body.description || '' };
   }
 
@@ -296,8 +308,10 @@ export class DefinitionRepository<T> {
    * @throws 版本未提供或不是正整数时返回 HTTP 400。
    */
   private requireRevision(revision: unknown): asserts revision is number {
-    if (!Number.isSafeInteger(revision) || Number(revision) < 1)
-      throw new BadRequestException('必须提供正整数 expectedRevision');
+    requireRequest(
+      Number.isSafeInteger(revision) && Number(revision) >= 1,
+      '必须提供正整数 expectedRevision',
+    );
   }
 
   /**
@@ -310,8 +324,7 @@ export class DefinitionRepository<T> {
     try {
       return await this.normalize(definition);
     } catch (error) {
-      if (error instanceof Error) throw new BadRequestException(error.message);
-      throw new BadRequestException('定义数据不合法');
+      rejectDefinitionInput(error);
     }
   }
 }

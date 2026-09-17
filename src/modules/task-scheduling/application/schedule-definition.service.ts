@@ -1,9 +1,5 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Optional,
-} from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { DefinitionProvision } from '@/common/automation/definition-provision.port';
 import {
@@ -78,30 +74,38 @@ export class ScheduleDefinitionService {
    * @throws 依赖未选、目标不可用或映射不合法时拒绝发布。
    */
   async checkForPublish(definition: ScheduleDefinition) {
-    if (!definition.triggerRef || !definition.target)
-      throw new BadRequestException('必须选择触发器和执行目标的固定发布版本');
+    requireRequest(
+      definition.triggerRef && definition.target,
+      '必须选择触发器和执行目标的固定发布版本',
+    );
     const trigger = await this.triggers.resolve(definition.triggerRef);
     let eventSchema = {
       fields: [],
     } as import('@/common/automation/data-schema').DataSchema;
     if (trigger.trigger.type === 'event')
       eventSchema = trigger.trigger.payloadSchema;
-    if (definition.target.type !== 'workflow') throw new BadRequestException('计划只能发起工作流，内置动作必须放在流程服务任务中');
-    if (!this.workflows) throw new BadRequestException('工作流执行模块未装配');
+    requireRequest(
+      definition.target.type === 'workflow',
+      '计划只能发起工作流，内置动作必须放在流程服务任务中',
+    );
+    requireRequest(this.workflows, '工作流执行模块未装配');
     const contract = await this.workflows.contract(definition.target.reference);
-    if (contract.processRef) throw new BadRequestException('业务流程必须由对应业务入口创建，计划不能绕过业务上下文');
+    requireRequest(
+      !contract.processRef,
+      '业务流程必须由对应业务入口创建，计划不能绕过业务上下文',
+    );
     const inputSchema = contract.inputSchema;
     validateDefinitionInput(() =>
       validateScheduleBindings(definition.input, inputSchema, eventSchema),
     );
     if (definition.admission) {
-      if (!this.rules) throw new BadRequestException('规则引擎未装配');
+      requireRequest(this.rules, '规则引擎未装配');
       const rule = await this.rules.resolve(definition.admission.ruleRef);
-      if (
-        rule.mode === 'condition' &&
-        typeof definition.admission.expected !== 'boolean'
-      )
-        throw new BadRequestException('条件规则的准入匹配值必须是布尔值');
+      requireRequest(
+        rule.mode !== 'condition' ||
+          typeof definition.admission.expected === 'boolean',
+        '条件规则的准入匹配值必须是布尔值',
+      );
       validateDefinitionInput(() =>
         validateScheduleBindings(
           definition.admission!.facts,

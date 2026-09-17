@@ -10,7 +10,7 @@ const {
 } = require('../../../src/modules/workflow-engine/infrastructure/workflow-bpmn.runtime');
 const {
   KT_BPMN_STEP,
-} = require('../../../src/modules/workflow-engine/contract/workflow-bpmn.types');
+} = require('../../../src/modules/workflow-engine/constants/bpmn');
 const {
   WorkflowBpmnFlowIndex,
 } = require('../../../src/modules/workflow-engine/infrastructure/workflow-bpmn-flow-index');
@@ -68,13 +68,13 @@ test('可达分析保留回边，网关入口分析在本轮汇合处停止', ()
     flow('G', 'A'),
     flow('X', 'Y'),
   ]);
-  assert.equal(graph.reaches('A', 'A'), true);
-  assert.equal(graph.reaches('A', 'C'), true);
-  assert.equal(graph.reaches('A', 'X'), false);
-  assert.equal(graph.reaches('X', 'X'), false);
-  assert.deepEqual([...graph.incomingBefore('A', 'G')], ['BG']);
-  assert.deepEqual([...graph.incomingBefore('C', 'G')], ['CG']);
-  assert.equal(graph.reaches('A', 'C'), true);
+  const { componentByNode, components } = graph.condense();
+  assert.equal(componentByNode.get('A'), componentByNode.get('C'));
+  assert.notEqual(componentByNode.get('A'), componentByNode.get('X'));
+  assert.equal(components[componentByNode.get('A')].cyclic, true);
+  assert.equal(components[componentByNode.get('X')].cyclic, false);
+  assert.deepEqual(graph.originsBefore('G', ['BG']), new Set(['B', 'A', 'G']));
+  assert.deepEqual(graph.originsBefore('G', ['CG']), new Set(['C', 'G']));
 });
 
 test('数量边界同时拒绝类型绕过、不安全整数与超过展开上限的值', () => {

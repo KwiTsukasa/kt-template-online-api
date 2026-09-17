@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { requireExecutionState } from '@/common/automation/validation';
+import { requireRequest } from '@/common/automation/validation';
+import { Injectable } from '@nestjs/common';
 import { normalizeDataSchema } from '@/common/automation/data-schema';
 import type {
   WorkflowProcess,
@@ -20,41 +22,58 @@ export class WorkflowProcessRegistry implements WorkflowProcessRegistryPort {
    * @throws 流程身份、步骤声明、实现方法或版本唯一性不满足约束时拒绝注册。
    */
   register(process: WorkflowProcess): () => void {
-    if (process.concurrencyGroup !== undefined && !/^[a-z][a-z0-9.-]{2,63}$/.test(process.concurrencyGroup))
-      throw new Error('业务流程并发组身份无效');
-    if (
-      !/^[a-z][a-z0-9.-]{2,63}$/.test(process.key) ||
-      !Number.isSafeInteger(process.version) ||
-      process.version < 1
-    )
-      throw new Error('业务流程接口身份或版本无效');
+    requireExecutionState(
+      process.concurrencyGroup === undefined ||
+        /^[a-z][a-z0-9.-]{2,63}$/.test(process.concurrencyGroup),
+      '业务流程并发组身份无效',
+    );
+    requireExecutionState(
+      /^[a-z][a-z0-9.-]{2,63}$/.test(process.key) &&
+        Number.isSafeInteger(process.version) &&
+        !(process.version < 1),
+      '业务流程接口身份或版本无效',
+    );
     const validName = typeof process.name === 'string' && !!process.name.trim();
-    const lifecycleImplemented = [process.prepare, process.prepareStep, process.acceptStep, process.stopStep, process.complete].every((method) => typeof method === 'function');
-    if (!validName || !lifecycleImplemented)
-      throw new Error('业务流程接口实现不完整');
+    const lifecycleImplemented = [
+      process.prepare,
+      process.prepareStep,
+      process.acceptStep,
+      process.stopStep,
+      process.complete,
+    ].every((method) => typeof method === 'function');
+    requireExecutionState(
+      validName && lifecycleImplemented,
+      '业务流程接口实现不完整',
+    );
     const key = `${process.key}@${process.version}`;
-    if (this.entries.has(key)) throw new Error('业务流程接口版本重复注册');
-    if (
-      !Array.isArray(process.steps) ||
-      !process.steps.length ||
-      process.steps.length > 100
-    )
-      throw new Error('业务流程需声明 1 至 100 个步骤能力');
+    requireExecutionState(!this.entries.has(key), '业务流程接口版本重复注册');
+    requireExecutionState(
+      Array.isArray(process.steps) &&
+        process.steps.length &&
+        !(process.steps.length > 100),
+      '业务流程需声明 1 至 100 个步骤能力',
+    );
     const stepKeys = new Set<string>();
     for (const step of process.humanSteps ?? []) {
-      if (!/^[a-z][a-z0-9.-]{1,63}$/.test(step.key) || stepKeys.has(step.key) || !step.name?.trim() || typeof process.acceptHumanStep !== 'function') throw new Error('人工办理能力声明或实现无效');
+      requireExecutionState(
+        /^[a-z][a-z0-9.-]{1,63}$/.test(step.key) &&
+          !stepKeys.has(step.key) &&
+          step.name?.trim() &&
+          typeof process.acceptHumanStep === 'function',
+        '人工办理能力声明或实现无效',
+      );
       stepKeys.add(step.key);
       normalizeDataSchema(step.outputSchema);
     }
     for (const step of process.steps) {
-      if (
-        !/^[a-z][a-z0-9.-]{1,63}$/.test(step.key) ||
-        stepKeys.has(step.key) ||
-        typeof step.name !== 'string' ||
-        !step.name.trim() ||
-        typeof step.description !== 'string'
-      )
-        throw new Error('业务流程步骤身份或名称无效');
+      requireExecutionState(
+        /^[a-z][a-z0-9.-]{1,63}$/.test(step.key) &&
+          !stepKeys.has(step.key) &&
+          typeof step.name === 'string' &&
+          step.name.trim() &&
+          typeof step.description === 'string',
+        '业务流程步骤身份或名称无效',
+      );
       stepKeys.add(step.key);
       normalizeDataSchema(step.inputSchema);
       normalizeDataSchema(step.outputSchema);
@@ -76,11 +95,11 @@ export class WorkflowProcessRegistry implements WorkflowProcessRegistryPort {
    */
   resolve(reference: WorkflowProcessReference): WorkflowProcess {
     const entry = this.entries.get(`${reference.key}@${reference.version}`);
-    if (!entry) throw new BadRequestException('业务流程接口版本未加载');
-    if (JSON.stringify(this.describe(entry.process)) !== entry.signature)
-      throw new BadRequestException(
-        '业务流程接口契约在注册后发生变化，必须发布新接口版本',
-      );
+    requireRequest(entry, '业务流程接口版本未加载');
+    requireRequest(
+      JSON.stringify(this.describe(entry.process)) === entry.signature,
+      '业务流程接口契约在注册后发生变化，必须发布新接口版本',
+    );
     return entry.process;
   }
 
@@ -108,7 +127,11 @@ export class WorkflowProcessRegistry implements WorkflowProcessRegistryPort {
       launchSchema: normalizeDataSchema(process.launchSchema ?? { fields: [] }),
       inputSchema: normalizeDataSchema(process.inputSchema),
       outputSchema: normalizeDataSchema(process.outputSchema),
-      humanSteps: (process.humanSteps ?? []).map((step) => ({ key: step.key, name: step.name, outputSchema: normalizeDataSchema(step.outputSchema) })),
+      humanSteps: (process.humanSteps ?? []).map((step) => ({
+        key: step.key,
+        name: step.name,
+        outputSchema: normalizeDataSchema(step.outputSchema),
+      })),
       steps: process.steps.map((step) => ({
         key: step.key,
         name: step.name,

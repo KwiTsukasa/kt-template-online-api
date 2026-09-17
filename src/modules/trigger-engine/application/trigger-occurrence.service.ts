@@ -1,10 +1,11 @@
 import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { createHash } from 'node:crypto';
+  requireConsistent,
+  requireFound,
+  requireRequest,
+} from '@/common/automation/validation';
+import { automationDigest } from '@/common/automation/content-digest';
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
+import { Injectable } from '@nestjs/common';
 import { isDeepStrictEqual } from 'node:util';
 import { DataSource, LessThanOrEqual, type EntityManager } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
@@ -107,8 +108,7 @@ export class TriggerOccurrenceService
   async activate(registrationId: string): Promise<TriggerRegistrationView> {
     return this.database.transaction(async (manager) => {
       const row = await this.lockRegistration(manager, registrationId);
-      if (row.status === 'closed')
-        throw new ConflictException('已关闭的注册不能重新激活');
+      requireConsistent(row.status !== 'closed', '已关闭的注册不能重新激活');
       await this.definitions.checkForPublish(row.definition);
       row.status = 'active';
       await manager.save(row);
@@ -143,7 +143,7 @@ export class TriggerOccurrenceService
     const row = await this.database
       .getRepository(TriggerRegistration)
       .findOneBy({ id: registrationId });
-    if (!row) throw new NotFoundException('触发注册不存在');
+    requireFound(row, '触发注册不存在');
     return this.registrationView(row);
   }
 
@@ -153,13 +153,11 @@ export class TriggerOccurrenceService
    * @returns 最多一百条待消费事件；关闭注册的历史事件仍可读取。
    */
   async pending(registrationId: string): Promise<TriggerOccurrenceView[]> {
-    const rows = await this.database
-      .getRepository(TriggerOccurrence)
-      .find({
-        where: { registrationId, status: 'pending' },
-        order: { id: 'ASC' },
-        take: 100,
-      });
+    const rows = await this.database.getRepository(TriggerOccurrence).find({
+      where: { registrationId, status: RUN_STATUS.pending },
+      order: { id: 'ASC' },
+      take: 100,
+    });
     return rows.map((row) => this.occurrenceView(row));
   }
 
@@ -178,9 +176,9 @@ export class TriggerOccurrenceService
       id: occurrenceId,
       registrationId,
     });
-    if (!row) throw new NotFoundException('触发事件不存在或不属于该注册');
+    requireFound(row, '触发事件不存在或不属于该注册');
     await repository.update(
-      { id: occurrenceId, registrationId, status: 'pending' },
+      { id: occurrenceId, registrationId, status: RUN_STATUS.pending },
       { status: 'acknowledged', acknowledgedAt: new Date() },
     );
   }
@@ -204,11 +202,11 @@ export class TriggerOccurrenceService
         identityKey,
       });
       if (existing) return this.occurrenceView(existing);
-      if (
-        registration.status !== 'active' ||
-        registration.definition.trigger.type !== 'manual'
-      )
-        throw new ConflictException('只有已激活的手动注册可以发起');
+      requireConsistent(
+        registration.status === 'active' &&
+          registration.definition.trigger.type === 'manual',
+        '只有已激活的手动注册可以发起',
+      );
       return this.occurrenceView(
         await this.append(
           manager,
@@ -232,18 +230,18 @@ export class TriggerOccurrenceService
     validateDefinitionInput(() => definitionRecord(event));
     this.validateKey(event.eventId);
     const source = this.sources.resolve(event.eventKey, event.eventVersion);
-    if (!source) throw new BadRequestException('事件源固定版本未加载');
+    requireRequest(source, '事件源固定版本未加载');
     const payload = validateDefinitionInput(() =>
       validateDataValues(source.payloadSchema, event.payload),
     );
-    if (
-      typeof event.occurredAt !== 'string' ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(
-        event.occurredAt,
-      ) ||
-      !Number.isFinite(Date.parse(event.occurredAt))
-    )
-      throw new BadRequestException('事件时间必须包含明确时区');
+    requireRequest(
+      typeof event.occurredAt === 'string' &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(
+          event.occurredAt,
+        ) &&
+        Number.isFinite(Date.parse(event.occurredAt)),
+      '事件时间必须包含明确时区',
+    );
     const occurredAt = new Date(event.occurredAt);
     const id = this.hash([event.eventKey, event.eventVersion, event.eventId]);
     const requestHash = this.hash([
@@ -278,11 +276,11 @@ export class TriggerOccurrenceService
         const occurrenceIds: string[] = [];
         for (const registration of registrations) {
           const trigger = registration.definition.trigger;
-          if (
-            trigger.type !== 'event' ||
-            !isDeepStrictEqual(trigger.payloadSchema, source.payloadSchema)
-          )
-            throw new ConflictException('事件源契约与已发布触发器不一致');
+          requireConsistent(
+            trigger.type === 'event' &&
+              isDeepStrictEqual(trigger.payloadSchema, source.payloadSchema),
+            '事件源契约与已发布触发器不一致',
+          );
           const occurrence = await this.append(
             manager,
             registration,
@@ -308,13 +306,11 @@ export class TriggerOccurrenceService
    * @returns 本轮产生的事件数量；积压周期合并为一次并保留最早到期时间。
    */
   async recordDue(now = new Date()): Promise<number> {
-    const rows = await this.database
-      .getRepository(TriggerRegistration)
-      .find({
-        where: { status: 'active', nextAt: LessThanOrEqual(now) },
-        order: { nextAt: 'ASC', id: 'ASC' },
-        take: 100,
-      });
+    const rows = await this.database.getRepository(TriggerRegistration).find({
+      where: { status: 'active', nextAt: LessThanOrEqual(now) },
+      order: { nextAt: 'ASC', id: 'ASC' },
+      take: 100,
+    });
     let count = 0;
     for (const candidate of rows) {
       count += await this.database.transaction(async (manager) => {
@@ -373,8 +369,7 @@ export class TriggerOccurrenceService
       .createQueryBuilder('occurrence')
       .where('occurrence.triggerId = :triggerId', { triggerId });
     if (beforeId) {
-      if (!/^[1-9]\d{0,19}$/.test(beforeId))
-        throw new BadRequestException('发生记录游标不合法');
+      requireRequest(/^[1-9]\d{0,19}$/.test(beforeId), '发生记录游标不合法');
       query.andWhere('occurrence.id < :beforeId', { beforeId });
     }
     const rows = await query
@@ -401,15 +396,15 @@ export class TriggerOccurrenceService
       .getRepository(TriggerEventReceipt)
       .findOneBy({ id });
     if (!receipt) return undefined;
-    if (receipt.requestHash !== requestHash)
-      throw new ConflictException('事件身份已经用于其他内容');
-    const rows = await this.database
-      .getRepository(TriggerOccurrence)
-      .find({
-        where: { eventReceiptId: id },
-        select: { id: true },
-        order: { id: 'ASC' },
-      });
+    requireConsistent(
+      receipt.requestHash === requestHash,
+      '事件身份已经用于其他内容',
+    );
+    const rows = await this.database.getRepository(TriggerOccurrence).find({
+      where: { eventReceiptId: id },
+      select: { id: true },
+      order: { id: 'ASC' },
+    });
     return { occurrenceIds: rows.map((row) => row.id) };
   }
 
@@ -425,7 +420,7 @@ export class TriggerOccurrenceService
       where: { id },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!row) throw new NotFoundException('触发注册不存在');
+    requireFound(row, '触发注册不存在');
     return row;
   }
 
@@ -456,7 +451,7 @@ export class TriggerOccurrenceService
       occurredAt,
       payload,
       eventReceiptId,
-      status: 'pending',
+      status: RUN_STATUS.pending,
       acknowledgedAt: null,
     });
     await manager.insert(TriggerOccurrence, row);
@@ -474,11 +469,11 @@ export class TriggerOccurrenceService
     row: TriggerRegistration,
     reference: PublishedReference,
   ) {
-    if (
-      row.triggerId !== reference.id ||
-      row.triggerVersion !== reference.version
-    )
-      throw new ConflictException('消费身份已经用于其他触发版本');
+    requireConsistent(
+      row.triggerId === reference.id &&
+        row.triggerVersion === reference.version,
+      '消费身份已经用于其他触发版本',
+    );
     return this.registrationView(row);
   }
 
@@ -519,13 +514,13 @@ export class TriggerOccurrenceService
    * @throws 身份为空、过长或包含控制字符时拒绝处理。
    */
   private validateKey(value: unknown): void {
-    if (
-      typeof value !== 'string' ||
-      !value.trim() ||
-      value.length > 191 ||
-      /[\u0000-\u001f]/.test(value)
-    )
-      throw new BadRequestException('请求身份必须是 1 至 191 个可见字符');
+    requireRequest(
+      typeof value === 'string' &&
+        value.trim() &&
+        value.length <= 191 &&
+        !/[\u0000-\u001f]/.test(value),
+      '请求身份必须是 1 至 191 个可见字符',
+    );
   }
 
   /**
@@ -534,6 +529,6 @@ export class TriggerOccurrenceService
    * @returns 数据库唯一索引使用的摘要。
    */
   private hash(value: unknown): string {
-    return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    return automationDigest(JSON.stringify(value));
   }
 }

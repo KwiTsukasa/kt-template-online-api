@@ -1,3 +1,9 @@
+import { requireDefinition } from '@/common/automation/validation';
+
+import {
+  AUTOMATION_DATA_LIMITS,
+  FORBIDDEN_OBJECT_KEYS,
+} from './constants/identity';
 import { definitionRecord } from './definition.types';
 
 export type DataScalar = boolean | number | string;
@@ -13,7 +19,22 @@ export type DataField = {
 };
 export type DataSchema = { fields: DataField[] };
 
-const reservedFields = new Set(['__proto__', 'prototype', 'constructor']);
+/**
+ * 为一次校验批次缓存各数据契约的字段索引，重复引用同一契约不再逐字段搜索。
+ * @returns 按字段名读取当前契约的函数；契约修改后应开启新批次。
+ */
+export function createDataSchemaIndex(): (
+  schema: DataSchema,
+) => ReadonlyMap<string, DataField> {
+  const indexes = new WeakMap<DataSchema, ReadonlyMap<string, DataField>>();
+  return (schema) => {
+    const existing = indexes.get(schema);
+    if (existing) return existing;
+    const fields = new Map(schema.fields.map((field) => [field.key, field]));
+    indexes.set(schema, fields);
+    return fields;
+  };
+}
 
 /**
  * 将字段契约限制为当前前后端都能验证的有界标量，拒绝未实现的类型与控件约束。
@@ -23,36 +44,96 @@ const reservedFields = new Set(['__proto__', 'prototype', 'constructor']);
  */
 export function normalizeDataSchema(input: unknown): DataSchema {
   const source = definitionRecord(input);
-  if (!Array.isArray(source.fields) || source.fields.length > 64) throw new Error('字段数量必须在 0 至 64 之间');
+  requireDefinition(
+    Array.isArray(source.fields) &&
+      source.fields.length <= AUTOMATION_DATA_LIMITS.fields,
+    '字段数量必须在 0 至 64 之间',
+  );
   const keys = new Set<string>();
   const fields: DataField[] = source.fields.map((raw) => {
     const field = definitionRecord(raw);
-    if (typeof field.key !== 'string' || !/^[A-Za-z_][A-Za-z_0-9]{0,63}$/.test(field.key) || reservedFields.has(field.key) || keys.has(field.key)) throw new Error('字段标识不合法或重复');
+    requireDefinition(
+      typeof field.key === 'string' &&
+        /^[A-Za-z_][A-Za-z_0-9]{0,63}$/.test(field.key) &&
+        !FORBIDDEN_OBJECT_KEYS.has(field.key) &&
+        !keys.has(field.key),
+      '字段标识不合法或重复',
+    );
     keys.add(field.key);
-    if (typeof field.label !== 'string' || !field.label.trim() || field.label.length > 80) throw new Error('字段标题需要 1 至 80 个字符');
-    if (field.type !== 'string' && field.type !== 'number' && field.type !== 'integer' && field.type !== 'boolean') throw new Error('字段类型尚不支持');
-    if (typeof field.required !== 'boolean') throw new Error('必须明确字段是否必填');
-    const result: DataField = { key: field.key, label: field.label.trim(), type: field.type, required: field.required };
+    requireDefinition(
+      typeof field.label === 'string' &&
+        field.label.trim() &&
+        field.label.length <= AUTOMATION_DATA_LIMITS.labelLength,
+      '字段标题需要 1 至 80 个字符',
+    );
+    requireDefinition(
+      field.type === 'string' ||
+        field.type === 'number' ||
+        field.type === 'integer' ||
+        field.type === 'boolean',
+      '字段类型尚不支持',
+    );
+    requireDefinition(
+      typeof field.required === 'boolean',
+      '必须明确字段是否必填',
+    );
+    const result: DataField = {
+      key: field.key,
+      label: field.label.trim(),
+      type: field.type,
+      required: field.required,
+    };
     for (const bound of ['min', 'max'] as const) {
       if (field[bound] === undefined) continue;
-      if (typeof field[bound] !== 'number' || !Number.isFinite(field[bound]) || field.type === 'boolean') throw new Error('字段范围必须是有限数字，布尔字段不支持范围');
-      if (field.type === 'string' && (!Number.isInteger(field[bound]) || field[bound] < 0 || field[bound] > 16384)) throw new Error('文本长度范围必须是 0 至 16384 的整数');
+      requireDefinition(
+        typeof field[bound] === 'number' &&
+          Number.isFinite(field[bound]) &&
+          field.type !== 'boolean',
+        '字段范围必须是有限数字，布尔字段不支持范围',
+      );
+      requireDefinition(
+        field.type !== 'string' ||
+          (Number.isInteger(field[bound]) &&
+            field[bound] >= 0 &&
+            field[bound] <= AUTOMATION_DATA_LIMITS.textLength),
+        '文本长度范围必须是 0 至 16384 的整数',
+      );
       result[bound] = field[bound];
     }
-    if (result.min !== undefined && result.max !== undefined && result.min > result.max) throw new Error('字段最小值不能大于最大值');
+    requireDefinition(
+      result.min === undefined ||
+        result.max === undefined ||
+        result.min <= result.max,
+      '字段最小值不能大于最大值',
+    );
     if (field.format !== undefined) {
-      if (field.type !== 'string' || (field.format !== 'date' && field.format !== 'date-time')) throw new Error('日期格式只支持文本字段');
+      requireDefinition(
+        field.type === 'string' &&
+          (field.format === 'date' || field.format === 'date-time'),
+        '日期格式只支持文本字段',
+      );
       result.format = field.format;
     }
     if (field.options !== undefined) {
-      if (!Array.isArray(field.options) || field.options.length < 1 || field.options.length > 100 || result.format) throw new Error('枚举选项需要 1 至 100 项且不能和日期格式混用');
+      requireDefinition(
+        Array.isArray(field.options) &&
+          field.options.length >= 1 &&
+          field.options.length <= AUTOMATION_DATA_LIMITS.options &&
+          !result.format,
+        '枚举选项需要 1 至 100 项且不能和日期格式混用',
+      );
       const values = new Set<DataScalar>();
       result.options = field.options.map((item) => {
         const option = definitionRecord(item);
-        if (typeof option.label !== 'string' || !option.label.trim() || option.label.length > 80) throw new Error('选项标题不合法');
+        requireDefinition(
+          typeof option.label === 'string' &&
+            option.label.trim() &&
+            option.label.length <= AUTOMATION_DATA_LIMITS.labelLength,
+          '选项标题不合法',
+        );
         validateFieldValue({ ...result, options: undefined }, option.value);
         const value = option.value as DataScalar;
-        if (values.has(value)) throw new Error('枚举选项值不能重复');
+        requireDefinition(!values.has(value), '枚举选项值不能重复');
         values.add(value);
         return { label: option.label.trim(), value };
       });
@@ -70,23 +151,53 @@ export function normalizeDataSchema(input: unknown): DataSchema {
  */
 export function validateFieldValue(field: DataField, value: unknown): void {
   let valid = false;
-  if (field.type === 'string') valid = typeof value === 'string' && value.length <= 16384;
+  if (field.type === 'string')
+    valid =
+      typeof value === 'string' &&
+      value.length <= AUTOMATION_DATA_LIMITS.textLength;
   if (field.type === 'boolean') valid = typeof value === 'boolean';
-  if (field.type === 'number') valid = typeof value === 'number' && Number.isFinite(value);
-  if (field.type === 'integer') valid = typeof value === 'number' && Number.isSafeInteger(value);
-  if (!valid) throw new Error(`${field.label}：值类型不正确`);
-  if (field.required && typeof value === 'string' && !value.trim()) throw new Error(`${field.label}：不能为空`);
+  if (field.type === 'number')
+    valid = typeof value === 'number' && Number.isFinite(value);
+  if (field.type === 'integer')
+    valid = typeof value === 'number' && Number.isSafeInteger(value);
+  requireDefinition(valid, `${field.label}：值类型不正确`);
+  requireDefinition(
+    !field.required || typeof value !== 'string' || value.trim(),
+    `${field.label}：不能为空`,
+  );
   let measure: number | undefined;
   if (typeof value === 'string') measure = value.length;
   if (typeof value === 'number') measure = value;
-  if (measure !== undefined && field.min !== undefined && measure < field.min) throw new Error(`${field.label}：小于允许的最小值`);
-  if (measure !== undefined && field.max !== undefined && measure > field.max) throw new Error(`${field.label}：超过允许的最大值`);
-  if (field.options && !field.options.some((option) => option.value === value)) throw new Error(`${field.label}：不属于允许的选项`);
+  requireDefinition(
+    measure === undefined || field.min === undefined || measure >= field.min,
+    `${field.label}：小于允许的最小值`,
+  );
+  requireDefinition(
+    measure === undefined || field.max === undefined || measure <= field.max,
+    `${field.label}：超过允许的最大值`,
+  );
+  requireDefinition(
+    !field.options || field.options.some((option) => option.value === value),
+    `${field.label}：不属于允许的选项`,
+  );
   if (field.format === 'date') {
-    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw new Error(`${field.label}：日期不合法`);
+    requireDefinition(
+      typeof value === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+        Number.isFinite(Date.parse(value)) &&
+        new Date(value).toISOString().slice(0, 10) === value,
+      `${field.label}：日期不合法`,
+    );
   }
   if (field.format === 'date-time') {
-    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) throw new Error(`${field.label}：时间必须包含明确时区`);
+    requireDefinition(
+      typeof value === 'string' &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.test(
+          value,
+        ) &&
+        Number.isFinite(Date.parse(value)),
+      `${field.label}：时间必须包含明确时区`,
+    );
   }
 }
 
@@ -98,19 +209,32 @@ export function validateFieldValue(field: DataField, value: unknown): void {
  * @returns 与原对象分离的已验证字段值。
  * @throws 未声明、越权、缺失必填或值非法时拒绝整个提交。
  */
-export function validateDataValues(schema: DataSchema, input: unknown, writableFields?: readonly string[]): Record<string, DataScalar> {
+export function validateDataValues(
+  schema: DataSchema,
+  input: unknown,
+  writableFields?: readonly string[],
+): Record<string, DataScalar> {
   const source = definitionRecord(input);
   const fields = new Map(schema.fields.map((field) => [field.key, field]));
   const result: Record<string, DataScalar> = {};
+  let writable: ReadonlySet<string> | undefined;
+  if (writableFields) writable = new Set(writableFields);
   for (const [key, value] of Object.entries(source)) {
     const field = fields.get(key);
-    if (!field || reservedFields.has(key)) throw new Error(`未声明字段：${key}`);
-    if (writableFields && !writableFields.includes(key)) throw new Error(`无权填写字段：${key}`);
+    requireDefinition(
+      field && !FORBIDDEN_OBJECT_KEYS.has(key),
+      `未声明字段：${key}`,
+    );
+    requireDefinition(!writable || writable.has(key), `无权填写字段：${key}`);
     validateFieldValue(field, value);
     result[key] = value as DataScalar;
   }
   for (const field of schema.fields) {
-    if (field.required && !Object.prototype.hasOwnProperty.call(result, field.key)) throw new Error(`${field.label}：必填字段缺失`);
+    requireDefinition(
+      !field.required ||
+        Object.prototype.hasOwnProperty.call(result, field.key),
+      `${field.label}：必填字段缺失`,
+    );
   }
   return result;
 }

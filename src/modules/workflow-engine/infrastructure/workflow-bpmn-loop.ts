@@ -1,3 +1,4 @@
+import { BPMN_EXCHANGE, BPMN_ROUTING } from '../constants/bpmn-runtime';
 import { MultiInstanceLoopCharacteristics } from 'bpmn-elements';
 import { requireBpmnInstanceCount } from '../domain/workflow-bpmn-limits';
 
@@ -56,10 +57,14 @@ export function WorkflowStandardLoop(activity: any, definition: any) {
       !message.fields?.redelivered &&
       !activity.environment.resolveExpression(original.loopCondition, message)
     ) {
-      activity.broker.publish('execution', 'execute.completed', {
-        ...message.content,
-        output: [],
-      });
+      activity.broker.publish(
+        BPMN_EXCHANGE.execution,
+        BPMN_ROUTING.executeCompleted,
+        {
+          ...message.content,
+          output: [],
+        },
+      );
       return;
     }
     return execute(message);

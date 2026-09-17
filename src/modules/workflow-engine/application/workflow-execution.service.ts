@@ -1,3 +1,17 @@
+import { requireExecutionState } from '@/common/automation/validation';
+import {
+  requireRequest,
+  requireConsistent,
+  requireFound,
+} from '@/common/automation/validation';
+import {
+  automationDigest,
+  automationFieldEntries,
+} from '@/common/automation/content-digest';
+import {
+  RUN_STATUS,
+  RUN_STATUS_GROUP,
+} from '@/common/automation/constants/run-status';
 import {
   TASK_EXECUTION,
   type TaskExecutionPort,
@@ -13,20 +27,11 @@ import { parseWorkflowBpmn } from '../domain/workflow-bpmn.policy';
 import { prepareBpmnMessageStart } from '../domain/workflow-message.policy';
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
-  NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
-import {
-  DataSource,
-  EntityManager,
-  In,
-  LessThan,
-  LessThanOrEqual,
-} from 'typeorm';
+import { DataSource, EntityManager, In, LessThanOrEqual } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
 import { validateDataValues } from '@/common/automation/data-schema';
 import { validateDefinitionInput } from '@/common/automation/definition.repository';
@@ -43,19 +48,23 @@ import type {
   WorkflowNodeVisitPage,
   WorkflowRunView,
 } from '../contract/workflow-run.types';
-import {
-  WorkflowNodeRun,
-  WorkflowNodeVisit,
-  WorkflowRun,
-} from '../infrastructure/persistence/workflow-run.entities';
+import { WorkflowRun } from '../infrastructure/persistence/workflow-run.entities';
 import { WorkflowDefinitionService } from './workflow-definition.service';
 import type { WorkflowBusinessContext } from '../contract/workflow-process.interface';
-import {
-  isBpmnWorkflow,
-  workflowContract,
-} from '../domain/workflow-document.policy';
+import { workflowContract } from '../domain/workflow-document.policy';
 import { WorkflowBpmnExecutionService } from './workflow-bpmn-execution.service';
 import { WorkflowBpmnActivity } from '../infrastructure/persistence/workflow-bpmn.entity';
+import { workflowAllowsDispatch } from '../domain/workflow-execution-control.policy';
+import { isAutomationUniqueConflict } from '@/common/automation/database-error';
+import {
+  WORKFLOW_ACTIVE_SUBJECT_INDEX,
+  WORKFLOW_CONFLICT_MESSAGE,
+} from '../constants/persistence';
+import type { WorkflowNodeSnapshot } from '../contract/workflow-activity.types';
+import {
+  preferWorkflowActivity,
+  workflowActivitySnapshot,
+} from '../domain/workflow-activity-state';
 
 @Injectable()
 export class WorkflowExecutionService implements WorkflowExecutionPort {
@@ -79,7 +88,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @throws 消息服务未装配或消息不符合当前等待契约时拒绝接收。
    */
   async receiveMessage(runId: string, delivery: WorkflowMessageDelivery) {
-    if (!this.messages) throw new Error('工作流消息模块尚未装配');
+    requireExecutionState(this.messages, '工作流消息模块尚未装配');
     return this.messages.receive(runId, delivery);
   }
 
@@ -91,7 +100,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @throws 消息服务尚未装配时拒绝接收。
    */
   async receiveBusinessMessage(runId: string, message: WorkflowMessageIngress) {
-    if (!this.messages) throw new Error('工作流消息模块尚未装配');
+    requireExecutionState(this.messages, '工作流消息模块尚未装配');
     return this.messages.receiveBusiness(runId, message);
   }
 
@@ -102,7 +111,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @throws 人工任务服务未装配时拒绝读取，不能返回伪造的空待办。
    */
   async humanTasks(runId: string) {
-    if (!this.human) throw new Error('人工任务模块尚未装配');
+    requireExecutionState(this.human, '人工任务模块尚未装配');
     return this.human.pending(runId);
   }
 
@@ -121,7 +130,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     actorId: string,
     values: unknown,
   ) {
-    if (!this.human) throw new Error('人工任务模块尚未装配');
+    requireExecutionState(this.human, '人工任务模块尚未装配');
     await this.human.submit(runId, executionId, actorId, values);
     return this.read(runId);
   }
@@ -170,12 +179,10 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   ) {
     const contract = await this.contract(reference);
     if (!contract.formRef) {
-      if (submitted !== undefined)
-        throw new BadRequestException('当前工作流未绑定业务表单');
+      requireRequest(submitted === undefined, '当前工作流未绑定业务表单');
       return { formValues: null, values: {} as Record<string, unknown> };
     }
-    if (submitted === undefined)
-      throw new BadRequestException('请填写当前工作流绑定的业务表单');
+    requireRequest(submitted !== undefined, '请填写当前工作流绑定的业务表单');
     const formValues = await this.forms.validate(contract.formRef, submitted);
     const values: Record<string, unknown> = {};
     for (const [target, source] of Object.entries(contract.formMapping)) {
@@ -260,51 +267,47 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     const definition = await this.resolve(reference);
     const contract = await workflowContract(definition);
     if (contract.processRef) {
-      if (
-        !business ||
-        contract.processRef.key !== business.processRef.key ||
-        contract.processRef.version !== business.processRef.version
-      )
-        throw new BadRequestException('业务工作流只能从兼容的业务绑定入口发起');
-    } else if (business)
-      throw new BadRequestException('工作流没有声明业务流程接口');
-    if (
-      typeof executionKey !== 'string' ||
-      !executionKey.trim() ||
-      executionKey.length > 191
-    )
-      throw new BadRequestException('必须提供 1 至 191 字符的执行请求键');
+      requireRequest(
+        business &&
+          contract.processRef.key === business.processRef.key &&
+          contract.processRef.version === business.processRef.version,
+        '业务工作流只能从兼容的业务绑定入口发起',
+      );
+    } else requireRequest(!business, '工作流没有声明业务流程接口');
+    requireRequest(
+      typeof executionKey === 'string' &&
+        executionKey.trim() &&
+        executionKey.length <= 191,
+      '必须提供 1 至 191 字符的执行请求键',
+    );
     const inputValues = validateDefinitionInput(() =>
       validateDataValues(contract.inputSchema, input),
     );
-    const key = createHash('sha256').update(executionKey).digest('hex');
+    const key = automationDigest(executionKey);
     let formEntries: Array<[string, unknown]> | null = null;
-    if (formValues)
-      formEntries = Object.entries(formValues).sort(([left], [right]) =>
-        left.localeCompare(right),
-      );
+    if (formValues) formEntries = automationFieldEntries(formValues);
     const requestParts: unknown[] = [
       reference.id,
       reference.version,
-      Object.entries(inputValues).sort(([left], [right]) =>
-        left.localeCompare(right),
-      ),
+      automationFieldEntries(inputValues),
       formEntries,
     ];
     if (business) requestParts.push(business);
     if (initialMessage)
       requestParts.push(initialMessage.ingressKey, initialMessage.ingressHash);
-    const requestHash = createHash('sha256')
-      .update(JSON.stringify(requestParts))
-      .digest('hex');
+    const requestHash = automationDigest(JSON.stringify(requestParts));
     const manager = transaction ?? this.database.manager;
-    if (transaction && !transaction.queryRunner?.isTransactionActive)
-      throw new BadRequestException('业务创建必须使用活动事务');
+    requireRequest(
+      !transaction || transaction.queryRunner?.isTransactionActive,
+      '业务创建必须使用活动事务',
+    );
     const repository = manager.getRepository(WorkflowRun);
     const existing = await repository.findOneBy({ executionKey: key });
     if (existing) {
-      if (existing.requestHash !== requestHash)
-        throw new ConflictException('流程请求键已经用于不同内容');
+      requireConsistent(
+        existing.requestHash === requestHash,
+        WORKFLOW_CONFLICT_MESSAGE.requestReused,
+      );
       return { runId: existing.id };
     }
     await this.definitions.checkForPublish(definition);
@@ -316,7 +319,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       requestHash,
       businessContext: business,
       businessSubjectKey: subjectKey,
-      status: 'pending',
+      status: RUN_STATUS.pending,
       inputValues,
       formValues,
       outputValues: null,
@@ -346,10 +349,23 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       if (transaction) await persist(transaction);
       else await this.database.transaction(persist);
     } catch (error) {
-      const duplicate = await repository.findOneBy({ executionKey: key });
-      if (!duplicate) throw error;
-      if (duplicate.requestHash !== requestHash)
-        throw new ConflictException('流程请求键已经用于不同内容');
+      if (!isAutomationUniqueConflict(error)) throw error;
+      const query = repository
+        .createQueryBuilder('run')
+        .where('run.executionKey = :key', { key });
+      if (transaction) query.setLock('pessimistic_read');
+      const duplicate = await query.getOne();
+      if (!duplicate) {
+        requireConsistent(
+          !isAutomationUniqueConflict(error, WORKFLOW_ACTIVE_SUBJECT_INDEX),
+          WORKFLOW_CONFLICT_MESSAGE.activeSubject,
+        );
+        throw error;
+      }
+      requireConsistent(
+        duplicate.requestHash === requestHash,
+        WORKFLOW_CONFLICT_MESSAGE.requestReused,
+      );
       return { runId: duplicate.id };
     }
     return { runId: run.id };
@@ -365,26 +381,20 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     const run = await this.database
       .getRepository(WorkflowRun)
       .findOneBy({ id: runId });
-    if (!run) throw new NotFoundException('流程运行不存在');
-    const nodes = await this.database
-      .getRepository(WorkflowNodeRun)
-      .findBy({ runId });
+    requireFound(run, '流程运行不存在');
+
     const activities = await this.database
       .getRepository(WorkflowBpmnActivity)
       .findBy({ runId });
-    const bpmnNodes = new Map<string, WorkflowNodeRun>();
+    const bpmnNodes = new Map<string, WorkflowNodeSnapshot>();
     for (const activity of activities) {
       const current = bpmnNodes.get(activity.elementId);
-      if (
-        !current ||
-        activity.state.visit > current.visit ||
-        activity.state.status === 'waiting'
-      )
-        bpmnNodes.set(activity.elementId, activity.state);
+      if (preferWorkflowActivity(activity.state, current))
+        bpmnNodes.set(activity.elementId, workflowActivitySnapshot(activity));
     }
-    nodes.push(...bpmnNodes.values());
+    const nodes = [...bpmnNodes.values()];
     let activeActivities = run.bpmnState?.activeActivities ?? [];
-    if (!['pending', 'running', 'waiting'].includes(run.status))
+    if (!RUN_STATUS_GROUP.workflowOpen.includes(run.status))
       activeActivities = [];
     return {
       runId: run.id,
@@ -428,7 +438,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   }
 
   /**
-   * 按轮次倒序读取单个节点的当前记录与已归档记录，翻页不会重复返回当前轮。
+   * 按轮次倒序读取标准活动账本，当前与历史实例共用同一持久来源，翻页不重复返回当前轮。
    * @param runId - 所属工作流实例身份。
    * @param nodeId - 固定图中的节点身份。
    * @param beforeVisit - 只读取早于该轮次的记录，省略时包含当前轮。
@@ -443,47 +453,31 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     let before: number | undefined;
     if (beforeVisit !== undefined) {
       before = Number(beforeVisit);
-      if (!Number.isSafeInteger(before) || before < 1)
-        throw new BadRequestException('历史轮次边界必须是正整数');
+      requireRequest(
+        Number.isSafeInteger(before) && before >= 1,
+        '历史轮次边界必须是正整数',
+      );
     }
-    const current = await this.database
-      .getRepository(WorkflowNodeRun)
-      .findOneBy({ runId, nodeId });
-    const records: (WorkflowNodeRun | WorkflowNodeVisit)[] = [];
-    if (!current) {
-      const query = this.database
-        .getRepository(WorkflowBpmnActivity)
-        .createQueryBuilder('activity')
-        .where('activity.runId = :runId AND activity.elementId = :nodeId', {
-          runId,
-          nodeId,
-        });
-      if (before !== undefined)
-        query.andWhere(
-          "JSON_EXTRACT(activity.step_state, '$.visit') < :before",
-          { before },
-        );
-      const activities = await query
-        .orderBy(
-          "CAST(JSON_EXTRACT(activity.step_state, '$.visit') AS UNSIGNED)",
-          'DESC',
-        )
-        .take(51)
-        .getMany();
-      if (!activities.length && before === undefined)
-        throw new NotFoundException('流程节点不存在');
-      records.push(...activities.map((activity) => activity.state));
-    } else {
-      if (before === undefined || current.visit < before) records.push(current);
-      const archived = await this.database
-        .getRepository(WorkflowNodeVisit)
-        .find({
-          where: { runId, nodeId, visit: LessThan(before || current.visit) },
-          order: { visit: 'DESC' },
-          take: 51,
-        });
-      records.push(...archived);
-    }
+    const query = this.database
+      .getRepository(WorkflowBpmnActivity)
+      .createQueryBuilder('activity')
+      .where('activity.runId = :runId AND activity.elementId = :nodeId', {
+        runId,
+        nodeId,
+      });
+    if (before !== undefined)
+      query.andWhere("JSON_EXTRACT(activity.step_state, '$.visit') < :before", {
+        before,
+      });
+    const activities = await query
+      .orderBy(
+        "CAST(JSON_EXTRACT(activity.step_state, '$.visit') AS UNSIGNED)",
+        'DESC',
+      )
+      .take(51)
+      .getMany();
+    requireFound(activities.length || before !== undefined, '流程节点不存在');
+    const records = activities.map(workflowActivitySnapshot);
     let nextBeforeVisit: number | null = null;
     if (records.length > 50) nextBeforeVisit = records[49].visit;
     return {
@@ -520,7 +514,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     await this.database
       .getRepository(WorkflowRun)
       .update(
-        { id: runId, status: In(['pending', 'running', 'waiting']) },
+        { id: runId, status: In(RUN_STATUS_GROUP.workflowOpen) },
         { cancelRequested: true, nextWakeAt: new Date() },
       );
     return this.read(runId);
@@ -533,7 +527,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
   async pendingRunIds(): Promise<string[]> {
     const rows = await this.database.getRepository(WorkflowRun).find({
       where: {
-        status: In(['pending', 'running', 'waiting']),
+        status: In(RUN_STATUS_GROUP.workflowOpen),
         nextWakeAt: LessThanOrEqual(new Date()),
       },
       order: { nextWakeAt: 'ASC' },
@@ -554,7 +548,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       .createQueryBuilder('activity')
       .innerJoin(WorkflowRun, 'run', 'run.id = activity.runId')
       .where('run.status IN (:...statuses)', {
-        statuses: ['pending', 'running', 'waiting'],
+        statuses: RUN_STATUS_GROUP.workflowOpen,
       })
       .andWhere('activity.delivered = false')
       .andWhere(
@@ -582,7 +576,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @throws 内置动作模块未装配时拒绝派发。
    */
   async processAction(actionRunId: string): Promise<void> {
-    if (!this.tasks) throw new Error('内置动作能力未装配');
+    requireExecutionState(this.tasks, '内置动作能力未装配');
     const activity = await this.database
       .getRepository(WorkflowBpmnActivity)
       .createQueryBuilder('activity')
@@ -610,10 +604,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
         current.delivered
       )
         return false;
-      return (
-        ['pending', 'running', 'waiting'].includes(parent.status) &&
-        !parent.errorMessage
-      );
+      return workflowAllowsDispatch(parent);
     });
     await this.database
       .getRepository(WorkflowRun)
@@ -632,26 +623,13 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       'background',
       async (manager) => {
         const run = await manager.findOneBy(WorkflowRun, { id: runId });
-        if (!run || !['pending', 'running', 'waiting'].includes(run.status))
-          return;
+        if (!run || !RUN_STATUS_GROUP.workflowOpen.includes(run.status)) return;
         const definition = await this.resolve({
           id: run.workflowId,
           version: run.workflowVersion,
         });
-        if (isBpmnWorkflow(definition)) {
-          if (!this.bpmn) throw new Error('BPMN 工作流执行模块尚未装配');
-          await this.bpmn.process(run, definition, manager);
-          return;
-        }
-        await manager.update(
-          WorkflowRun,
-          { id: run.id },
-          {
-            status: 'failed',
-            errorMessage: '旧自定义图执行器已退役，请重新建立 BPMN 2.0 流程',
-            finishedAt: new Date(),
-          },
-        );
+        requireExecutionState(this.bpmn, 'BPMN 工作流执行模块尚未装配');
+        await this.bpmn.process(run, definition, manager);
       },
     );
   }

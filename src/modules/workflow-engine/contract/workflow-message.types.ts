@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 export type BpmnCorrelationValues = Record<string, Record<string, unknown>>;
 
 export interface WorkflowBusinessMessage {
@@ -25,7 +26,7 @@ export interface WorkflowMessageReceipt {
   deliveryId: string;
   nodeId: string;
   executionId: string;
-  status: 'pending' | 'delivered' | 'discarded';
+  status: typeof RUN_STATUS.pending | 'delivered' | 'discarded';
   receivedAt: string;
   deliveredAt: string | null;
 }

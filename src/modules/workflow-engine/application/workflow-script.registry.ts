@@ -1,10 +1,11 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import { Injectable } from '@nestjs/common';
 import { isAbsolute } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
-  normalizeDataSchema,
-  validateFieldValue,
-} from '@/common/automation/data-schema';
+  normalizeWorkflowScriptDeclaration,
+  normalizeWorkflowScriptReference,
+} from '../domain/workflow-script-declaration.policy';
 import type {
   WorkflowScriptCall,
   WorkflowScriptDefinition,
@@ -22,47 +23,23 @@ export class WorkflowScriptRegistry {
    * @throws 脚本元数据不合法或同版本契约漂移时拒绝装配。
    */
   register(script: WorkflowScriptDefinition): () => void {
-    const validIdentity = /^[a-z][a-z0-9.-]{2,63}$/.test(script.key) && Number.isSafeInteger(script.version) && script.version >= 1;
-    const validContent = script.protocol === 'kt.workflow.script.v1' && /^[a-f0-9]{64}$/.test(script.sha256) && !!script.name.trim();
-    if (!validIdentity || !validContent)
-      throw new Error('工作流脚本身份或摘要无效');
-    if (
-      !isAbsolute(script.path) ||
-      script.path.includes('\0') ||
-      !['bash', 'node', 'python'].includes(script.runtime) ||
-      !['local', 'nas'].includes(script.target)
-    )
-      throw new Error('工作流脚本路径、解释器或目标不支持');
-    if (
-      !Number.isSafeInteger(script.maxTimeoutMs) ||
-      script.maxTimeoutMs < 1000 ||
-      script.maxTimeoutMs > 24 * 86400000 ||
-      typeof script.idempotent !== 'boolean'
-    )
-      throw new Error('工作流脚本超时或重试契约无效');
-    if (
-      !/^[a-z][a-z0-9.-]{2,63}$/.test(script.processKey) ||
-      !/^[a-z][a-z0-9.-]{1,63}$/.test(script.stepKey)
-    )
-      throw new Error('脚本必须声明兼容的业务接口与步骤');
-    const key = `${script.key}@${script.version}`;
-    const paramsSchema = normalizeDataSchema(script.paramsSchema);
-    const resultSchema = normalizeDataSchema(script.resultSchema);
-    for (const [key, value] of Object.entries(script.defaults)) {
-      const field = paramsSchema.fields.find((field) => field.key === key);
-      if (!field) throw new Error('脚本默认参数未声明');
-      validateFieldValue(field, value);
-    }
-    const frozen = Object.freeze({
-      ...script,
-      paramsSchema,
-      resultSchema,
-      defaults: { ...script.defaults },
-    });
+    const reference = normalizeWorkflowScriptReference(script);
+    const declaration = normalizeWorkflowScriptDeclaration(script);
+    requireExecutionState(
+      isAbsolute(script.path) &&
+        !script.path.includes('\0') &&
+        ['bash', 'node', 'python'].includes(script.runtime) &&
+        ['local', 'nas'].includes(script.target),
+      '工作流脚本路径、解释器或目标不支持',
+    );
+    const key = `${reference.key}@${reference.version}`;
+    const frozen = Object.freeze({ ...script, ...reference, ...declaration });
     const existing = this.scripts.get(key);
     if (existing) {
-      if (!isDeepStrictEqual(existing, frozen))
-        throw new Error('工作流脚本同版本契约漂移');
+      requireExecutionState(
+        isDeepStrictEqual(existing, frozen),
+        '工作流脚本同版本契约漂移',
+      );
       return () => {};
     }
     this.scripts.set(key, frozen);
@@ -79,8 +56,10 @@ export class WorkflowScriptRegistry {
    */
   resolve(reference: WorkflowScriptReference): WorkflowScriptDefinition {
     const script = this.scripts.get(`${reference.key}@${reference.version}`);
-    if (!script || script.sha256 !== reference.sha256)
-      throw new Error('工作流脚本版本或内容摘要不可用');
+    requireExecutionState(
+      script && script.sha256 === reference.sha256,
+      '工作流脚本版本或内容摘要不可用',
+    );
     return structuredClone(script);
   }
 
@@ -98,13 +77,15 @@ export class WorkflowScriptRegistry {
     stepKey: string,
   ): WorkflowScriptDefinition {
     const script = this.resolve(call);
-    if (script.processKey !== processKey || script.stepKey !== stepKey)
-      throw new Error('脚本不适用于当前业务步骤');
-    if (
-      call.timeoutMs > script.maxTimeoutMs ||
-      (call.maxAttempts > 1 && !script.idempotent)
-    )
-      throw new Error('脚本超时或自动重试不符合固定契约');
+    requireExecutionState(
+      script.processKey === processKey && script.stepKey === stepKey,
+      '脚本不适用于当前业务步骤',
+    );
+    requireExecutionState(
+      !(call.timeoutMs > script.maxTimeoutMs) &&
+        (!(call.maxAttempts > 1) || script.idempotent),
+      '脚本超时或自动重试不符合固定契约',
+    );
     return script;
   }
 

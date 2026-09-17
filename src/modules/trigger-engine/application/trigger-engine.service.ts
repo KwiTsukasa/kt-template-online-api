@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { Injectable } from '@nestjs/common';
 import { isDeepStrictEqual } from 'node:util';
 import { DataSource } from 'typeorm';
 import {
@@ -60,9 +61,11 @@ export class TriggerEngineService implements TriggerEnginePort {
     const trigger = definition.trigger;
     if (trigger.type !== 'event') return;
     const source = this.events.resolve(trigger.eventKey, trigger.eventVersion);
-    if (!source) throw new BadRequestException('事件源固定版本未加载');
-    if (!isDeepStrictEqual(source.payloadSchema, trigger.payloadSchema))
-      throw new BadRequestException('触发器字段与事件源契约不一致');
+    requireRequest(source, '事件源固定版本未加载');
+    requireRequest(
+      isDeepStrictEqual(source.payloadSchema, trigger.payloadSchema),
+      '触发器字段与事件源契约不一致',
+    );
   }
 
   /**

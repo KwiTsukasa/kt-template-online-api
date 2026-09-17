@@ -1,3 +1,9 @@
+import { requireExecutionState } from '@/common/automation/validation';
+import { requireRequest } from '@/common/automation/validation';
+import {
+  RUN_STATUS,
+  RUN_STATUS_GROUP,
+} from '@/common/automation/constants/run-status';
 import {
   BadRequestException,
   ConflictException,
@@ -44,7 +50,7 @@ export class ScheduleDispatchService {
       const running = await manager.find(ScheduleDispatch, {
         where: {
           scheduleId,
-          status: 'running',
+          status: RUN_STATUS.running,
           nextAttemptAt: LessThanOrEqual(new Date()),
         },
         order: { id: 'ASC' },
@@ -54,7 +60,7 @@ export class ScheduleDispatchService {
       const pending = await manager.find(ScheduleDispatch, {
         where: {
           scheduleId,
-          status: In(['pending', 'starting']),
+          status: In(RUN_STATUS_GROUP.occurrenceDispatchable),
           nextAttemptAt: LessThanOrEqual(new Date()),
         },
         order: { id: 'ASC' },
@@ -77,8 +83,7 @@ export class ScheduleDispatchService {
       .createQueryBuilder('dispatch')
       .where('dispatch.scheduleId = :scheduleId', { scheduleId });
     if (beforeId) {
-      if (!/^[1-9]\d{0,19}$/.test(beforeId))
-        throw new BadRequestException('派发记录游标不合法');
+      requireRequest(/^[1-9]\d{0,19}$/.test(beforeId), '派发记录游标不合法');
       query.andWhere('dispatch.id < :beforeId', { beforeId });
     }
     const rows = await query.orderBy('dispatch.id', 'DESC').take(101).getMany();
@@ -138,7 +143,7 @@ export class ScheduleDispatchService {
             occurrencePayload: occurrence.payload,
             occurredAt: occurrence.occurredAt,
             definition,
-            status: 'pending',
+            status: RUN_STATUS.pending,
             targetRunId: null,
             errorMessage: null,
             deadlineAt: new Date(Date.now() + definition.taskDeadlineMs),
@@ -176,27 +181,35 @@ export class ScheduleDispatchService {
     row: ScheduleDispatch,
   ): Promise<void> {
     if (
-      row.status === 'pending' &&
+      row.status === RUN_STATUS.pending &&
       (!state.enabled || state.activeBindingId !== row.bindingId)
     ) {
       await this.finish(
         manager,
         row,
-        'skipped',
+        RUN_STATUS.skipped,
         '计划已停用或此触发注册已被替换',
       );
       return;
     }
     try {
-      if (row.status === 'pending' && row.definition.overlap === 'skip') {
+      if (
+        row.status === RUN_STATUS.pending &&
+        row.definition.overlap === 'skip'
+      ) {
         const busy = await manager.exists(ScheduleDispatch, {
           where: {
             scheduleId: row.scheduleId,
-            status: In(['starting', 'running']),
+            status: In(RUN_STATUS_GROUP.occurrenceLaunched),
           },
         });
         if (busy) {
-          await this.finish(manager, row, 'skipped', '上一次计划运行尚未结束');
+          await this.finish(
+            manager,
+            row,
+            RUN_STATUS.skipped,
+            '上一次计划运行尚未结束',
+          );
           return;
         }
       }
@@ -209,32 +222,38 @@ export class ScheduleDispatchService {
         status: 'acknowledged',
       };
       const admission = row.definition.admission;
-      if (row.status === 'pending' && admission) {
-        if (!this.definitions.rules)
-          throw new BadRequestException('规则引擎未装配');
+      if (row.status === RUN_STATUS.pending && admission) {
+        requireRequest(this.definitions.rules, '规则引擎未装配');
         const result = await this.definitions.rules.evaluate(
           admission.ruleRef,
           bindScheduleValues(admission.facts, occurrence),
         );
         if (result.result !== admission.expected) {
-          await this.finish(manager, row, 'skipped', '准入规则未匹配');
+          await this.finish(manager, row, RUN_STATUS.skipped, '准入规则未匹配');
           return;
         }
       }
       const target = row.definition.target;
-      if (!target) throw new BadRequestException('已发布计划缺少执行目标');
-      if (target.type !== 'workflow') throw new BadRequestException('旧计划直接执行动作的路径已停用，请发布工作流计划');
+      requireRequest(target, '已发布计划缺少执行目标');
+      requireRequest(
+        target.type === 'workflow',
+        '旧计划直接执行动作的路径已停用，请发布工作流计划',
+      );
       const input = bindScheduleValues(row.definition.input, occurrence);
       const executionKey = `schedule-${row.scheduleId}-${row.occurrenceId}`;
-      if (row.status === 'pending') {
-        row.status = 'starting';
+      if (row.status === RUN_STATUS.pending) {
+        row.status = RUN_STATUS.starting;
         await manager.save(row);
       }
-      if (!this.definitions.workflows) throw new BadRequestException('工作流模块未装配');
-      const run = await this.definitions.workflows.start(target.reference, input, executionKey);
+      requireRequest(this.definitions.workflows, '工作流模块未装配');
+      const run = await this.definitions.workflows.start(
+        target.reference,
+        input,
+        executionKey,
+      );
       const runId = run.runId;
       row.targetRunId = runId;
-      row.status = 'running';
+      row.status = RUN_STATUS.running;
       row.errorMessage = null;
       row.nextAttemptAt = new Date();
       await manager.save(row);
@@ -245,7 +264,7 @@ export class ScheduleDispatchService {
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
-        await this.finish(manager, row, 'failed', error.message);
+        await this.finish(manager, row, RUN_STATUS.failed, error.message);
       } else await this.defer(manager, row, error);
     }
   }
@@ -265,16 +284,16 @@ export class ScheduleDispatchService {
       const target = row.definition.target;
       let result: { status: string; error: string | null };
       if (target.type === 'task') {
-        if (!this.definitions.tasks) throw new Error('原子任务模块暂未装配');
+        requireExecutionState(this.definitions.tasks, '原子任务模块暂未装配');
         result = await this.definitions.tasks.read(row.targetRunId);
       } else {
-        if (!this.definitions.workflows) throw new Error('工作流模块暂未装配');
+        requireExecutionState(this.definitions.workflows, '工作流模块暂未装配');
         result = await this.definitions.workflows.read(row.targetRunId);
       }
       if (
-        result.status === 'succeeded' ||
-        result.status === 'failed' ||
-        result.status === 'cancelled'
+        result.status === RUN_STATUS.succeeded ||
+        result.status === RUN_STATUS.failed ||
+        result.status === RUN_STATUS.cancelled
       )
         await this.finish(manager, row, result.status, result.error);
       else
@@ -298,7 +317,11 @@ export class ScheduleDispatchService {
   private async finish(
     manager: EntityManager,
     row: ScheduleDispatch,
-    status: 'succeeded' | 'failed' | 'cancelled' | 'skipped',
+    status:
+      | typeof RUN_STATUS.succeeded
+      | typeof RUN_STATUS.failed
+      | typeof RUN_STATUS.cancelled
+      | typeof RUN_STATUS.skipped,
     message: string | null,
   ): Promise<void> {
     row.status = status;

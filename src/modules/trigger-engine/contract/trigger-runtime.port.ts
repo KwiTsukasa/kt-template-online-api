@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { DataSchema, DataScalar } from '@/common/automation/data-schema';
 import type { PublishedReference } from '@/common/automation/definition.types';
 
@@ -24,7 +25,7 @@ export type TriggerOccurrenceView = {
   triggerRef: PublishedReference;
   occurredAt: Date;
   payload: Record<string, DataScalar>;
-  status: 'pending' | 'acknowledged';
+  status: typeof RUN_STATUS.pending | 'acknowledged';
 };
 export type TriggerEvent = {
   eventKey: string;

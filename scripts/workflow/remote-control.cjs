@@ -59,10 +59,8 @@ async function control(request) {
     const heartbeat = await optionalJson(
       path.join(directory, 'heartbeat.json'),
     );
-    if (
-      heartbeat?.executionId === executionId &&
-      Date.now() - Date.parse(heartbeat.observedAt) < 10000
-    )
+    const age = Date.now() - Date.parse(heartbeat?.observedAt);
+    if (heartbeat?.executionId === executionId && age >= 0 && age < 10000)
       return { status: 'running', executionId };
     return { status: 'unconfirmed', executionId };
   }

@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import { KtCreateDateColumn, KtDateTime, KtDateTimeColumn } from '@/common';
 import type { DataScalar } from '@/common/automation/data-schema';
@@ -44,7 +45,7 @@ export class TriggerOccurrence {
   eventReceiptId: string | null;
   @KtDateTimeColumn({ name: 'occurred_at' }) occurredAt: KtDateTime;
   @Column({ type: 'json' }) payload: Record<string, DataScalar>;
-  @Column({ length: 16 }) status: 'pending' | 'acknowledged';
+  @Column({ length: 16 }) status: typeof RUN_STATUS.pending | 'acknowledged';
   @KtDateTimeColumn({ name: 'acknowledged_at', nullable: true })
   acknowledgedAt: KtDateTime | null;
   @KtCreateDateColumn({ name: 'create_time' }) createTime: KtDateTime;

@@ -1,3 +1,9 @@
+import {
+  BPMN_EXCHANGE,
+  BPMN_ROUTING,
+  BPMN_QUEUE,
+} from '../constants/bpmn-runtime';
+import { BPMN_TYPE } from '@/modules/workflow-engine/constants/bpmn';
 import { randomUUID } from 'node:crypto';
 import { Activity } from 'bpmn-elements';
 import { ServiceTaskBehaviour, UserTaskBehaviour } from 'bpmn-elements/tasks';
@@ -11,7 +17,7 @@ import { workflowBpmnChildParent } from './workflow-bpmn-scope';
  */
 export function WorkflowConcurrentTask(definition: any, context: any) {
   let Behaviour: any = ServiceTaskBehaviour;
-  if (definition.type === 'bpmn:UserTask') Behaviour = UserTaskBehaviour;
+  if (definition.type === BPMN_TYPE.UserTask) Behaviour = UserTaskBehaviour;
   if (definition.behaviour?.loopCharacteristics)
     return new Activity(Behaviour, definition, context);
   const activity = new Activity(
@@ -61,8 +67,8 @@ export class WorkflowConcurrentTaskBehaviour {
     };
     const broker = this.activity.broker;
     broker.subscribeTmp(
-      'execution',
-      'execute.completed',
+      BPMN_EXCHANGE.execution,
+      BPMN_ROUTING.executeCompleted,
       (_: string, completed: any) => {
         const content = completed.content;
         if (content.isRootScope) {
@@ -73,23 +79,34 @@ export class WorkflowConcurrentTaskBehaviour {
         this.instances.delete(content.executionId);
         broker.cancel(`_kt-task-instance-${content.executionId}`);
         if (!content.ktTaskDiscarded) {
-          broker.publish('execution', 'execute.outbound.take', {
+          broker.publish(
+            BPMN_EXCHANGE.execution,
+            BPMN_ROUTING.executeOutboundTake,
+            {
+              ...content,
+              ignoreOutbound: false,
+              outbound: undefined,
+            },
+          );
+          broker.publish(BPMN_EXCHANGE.event, BPMN_ROUTING.activityEnd, {
             ...content,
-            ignoreOutbound: false,
-            outbound: undefined,
+            state: 'end',
           });
-          broker.publish('event', 'activity.end', { ...content, state: 'end' });
         }
-        broker.publish('event', 'activity.instance.leave', {
-          ...content,
-          state: 'leave',
-        });
+        broker.publish(
+          BPMN_EXCHANGE.event,
+          BPMN_ROUTING.activityInstanceLeave,
+          {
+            ...content,
+            state: 'leave',
+          },
+        );
         this.schedule();
       },
       { noAck: true, consumerTag: '_kt-task-completed', priority: 500 },
     );
     broker.subscribeTmp(
-      'api',
+      BPMN_EXCHANGE.api,
       `activity.*.${this.root.executionId}`,
       (_: string, incoming: any) => {
         if (['stop', 'discard', 'cancel'].includes(incoming.properties.type))
@@ -97,7 +114,7 @@ export class WorkflowConcurrentTaskBehaviour {
       },
       { noAck: true, consumerTag: '_kt-task-api', priority: 300 },
     );
-    broker.getQueue('inbound-q').consume(
+    broker.getQueue(BPMN_QUEUE.inbound).consume(
       (_: string, incoming: any) => {
         this.arrivals.push(structuredClone(incoming.content));
         incoming.ack();
@@ -106,7 +123,11 @@ export class WorkflowConcurrentTaskBehaviour {
       { consumerTag: '_kt-task-inbound', exclusive: true, prefetch: 1 },
     );
     if (!message.fields.redelivered) {
-      broker.publish('execution', 'execute.concurrent', this.root);
+      broker.publish(
+        BPMN_EXCHANGE.execution,
+        BPMN_ROUTING.executeConcurrent,
+        this.root,
+      );
       this.spawn(message.content.inbound ?? []);
     }
     this.schedule();
@@ -177,27 +198,43 @@ export class WorkflowConcurrentTaskBehaviour {
               content: any,
               properties: any,
             ) => {
-              if (exchange === 'execution' && routingKey === 'execute.error') {
-                broker.publish('event', 'activity.error', content, {
-                  ...properties,
-                  type: 'error',
-                  mandatory: false,
-                });
+              if (
+                exchange === 'execution' &&
+                routingKey === BPMN_ROUTING.executeError
+              ) {
+                broker.publish(
+                  BPMN_EXCHANGE.event,
+                  BPMN_ROUTING.activityError,
+                  content,
+                  {
+                    ...properties,
+                    type: 'error',
+                    mandatory: false,
+                  },
+                );
                 if (!this.instances.has(content.executionId)) return;
               }
               if (
                 exchange === 'execution' &&
-                routingKey === 'execute.discard'
+                routingKey === BPMN_ROUTING.executeDiscard
               ) {
-                broker.publish('event', 'activity.discard', {
-                  ...content,
-                  state: 'discard',
-                });
-                return broker.publish('execution', 'execute.completed', {
-                  ...content,
-                  error: undefined,
-                  ktTaskDiscarded: true,
-                });
+                broker.publish(
+                  BPMN_EXCHANGE.event,
+                  BPMN_ROUTING.activityDiscard,
+                  {
+                    ...content,
+                    state: 'discard',
+                  },
+                );
+                return broker.publish(
+                  BPMN_EXCHANGE.execution,
+                  BPMN_ROUTING.executeCompleted,
+                  {
+                    ...content,
+                    error: undefined,
+                    ktTaskDiscarded: true,
+                  },
+                );
               }
               return broker.publish(exchange, routingKey, content, properties);
             };
@@ -213,13 +250,13 @@ export class WorkflowConcurrentTaskBehaviour {
         },
       });
       broker.subscribeTmp(
-        'api',
+        BPMN_EXCHANGE.api,
         `activity.discard.${message.content.executionId}`,
         () => {
           if (this.instances.has(message.content.executionId))
             instanceBroker.publish(
-              'execution',
-              'execute.discard',
+              BPMN_EXCHANGE.execution,
+              BPMN_ROUTING.executeDiscard,
               message.content,
             );
         },
@@ -230,7 +267,7 @@ export class WorkflowConcurrentTaskBehaviour {
         },
       );
     }
-    if (this.activity.type === 'bpmn:UserTask')
+    if (this.activity.type === BPMN_TYPE.UserTask)
       return new UserTaskBehaviour(activity);
     return new ServiceTaskBehaviour(activity);
   }
@@ -251,9 +288,21 @@ export class WorkflowConcurrentTaskBehaviour {
       inbound,
       parent,
     };
-    this.activity.broker.publish('event', 'activity.execution.start', content);
-    this.activity.broker.publish('event', 'activity.instance.enter', content);
-    this.activity.broker.publish('execution', 'execute.start', content);
+    this.activity.broker.publish(
+      BPMN_EXCHANGE.event,
+      BPMN_ROUTING.activityExecutionStart,
+      content,
+    );
+    this.activity.broker.publish(
+      BPMN_EXCHANGE.event,
+      BPMN_ROUTING.activityInstanceEnter,
+      content,
+    );
+    this.activity.broker.publish(
+      BPMN_EXCHANGE.execution,
+      BPMN_ROUTING.executeStart,
+      content,
+    );
   }
 
   /** 等当前令牌传播结束后展开排队入口，全部实例完成后才结束活动容器。 */
@@ -265,15 +314,23 @@ export class WorkflowConcurrentTaskBehaviour {
       if (!this.running) return;
       const arrivals = this.arrivals.splice(0);
       if (arrivals.length) {
-        this.activity.broker.publish('event', 'activity.enter', {
-          ...this.root,
-          inbound: arrivals,
-        });
+        this.activity.broker.publish(
+          BPMN_EXCHANGE.event,
+          BPMN_ROUTING.activityEnter,
+          {
+            ...this.root,
+            inbound: arrivals,
+          },
+        );
         for (const arrival of arrivals) this.spawn([arrival]);
       }
       if (this.instances.size || this.arrivals.length) return;
       this.stop();
-      this.activity.broker.publish('execution', 'execute.completed', this.root);
+      this.activity.broker.publish(
+        BPMN_EXCHANGE.execution,
+        BPMN_ROUTING.executeCompleted,
+        this.root,
+      );
     });
   }
 

@@ -1,11 +1,15 @@
 import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { createHash } from 'node:crypto';
+  requireFound,
+  requireConsistent,
+  requireRequest,
+} from '@/common/automation/validation';
+import { workflowAllowsDispatch } from '../domain/workflow-execution-control.policy';
+import {
+  automationDigest,
+  automationFieldEntries,
+} from '@/common/automation/content-digest';
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { withWorkflowRunLock } from '../infrastructure/workflow-run-lock';
 import { definitionRecord } from '@/common/automation/definition.types';
@@ -37,20 +41,14 @@ export class WorkflowHumanTaskService {
     const run = await this.database
       .getRepository(WorkflowRun)
       .findOneBy({ id: runId });
-    if (
-      !run ||
-      run.cancelRequested ||
-      run.errorMessage ||
-      !['pending', 'running', 'waiting'].includes(run.status)
-    )
-      return [];
+    if (!workflowAllowsDispatch(run)) return [];
     const activities = await this.database
       .getRepository(WorkflowBpmnActivity)
       .findBy({ runId, delivered: false, cancelRequested: false });
     const result: WorkflowHumanTaskView[] = [];
     for (const activity of activities) {
       const step = activity.job.step;
-      if (step.kind !== 'human' || activity.state.status !== 'waiting')
+      if (step.kind !== 'human' || activity.state.status !== RUN_STATUS.waiting)
         continue;
       let form = null;
       if (step.formRef) form = await this.forms.resolve(step.formRef);
@@ -83,13 +81,9 @@ export class WorkflowHumanTaskService {
     input: unknown,
   ): Promise<void> {
     const values = validateDefinitionInput(() => definitionRecord(input));
-    const hash = createHash('sha256')
-      .update(
-        JSON.stringify(
-          Object.entries(values).sort(([a], [b]) => a.localeCompare(b)),
-        ),
-      )
-      .digest('hex');
+    const hash = automationDigest(
+      JSON.stringify(automationFieldEntries(values)),
+    );
     const locked = await withWorkflowRunLock(
       this.database,
       runId,
@@ -104,56 +98,54 @@ export class WorkflowHumanTaskService {
             runId,
             executionId,
           });
-          if (!run || !activity || activity.job.step.kind !== 'human')
-            throw new NotFoundException('人工待办不存在');
+          requireFound(
+            run && activity && activity.job.step.kind === 'human',
+            '人工待办不存在',
+          );
           const previous = activity.job.submission;
           if (previous) {
             if (previous.actorId === actorId && previous.hash === hash) return;
             throw new ConflictException('该待办已经提交了不同内容');
           }
-          const runActive =
-            !run.cancelRequested &&
-            !run.errorMessage &&
-            ['pending', 'running', 'waiting'].includes(run.status);
           const activityWaiting =
             !activity.cancelRequested &&
             !activity.delivered &&
-            activity.state.status === 'waiting';
-          if (
-            !runActive ||
-            !activityWaiting ||
-            new Date(run.deadlineAt).getTime() <= Date.now()
-          )
-            throw new ConflictException('该人工待办已经失效');
+            activity.state.status === RUN_STATUS.waiting;
+          requireConsistent(
+            workflowAllowsDispatch(run) && activityWaiting,
+            '该人工待办已经失效',
+          );
           const step = activity.job.step;
           let output: Record<string, unknown>;
           if (step.formRef) {
-            if (
-              Object.keys(values).some(
-                (key) => !step.writableFields.includes(key),
-              )
-            )
-              throw new BadRequestException('提交包含当前节点不可写的字段');
+            const writableFields = new Set(step.writableFields);
+            requireRequest(
+              !Object.keys(values).some((key) => !writableFields.has(key)),
+              '提交包含当前节点不可写的字段',
+            );
             output = await this.forms.validate(step.formRef, {
               ...activity.state.preparedInput,
               ...values,
             });
           } else {
-            if (values.confirmed !== true || Object.keys(values).length !== 1)
-              throw new BadRequestException('请确认当前步骤');
+            requireRequest(
+              values.confirmed === true && Object.keys(values).length === 1,
+              '请确认当前步骤',
+            );
             output = { confirmed: true };
           }
           if (step.businessKey) {
-            if (!run.businessContext)
-              throw new ConflictException('人工办理缺少业务实例身份');
+            requireConsistent(run.businessContext, '人工办理缺少业务实例身份');
             const process = this.processes.resolve(
               run.businessContext.processRef,
             );
             const capability = process.humanSteps?.find(
               (item) => item.key === step.businessKey,
             );
-            if (!capability || !process.acceptHumanStep)
-              throw new ConflictException('业务人工办理能力未装配');
+            requireConsistent(
+              capability && process.acceptHumanStep,
+              '业务人工办理能力未装配',
+            );
             const accepted = await process.acceptHumanStep({
               business: run.businessContext,
               executionId,
@@ -165,8 +157,10 @@ export class WorkflowHumanTaskService {
             const businessOutput = validateDefinitionInput(() =>
               validateDataValues(capability.outputSchema, accepted),
             );
-            if (Object.keys(businessOutput).some((key) => key in output))
-              throw new ConflictException('表单字段不能覆盖业务权威结果');
+            requireConsistent(
+              !Object.keys(businessOutput).some((key) => key in output),
+              '表单字段不能覆盖业务权威结果',
+            );
             output = { ...output, ...businessOutput };
           }
           activity.job.submission = {
@@ -175,7 +169,7 @@ export class WorkflowHumanTaskService {
             submittedAt: new Date().toISOString(),
           };
           activity.state.outputValues = output;
-          activity.state.status = 'succeeded';
+          activity.state.status = RUN_STATUS.succeeded;
           activity.state.finishedAt = new Date();
           await manager.save(WorkflowBpmnActivity, activity);
           await manager.update(
@@ -185,7 +179,6 @@ export class WorkflowHumanTaskService {
           );
         }),
     );
-    if (!locked.acquired)
-      throw new ConflictException('流程正在推进，请稍后提交');
+    requireConsistent(locked.acquired, '流程正在推进，请稍后提交');
   }
 }

@@ -1,6 +1,7 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { automationDigest } from '@/common/automation/content-digest';
+import { Inject, Injectable } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import { Observable } from 'rxjs';
 import {
   normalizeRunFeedQuery,
@@ -34,13 +35,20 @@ export class AutomationMonitorService {
         try {
           const page = await this.page(input);
           if (stopped) return;
-          const next = createHash('sha256').update(JSON.stringify(page)).digest('hex');
+          const next = automationDigest(JSON.stringify(page));
           if (next !== cursor) {
             cursor = next;
-            subscriber.next({ type: 'execution-snapshot', id: cursor, data: page });
+            subscriber.next({
+              type: 'execution-snapshot',
+              id: cursor,
+              data: page,
+            });
             heartbeatAt = Date.now();
           } else if (Date.now() - heartbeatAt >= 25_000) {
-            subscriber.next({ type: 'heartbeat', data: { observedAt: new Date().toISOString() } });
+            subscriber.next({
+              type: 'heartbeat',
+              data: { observedAt: new Date().toISOString() },
+            });
             heartbeatAt = Date.now();
           }
           if (!stopped) timeout = setTimeout(() => void poll(), 2_000);
@@ -71,8 +79,7 @@ export class AutomationMonitorService {
     };
     let kinds: RunKind[] = ['task', 'workflow', 'schedule'];
     if (input.kind !== undefined) {
-      if (!kinds.includes(input.kind as RunKind))
-        throw new BadRequestException('运行类型无效');
+      requireRequest(kinds.includes(input.kind as RunKind), '运行类型无效');
       kinds = [input.kind as RunKind];
     }
     const records = (

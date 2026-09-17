@@ -1,3 +1,4 @@
+import { BPMN_EXCHANGE, BPMN_ROUTING } from '../constants/bpmn-runtime';
 import { Activity, EventBasedGateway } from 'bpmn-elements';
 
 /**
@@ -7,7 +8,15 @@ import { Activity, EventBasedGateway } from 'bpmn-elements';
  * @returns 使用同一令牌与持久恢复机制的并行等待或排他竞争实例。
  */
 export function WorkflowEventBasedGateway(definition: any, context: any) {
-  if (definition.behaviour?.instantiate && definition.behaviour.eventGatewayType === 'Parallel') return new Activity(WorkflowParallelEventGatewayBehaviour, definition, context);
+  if (
+    definition.behaviour?.instantiate &&
+    definition.behaviour.eventGatewayType === 'Parallel'
+  )
+    return new Activity(
+      WorkflowParallelEventGatewayBehaviour,
+      definition,
+      context,
+    );
   return EventBasedGateway(definition, context);
 }
 
@@ -23,6 +32,10 @@ class WorkflowParallelEventGatewayBehaviour {
    * @param message - 网关当前执行或恢复消息；活动层负责持久化已发出的顺序流。
    */
   execute(message: any): void {
-    this.broker.publish('execution', 'execute.completed', { ...message.content, requireOutbound: true });
+    this.broker.publish(
+      BPMN_EXCHANGE.execution,
+      BPMN_ROUTING.executeCompleted,
+      { ...message.content, requireOutbound: true },
+    );
   }
 }

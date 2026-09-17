@@ -1,4 +1,10 @@
 import {
+  rejectDefinition,
+  requireDefinition,
+} from '@/common/automation/validation';
+
+import { FORBIDDEN_OBJECT_KEYS } from '@/common/automation/constants/identity';
+import {
   definitionRecord,
   publishedReference,
 } from '@/common/automation/definition.types';
@@ -36,27 +42,33 @@ export function normalizeScheduleBindings(
   input: unknown,
 ): Record<string, ScheduleBinding> {
   const source = definitionRecord(input);
-  if (Object.keys(source).length > 64)
-    throw new Error('计划映射最多支持 64 个字段');
+  requireDefinition(
+    Object.keys(source).length <= 64,
+    '计划映射最多支持 64 个字段',
+  );
   const result: Record<string, ScheduleBinding> = {};
   for (const [key, raw] of Object.entries(source)) {
-    if (
-      !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) ||
-      ['__proto__', 'prototype', 'constructor'].includes(key)
-    )
-      throw new Error('计划映射字段标识不合法');
+    requireDefinition(
+      /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) &&
+        !FORBIDDEN_OBJECT_KEYS.has(key),
+      '计划映射字段标识不合法',
+    );
     const binding = definitionRecord(raw);
     if (binding.source === 'literal') {
-      if (
-        typeof binding.value !== 'string' &&
-        typeof binding.value !== 'number' &&
-        typeof binding.value !== 'boolean'
-      )
-        throw new Error('计划常量必须是标量');
-      if (typeof binding.value === 'number' && !Number.isFinite(binding.value))
-        throw new Error('计划常量不能是无限数字');
-      if (typeof binding.value === 'string' && binding.value.length > 16384)
-        throw new Error('计划常量超过文本长度限制');
+      requireDefinition(
+        typeof binding.value === 'string' ||
+          typeof binding.value === 'number' ||
+          typeof binding.value === 'boolean',
+        '计划常量必须是标量',
+      );
+      requireDefinition(
+        typeof binding.value !== 'number' || Number.isFinite(binding.value),
+        '计划常量不能是无限数字',
+      );
+      requireDefinition(
+        typeof binding.value !== 'string' || binding.value.length <= 16384,
+        '计划常量超过文本长度限制',
+      );
       result[key] = { source: 'literal', value: binding.value };
       continue;
     }
@@ -77,7 +89,7 @@ export function normalizeScheduleBindings(
       result[key] = { source: 'occurrence', field: binding.field };
       continue;
     }
-    throw new Error('计划映射来源不支持');
+    rejectDefinition('计划映射来源不支持');
   }
   return result;
 }
@@ -92,15 +104,17 @@ export function normalizeScheduleDefinition(
   input: unknown,
 ): ScheduleDefinition {
   const source = definitionRecord(input);
-  if (source.schemaVersion !== 1) throw new Error('计划结构版本不支持');
-  if (source.overlap !== 'allow' && source.overlap !== 'skip')
-    throw new Error('计划重叠策略不支持');
-  if (
-    !Number.isSafeInteger(source.taskDeadlineMs) ||
-    Number(source.taskDeadlineMs) < 1000 ||
-    Number(source.taskDeadlineMs) > 86400000
-  )
-    throw new Error('原子任务总期限必须在 1 秒至 24 小时之间');
+  requireDefinition(source.schemaVersion === 1, '计划结构版本不支持');
+  requireDefinition(
+    source.overlap === 'allow' || source.overlap === 'skip',
+    '计划重叠策略不支持',
+  );
+  requireDefinition(
+    Number.isSafeInteger(source.taskDeadlineMs) &&
+      Number(source.taskDeadlineMs) >= 1000 &&
+      Number(source.taskDeadlineMs) <= 86400000,
+    '原子任务总期限必须在 1 秒至 24 小时之间',
+  );
   let triggerRef: ScheduleDefinition['triggerRef'] = null;
   let target: ScheduleDefinition['target'] = null;
   let admission: ScheduleDefinition['admission'] = null;
@@ -108,8 +122,10 @@ export function normalizeScheduleDefinition(
     triggerRef = publishedReference(source.triggerRef);
   if (source.target !== null) {
     const value = definitionRecord(source.target);
-    if (value.type !== 'task' && value.type !== 'workflow')
-      throw new Error('计划执行目标只能是任务或工作流');
+    requireDefinition(
+      value.type === 'task' || value.type === 'workflow',
+      '计划执行目标只能是任务或工作流',
+    );
     target = {
       type: value.type,
       reference: publishedReference(value.reference),
@@ -117,15 +133,17 @@ export function normalizeScheduleDefinition(
   }
   if (source.admission !== null) {
     const value = definitionRecord(source.admission);
-    if (
-      value.expected !== null &&
-      typeof value.expected !== 'boolean' &&
-      typeof value.expected !== 'string' &&
-      typeof value.expected !== 'number'
-    )
-      throw new Error('准入匹配值必须是规则结果标量');
-    if (typeof value.expected === 'number' && !Number.isFinite(value.expected))
-      throw new Error('准入匹配值必须是有限数字');
+    requireDefinition(
+      value.expected === null ||
+        typeof value.expected === 'boolean' ||
+        typeof value.expected === 'string' ||
+        typeof value.expected === 'number',
+      '准入匹配值必须是规则结果标量',
+    );
+    requireDefinition(
+      typeof value.expected !== 'number' || Number.isFinite(value.expected),
+      '准入匹配值必须是有限数字',
+    );
     admission = {
       ruleRef: publishedReference(value.ruleRef),
       facts: normalizeScheduleBindings(value.facts),
@@ -158,32 +176,42 @@ export function validateScheduleBindings(
   const targetFields = new Map(
     target.fields.map((field) => [field.key, field]),
   );
+  const eventFields = new Map(event.fields.map((field) => [field.key, field]));
+  const occurrenceFields = new Map(
+    metadataFields.map((field) => [field.key, field]),
+  );
   for (const [key, binding] of Object.entries(bindings)) {
     const destination = targetFields.get(key);
-    if (!destination) throw new Error(`计划映射包含未声明字段：${key}`);
+    requireDefinition(destination, `计划映射包含未声明字段：${key}`);
     if (binding.source === 'literal') {
       validateFieldValue(destination, binding.value);
       continue;
     }
-    let sourceFields = metadataFields;
-    if (binding.source === 'event') sourceFields = event.fields;
-    const field = sourceFields.find((item) => item.key === binding.field);
-    if (!field) throw new Error(`${destination.label}：来源字段不存在`);
+    let sourceFields = occurrenceFields;
+    if (binding.source === 'event') sourceFields = eventFields;
+    const field = sourceFields.get(binding.field);
+    requireDefinition(field, `${destination.label}：来源字段不存在`);
     const compatibleNumber =
       field.type === 'integer' && destination.type === 'number';
-    if (field.type !== destination.type && !compatibleNumber)
-      throw new Error(`${destination.label}：来源类型不兼容`);
-    if (destination.required && !field.required)
-      throw new Error(`${destination.label}：必填输入不能来自可缺失字段`);
-    if (destination.format && destination.format !== field.format)
-      throw new Error(`${destination.label}：来源日期格式不兼容`);
+    requireDefinition(
+      field.type === destination.type || compatibleNumber,
+      `${destination.label}：来源类型不兼容`,
+    );
+    requireDefinition(
+      !destination.required || field.required,
+      `${destination.label}：必填输入不能来自可缺失字段`,
+    );
+    requireDefinition(
+      !destination.format || destination.format === field.format,
+      `${destination.label}：来源日期格式不兼容`,
+    );
   }
   for (const field of target.fields) {
-    if (
-      field.required &&
-      !Object.prototype.hasOwnProperty.call(bindings, field.key)
-    )
-      throw new Error(`${field.label}：必填映射缺失`);
+    requireDefinition(
+      !field.required ||
+        Object.prototype.hasOwnProperty.call(bindings, field.key),
+      `${field.label}：必填映射缺失`,
+    );
   }
 }
 

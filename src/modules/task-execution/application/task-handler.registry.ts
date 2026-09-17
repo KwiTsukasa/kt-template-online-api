@@ -1,3 +1,4 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import { Injectable } from '@nestjs/common';
 import { normalizeDataSchema } from '@/common/automation/data-schema';
 import type {
@@ -17,27 +18,27 @@ export class TaskHandlerRegistry implements TaskHandlerRegistryPort {
    * @throws 身份重复、执行约束或数据契约不合法时拒绝注册。
    */
   register(handler: TaskHandler): () => void {
-    if (
-      !/^[a-z][a-z0-9_.:-]{2,190}$/.test(handler.key) ||
-      !Number.isSafeInteger(handler.version) ||
-      handler.version < 1 ||
-      !/^[a-z][a-z0-9-]{1,31}$/.test(handler.ownerKind)
-    )
-      throw new Error('处理器身份不合法');
-    if (
-      !Number.isSafeInteger(handler.timeoutMs) ||
-      handler.timeoutMs < 1000 ||
-      handler.timeoutMs > 3600000
-    )
-      throw new Error('处理器期限必须在一秒到一小时之间');
-    if (
-      typeof handler.idempotent !== 'boolean' ||
-      typeof handler.execute !== 'function' ||
-      typeof handler.isAvailable !== 'function'
-    )
-      throw new Error('处理器执行约束不合法');
+    requireExecutionState(
+      /^[a-z][a-z0-9_.:-]{2,190}$/.test(handler.key) &&
+        Number.isSafeInteger(handler.version) &&
+        !(handler.version < 1) &&
+        /^[a-z][a-z0-9-]{1,31}$/.test(handler.ownerKind),
+      '处理器身份不合法',
+    );
+    requireExecutionState(
+      Number.isSafeInteger(handler.timeoutMs) &&
+        !(handler.timeoutMs < 1000) &&
+        !(handler.timeoutMs > 3600000),
+      '处理器期限必须在一秒到一小时之间',
+    );
+    requireExecutionState(
+      typeof handler.idempotent === 'boolean' &&
+        typeof handler.execute === 'function' &&
+        typeof handler.isAvailable === 'function',
+      '处理器执行约束不合法',
+    );
     const key = `${handler.key}@${handler.version}`;
-    if (this.handlers.has(key)) throw new Error('处理器版本重复注册');
+    requireExecutionState(!this.handlers.has(key), '处理器版本重复注册');
     const saved = {
       ...handler,
       inputSchema: normalizeDataSchema(handler.inputSchema),

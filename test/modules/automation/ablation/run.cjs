@@ -45,26 +45,24 @@ const files = readdirSync(resolve(__dirname, '..'))
   .filter((name) => /^workflow-bpmn-.*\.test\.cjs$/.test(name))
   .sort()
   .map((name) => resolve(__dirname, '..', name));
-const sourceFiles = readdirSync(
-  join(root, 'src/modules/workflow-engine/infrastructure'),
-)
-  .filter((name) => /^workflow-bpmn.*\.ts$/.test(name))
+const sourceRoots = ['src/modules/workflow-engine', 'src/common/automation'];
+const sourceFiles = sourceRoots
+  .flatMap((directory) =>
+    readdirSync(join(root, directory), { recursive: true })
+      .filter((name) => /\.ts$/.test(name))
+      .map((name) => join(directory, name)),
+  )
   .sort();
 const sourceSha256 = createHash('sha256');
 for (const name of sourceFiles)
-  sourceSha256
-    .update(name)
-    .update(
-      readFileSync(
-        join(root, 'src/modules/workflow-engine/infrastructure', name),
-      ),
-    );
+  sourceSha256.update(name).update(readFileSync(join(root, name)));
 const identity = {
   commit: execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: root,
     encoding: 'utf8',
   }).trim(),
   sourceSha256: sourceSha256.digest('hex'),
+  sourceFiles,
   node: process.version,
   files,
 };

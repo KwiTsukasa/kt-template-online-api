@@ -3,8 +3,8 @@
 ALTER TABLE automation_workflow_run ADD COLUMN bpmn_state JSON NULL;
 CREATE TABLE IF NOT EXISTS automation_workflow_bpmn_activity (
   run_id BIGINT NOT NULL,
-  execution_id VARCHAR(191) NOT NULL,
-  element_id VARCHAR(191) NOT NULL,
+  execution_id VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  element_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   job JSON NOT NULL,
   step_state JSON NOT NULL,
   delivered TINYINT(1) NOT NULL DEFAULT 0,

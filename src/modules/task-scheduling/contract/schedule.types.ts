@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { DataScalar } from '@/common/automation/data-schema';
 import type { PublishedReference } from '@/common/automation/definition.types';
 import type { RuleScalar } from '@/modules/rule-engine/contract/rule.types';
@@ -24,13 +25,13 @@ export type ScheduleDefinition = {
   taskDeadlineMs: number;
 };
 export type ScheduleDispatchStatus =
-  | 'pending'
-  | 'starting'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'skipped'
-  | 'cancelled';
+  | typeof RUN_STATUS.pending
+  | typeof RUN_STATUS.starting
+  | typeof RUN_STATUS.running
+  | typeof RUN_STATUS.succeeded
+  | typeof RUN_STATUS.failed
+  | typeof RUN_STATUS.skipped
+  | typeof RUN_STATUS.cancelled;
 export const SCHEDULE_PLANS = Symbol('SCHEDULE_PLANS');
 export interface SchedulePlanPort {
   state: (scheduleId: string) => Promise<{

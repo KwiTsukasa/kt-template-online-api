@@ -1,17 +1,35 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { DefinitionRepository, validateDefinitionInput } from '@/common/automation/definition.repository';
-import { publishedReference, type PublishedReference } from '@/common/automation/definition.types';
+import {
+  DefinitionRepository,
+  validateDefinitionInput,
+} from '@/common/automation/definition.repository';
+import {
+  publishedReference,
+  type PublishedReference,
+} from '@/common/automation/definition.types';
 import type { RuleDefinition, RuleEnginePort } from '../contract/rule.types';
-import { evaluateRuleDefinition, normalizeRuleDefinition } from '../domain/rule.policy';
-import { RuleDraft, RuleRevision } from '../infrastructure/persistence/rule.entities';
+import {
+  evaluateRuleDefinition,
+  normalizeRuleDefinition,
+} from '../domain/rule.policy';
+import {
+  RuleDraft,
+  RuleRevision,
+} from '../infrastructure/persistence/rule.entities';
 
 @Injectable()
 export class RuleEngineService implements RuleEnginePort {
   readonly definitions: DefinitionRepository<RuleDefinition>;
 
   constructor(database: DataSource) {
-    this.definitions = new DefinitionRepository(database, RuleDraft, RuleRevision, normalizeRuleDefinition);
+    this.definitions = new DefinitionRepository(
+      database,
+      RuleDraft,
+      RuleRevision,
+      normalizeRuleDefinition,
+    );
   }
 
   /**
@@ -20,7 +38,9 @@ export class RuleEngineService implements RuleEnginePort {
    * @returns 固定的规则定义。
    */
   async resolve(reference: PublishedReference) {
-    return this.definitions.published(validateDefinitionInput(() => publishedReference(reference)));
+    return this.definitions.published(
+      validateDefinitionInput(() => publishedReference(reference)),
+    );
   }
 
   /**
@@ -31,7 +51,9 @@ export class RuleEngineService implements RuleEnginePort {
    */
   async evaluate(reference: PublishedReference, facts: unknown) {
     const definition = await this.resolve(reference);
-    return validateDefinitionInput(() => evaluateRuleDefinition(definition, facts));
+    return validateDefinitionInput(() =>
+      evaluateRuleDefinition(definition, facts),
+    );
   }
 
   /**
@@ -45,7 +67,12 @@ export class RuleEngineService implements RuleEnginePort {
       const definition = normalizeRuleDefinition(input);
       const cases = definition.testCases.map((item) => {
         const actual = evaluateRuleDefinition(definition, item.facts);
-        return { name: item.name, expected: item.expected, actual: actual.result, passed: actual.result === item.expected };
+        return {
+          name: item.name,
+          expected: item.expected,
+          actual: actual.result,
+          passed: actual.result === item.expected,
+        };
       });
       return { ...evaluateRuleDefinition(definition, facts), cases };
     });
@@ -57,7 +84,13 @@ export class RuleEngineService implements RuleEnginePort {
    * @throws 任一保存用例失败时拒绝发布。
    */
   async checkForPublish(definition: RuleDefinition): Promise<void> {
-    const failed = definition.testCases.filter((item) => evaluateRuleDefinition(definition, item.facts).result !== item.expected);
-    if (failed.length) throw new BadRequestException(`规则测试未通过：${failed.map((item) => item.name).join('、')}`);
+    const failed = definition.testCases.filter(
+      (item) =>
+        evaluateRuleDefinition(definition, item.facts).result !== item.expected,
+    );
+    requireRequest(
+      !failed.length,
+      `规则测试未通过：${failed.map((item) => item.name).join('、')}`,
+    );
   }
 }

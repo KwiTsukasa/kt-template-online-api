@@ -1,3 +1,4 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import type { ConfigService } from '@nestjs/config';
 import type { ConnectionOptions } from 'bullmq';
 
@@ -55,9 +56,9 @@ export function automationQueueConnection(config: ConfigService): {
   ]);
   const validPort = Number.isSafeInteger(port) && port >= 1 && port <= 65535;
   const validDatabase = Number.isSafeInteger(db) && db >= 0;
-  if (!host) throw new Error('自动化队列缺少 Redis 主机');
-  if (!validPort) throw new Error('自动化队列 Redis 端口不合法');
-  if (!validDatabase) throw new Error('自动化队列 Redis 数据库编号不合法');
+  requireExecutionState(host, '自动化队列缺少 Redis 主机');
+  requireExecutionState(validPort, '自动化队列 Redis 端口不合法');
+  requireExecutionState(validDatabase, '自动化队列 Redis 数据库编号不合法');
   return {
     connection: { host, port, db, password: password || undefined },
     prefix: read(

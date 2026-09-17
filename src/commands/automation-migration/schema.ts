@@ -11,7 +11,13 @@ export const AUTOMATION_SQL_FILES = [
   'automation-workflow-business-v2.sql',
   'automation-workflow-loop-v3.sql',
   'automation-workflow-bpmn-v4.sql',
+  'automation-workflow-subject-v5.sql',
+  'automation-workflow-identity-v6.sql',
 ] as const;
+const BPMN_IDENTITY_COLUMNS: Readonly<Record<string, number>> = {
+  execution_id: 512,
+  element_id: 191,
+};
 const DRAFT_TABLES = new Set([
   'automation_task',
   'automation_trigger',
@@ -32,7 +38,7 @@ export async function readAutomationColumns(
   table: string,
 ) {
   const [rows] = await connection.query<RowDataPacket[]>(
-    'SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',
+    'SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLLATION_NAME, GENERATION_EXPRESSION, EXTRA FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',
     [table],
   );
   return new Map(rows.map((row) => [String(row.COLUMN_NAME), row]));
@@ -82,6 +88,26 @@ function canonicalType(type: string): string {
   return type
     .toLowerCase()
     .replace(/\b(tinyint|smallint|int|bigint)\(\d+\)/g, '$1');
+}
+
+/**
+ * 比较本模块派生列的条件表达式，忽略 MySQL 添加的标识引号、括号和字符集前缀，保留字符串内容。
+ * @param expression - 版本 SQL 或元数据中的派生表达式。
+ * @returns 可以逐字比较的条件表达式标记序列。
+ */
+function canonicalGeneratedExpression(expression: string): string {
+  const source = expression
+    .replace(/\\'/g, "'")
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/_[a-z0-9]+(?=')/gi, '');
+  const tokens =
+    source.match(/'(?:''|[^'])*'|[a-z_][a-z_0-9]*|[^\s()]/gi) ?? [];
+  return tokens
+    .map((token) => {
+      if (token.startsWith("'")) return token;
+      return token.toLowerCase();
+    })
+    .join('|');
 }
 
 /**
@@ -144,6 +170,16 @@ async function verifyTable(
       throw new Error(`自动化字段类型不一致：${table}.${match[1]}`);
     if ((column.IS_NULLABLE === 'NO') !== /\bNOT NULL\b/i.test(definition))
       throw new Error(`自动化字段可空约束不一致：${table}.${match[1]}`);
+    const generated = /GENERATED ALWAYS AS\s*\(([\s\S]+)\)\s+STORED\b/i.exec(
+      definition,
+    );
+    if (
+      generated &&
+      (!String(column.EXTRA).includes('STORED GENERATED') ||
+        canonicalGeneratedExpression(String(column.GENERATION_EXPRESSION)) !==
+          canonicalGeneratedExpression(generated[1]))
+    )
+      throw new Error(`自动化派生字段表达式不一致：${table}.${match[1]}`);
     if (
       /COLLATE utf8mb4_bin/i.test(definition) &&
       column.COLLATION_NAME !== 'utf8mb4_bin'
@@ -174,15 +210,17 @@ export async function ensureAutomationSchema(
   sqlRoot: string,
 ): Promise<string[]> {
   const tables: string[] = [];
+  const creates: Array<{ table: string; statement: string; body: string }> = [];
+  const alterations: Array<{ table: string; additions: string }> = [];
   for (const file of AUTOMATION_SQL_FILES) {
     const source = readFileSync(join(sqlRoot, file), 'utf8');
     for (const statement of parseMysqlScript(source)) {
       const alter =
-        /^\s*(?:--[^\n]*\n\s*)*ALTER TABLE\s+(automation_workflow_run|automation_workflow_node_run)\s+([\s\S]+)$/i.exec(
+        /^\s*(?:--[^\n]*\n\s*)*ALTER TABLE\s+(automation_workflow_run|automation_workflow_node_run|automation_workflow_bpmn_activity)\s+([\s\S]+)$/i.exec(
           statement,
         );
       if (alter) {
-        await extendWorkflowTable(connection, alter[1], alter[2]);
+        alterations.push({ table: alter[1], additions: alter[2] });
         continue;
       }
       const match =
@@ -193,25 +231,31 @@ export async function ensureAutomationSchema(
       const table = match[1];
       if (!table.startsWith('automation_') && table !== 'bot_reminder')
         throw new Error('自动化迁移表超出范围');
-      await connection.query(statement);
-      if (DRAFT_TABLES.has(table)) {
-        const columns = await readAutomationColumns(connection, table);
-        if (!columns.has('source_key'))
-          await connection.query(
-            `ALTER TABLE \`${table}\` ADD COLUMN source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE`,
-          );
-      }
-      await verifyTable(connection, table, match[2]);
+      creates.push({ table, statement, body: match[2] });
       tables.push(table);
     }
   }
   if (tables.length !== 28 || new Set(tables).size !== 28)
     throw new Error('自动化模块表数不符合发布契约');
+  for (const { table, statement } of creates) {
+    await connection.query(statement);
+    if (DRAFT_TABLES.has(table)) {
+      const columns = await readAutomationColumns(connection, table);
+      if (!columns.has('source_key'))
+        await connection.query(
+          `ALTER TABLE \`${table}\` ADD COLUMN source_key VARCHAR(191) COLLATE utf8mb4_bin NULL UNIQUE`,
+        );
+    }
+  }
+  for (const { table, additions } of alterations)
+    await extendWorkflowTable(connection, table, additions);
+  for (const { table, body } of creates)
+    await verifyTable(connection, table, body);
   return tables;
 }
 
 /**
- * 仅执行版本化工作流增量中的新增字段和索引，重跑跳过已存在项但拒绝结构漂移。
+ * 执行版本化字段、索引增补及执行身份扩容，重跑跳过已满足项，拒绝缩列或其他结构漂移。
  * @param connection - 当前目标库的迁移连接。
  * @param table - 已通过白名单限定的流程或节点运行表。
  * @param additions - SQL 声明的顶层新增字段与索引列表。
@@ -223,6 +267,32 @@ async function extendWorkflowTable(
   additions: string,
 ): Promise<void> {
   for (const addition of splitDefinitions(additions)) {
+    const identity =
+      /^MODIFY COLUMN (execution_id|element_id) VARCHAR\((\d+)\) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL$/i.exec(
+        addition,
+      );
+    if (identity && table === 'automation_workflow_bpmn_activity') {
+      const name = identity[1];
+      const target = BPMN_IDENTITY_COLUMNS[name];
+      const expected = 'varchar(' + target + ')';
+      const column = (await readAutomationColumns(connection, table)).get(name);
+      const type = canonicalType(String(column?.COLUMN_TYPE));
+      if (
+        Number(identity[2]) !== target ||
+        !column ||
+        column.IS_NULLABLE !== 'NO' ||
+        (type !== 'varchar(191)' && type !== expected)
+      )
+        throw new Error('工作流身份列不符合允许迁移的前置结构');
+      if (type !== expected || column.COLLATION_NAME !== 'utf8mb4_bin')
+        await connection.query('ALTER TABLE `' + table + '` ' + addition);
+      await verifyTable(
+        connection,
+        table,
+        name + ' VARCHAR(' + target + ') COLLATE utf8mb4_bin NOT NULL',
+      );
+      continue;
+    }
     const column = /^ADD COLUMN\s+([A-Za-z0-9_]+)\s+([\s\S]+)$/i.exec(addition);
     if (column) {
       if (!(await readAutomationColumns(connection, table)).has(column[1]))
@@ -230,17 +300,20 @@ async function extendWorkflowTable(
       await verifyTable(connection, table, `${column[1]} ${column[2]}`);
       continue;
     }
-    const index = /^ADD INDEX\s+([A-Za-z0-9_]+)\s*(\([A-Za-z0-9_, ]+\))$/i.exec(
-      addition,
-    );
+    const index =
+      /^ADD (UNIQUE )?INDEX\s+([A-Za-z0-9_]+)\s*(\([A-Za-z0-9_, ]+\))$/i.exec(
+        addition,
+      );
     if (!index) throw new Error(`工作流增量只允许新增字段或索引：${table}`);
     const [existing] = await connection.query<RowDataPacket[]>(
       'SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?',
-      [table, index[1]],
+      [table, index[2]],
     );
     if (!existing.length)
       await connection.query(`ALTER TABLE \`${table}\` ${addition}`);
-    await verifyTable(connection, table, `KEY ${index[1]} ${index[2]}`);
+    let key = 'KEY';
+    if (index[1]) key = 'UNIQUE KEY';
+    await verifyTable(connection, table, `${key} ${index[2]} ${index[3]}`);
   }
 }
 

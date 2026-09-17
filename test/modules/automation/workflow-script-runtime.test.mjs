@@ -52,6 +52,43 @@ const run = async (sample) => {
   );
 };
 
+test('真实远端控制程序不把未来时间戳视为有效脚本心跳', async () => {
+  const sample = await fixture('future-heartbeat', prefix);
+  await writeFile(
+    path.join(sample.directory, 'heartbeat.json'),
+    JSON.stringify({
+      executionId: sample.executionId,
+      observedAt: new Date(Date.now() + 60_000).toISOString(),
+    }),
+  );
+  const controller = fileURLToPath(
+    new URL('../../../scripts/workflow/remote-control.cjs', import.meta.url),
+  );
+  const output = await new Promise((resolve, reject) => {
+    const child = execFile(
+      process.execPath,
+      [controller],
+      { windowsHide: true, timeout: 5000 },
+      (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout);
+      },
+    );
+    child.stdin.end(
+      JSON.stringify({
+        operation: 'read',
+        executionId: sample.executionId,
+        root,
+        nodeBinary: process.execPath,
+      }),
+    );
+  });
+  assert.deepEqual(JSON.parse(output), {
+    executionId: sample.executionId,
+    value: { executionId: sample.executionId, status: 'unconfirmed' },
+  });
+});
+
 test('真实短进程按标准回执完成并退出，业务字段保留在 data 内', async () => {
   const sample = await fixture(
     'success',
@@ -151,6 +188,22 @@ test('工作流停止意图等待实际脚本退出才形成取消回执', async
     JSON.stringify({ executionId: sample.executionId }),
   );
   assert.equal((await running).status, 'cancelled');
+});
+
+test('派发前已写入取消意图时不执行脚本副作用', async () => {
+  const sample = await fixture(
+    'cancel-before-start',
+    `import{writeFileSync}from'node:fs';${prefix}writeFileSync('unexpected-side-effect.txt','started');console.log(JSON.stringify(event));`,
+  );
+  await writeFile(
+    path.join(sample.directory, 'cancel.json'),
+    JSON.stringify({ executionId: sample.executionId }),
+  );
+  assert.equal((await run(sample)).status, 'cancelled');
+  await assert.rejects(
+    readFile(path.join(sample.directory, 'unexpected-side-effect.txt')),
+    { code: 'ENOENT' },
+  );
 });
 
 test('Bash 脚本通过固定解释器接收标准输入并返回标准业务结果', async () => {

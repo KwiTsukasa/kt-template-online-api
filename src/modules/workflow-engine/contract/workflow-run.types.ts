@@ -1,3 +1,4 @@
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import type { PublishedReference } from '@/common/automation/definition.types';
 import type { FormDefinition } from '@/modules/form-definition/contract/form.types';
 import type { WorkflowBusinessContext } from './workflow-process.interface';
@@ -5,19 +6,19 @@ import type { WorkflowScriptAttempt } from './workflow-script.types';
 import type { WorkflowBpmnTransition } from '../infrastructure/workflow-bpmn.runtime';
 
 export type WorkflowRunStatus =
-  | 'pending'
-  | 'running'
-  | 'waiting'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  | typeof RUN_STATUS.pending
+  | typeof RUN_STATUS.running
+  | typeof RUN_STATUS.waiting
+  | typeof RUN_STATUS.succeeded
+  | typeof RUN_STATUS.failed
+  | typeof RUN_STATUS.cancelled;
 export type WorkflowNodeStatus =
-  | 'pending'
-  | 'waiting'
-  | 'succeeded'
-  | 'failed'
-  | 'skipped'
-  | 'cancelled';
+  | typeof RUN_STATUS.pending
+  | typeof RUN_STATUS.waiting
+  | typeof RUN_STATUS.succeeded
+  | typeof RUN_STATUS.failed
+  | typeof RUN_STATUS.skipped
+  | typeof RUN_STATUS.cancelled;
 export type WorkflowNodeView = {
   nodeId: string;
   status: WorkflowNodeStatus;
@@ -59,7 +60,14 @@ export type WorkflowRunView = {
   output: Record<string, unknown>;
   error: string | null;
   nodes: WorkflowNodeView[];
-  activities?: Array<{ executionId: string; nodeId: string; status: WorkflowNodeStatus; visit: number; output: Record<string, unknown>; error: string | null }>;
+  activities?: Array<{
+    executionId: string;
+    nodeId: string;
+    status: WorkflowNodeStatus;
+    visit: number;
+    output: Record<string, unknown>;
+    error: string | null;
+  }>;
   transitions?: WorkflowBpmnTransition[];
   activeActivities?: import('../infrastructure/workflow-bpmn.runtime').WorkflowBpmnActiveActivity[];
 };

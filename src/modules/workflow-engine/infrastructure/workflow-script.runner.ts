@@ -1,3 +1,6 @@
+import { requireExecutionState } from '@/common/automation/validation';
+import { SCRIPT_LIMITS, SCRIPT_PATTERN } from '../constants/script';
+import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'node:child_process';
@@ -7,15 +10,12 @@ import { isDeepStrictEqual } from 'node:util';
 import type {
   WorkflowScriptCall,
   WorkflowScriptDefinition,
-  WorkflowScriptResult,
+  WorkflowScriptObservation,
 } from '../contract/workflow-script.types';
 import { normalizeWorkflowPayload } from '../domain/workflow-script.policy';
 import { WorkflowNasTransport } from './workflow-nas.transport';
-
-export type ScriptObservation =
-  | WorkflowScriptResult
-  | { status: 'running'; executionId: string }
-  | { status: 'unconfirmed'; executionId: string };
+import { workflowRuntimeAsset } from './workflow-runtime-assets';
+import { normalizeWorkflowScriptObservation } from '../domain/workflow-script-observation.policy';
 
 @Injectable()
 export class WorkflowScriptRunner {
@@ -41,12 +41,14 @@ export class WorkflowScriptRunner {
     if (script.target === 'nas') {
       const binaryKey = `WORKFLOW_NAS_${script.runtime.toUpperCase()}_BINARY`;
       const binary = this.config.get<string>(binaryKey) || '';
-      if (!path.posix.isAbsolute(binary))
-        throw new Error('工作流 NAS 脚本解释器需配置绝对路径');
+      requireExecutionState(
+        path.posix.isAbsolute(binary),
+        '工作流 NAS 脚本解释器需配置绝对路径',
+      );
       const [source, wrapper, protocol] = await Promise.all([
         readFile(script.path, 'utf8'),
-        readFile(path.resolve('scripts/workflow/run-script.mjs'), 'utf8'),
-        readFile(path.resolve('scripts/workflow/script-protocol.mjs'), 'utf8'),
+        readFile(workflowRuntimeAsset('run-script.mjs'), 'utf8'),
+        readFile(workflowRuntimeAsset('script-protocol.mjs'), 'utf8'),
       ]);
       await this.nas.request('start', executionId, {
         source,
@@ -64,19 +66,23 @@ export class WorkflowScriptRunner {
       return;
     }
     const directory = this.directory(executionId);
-    const wrapper = path.resolve(__dirname, '../../../../scripts/workflow/run-script.mjs');
+    const wrapper = workflowRuntimeAsset('run-script.mjs');
     await access(wrapper);
     let binary = process.execPath;
     if (script.runtime === 'python') {
       binary = this.config.get<string>('WORKFLOW_PYTHON_BINARY') || '';
-      if (!path.isAbsolute(binary))
-        throw new Error('工作流 Python 解释器需配置绝对路径');
+      requireExecutionState(
+        path.isAbsolute(binary),
+        '工作流 Python 解释器需配置绝对路径',
+      );
     }
     if (script.runtime === 'bash') {
       binary = this.config.get<string>('WORKFLOW_BASH_BINARY') || '';
       if (!binary && process.platform !== 'win32') binary = '/bin/bash';
-      if (!path.isAbsolute(binary))
-        throw new Error('工作流 Bash 解释器需配置绝对路径');
+      requireExecutionState(
+        path.isAbsolute(binary),
+        '工作流 Bash 解释器需配置绝对路径',
+      );
     }
     const manifest = {
       executionId,
@@ -96,13 +102,13 @@ export class WorkflowScriptRunner {
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (
-        !isDeepStrictEqual(
+      requireExecutionState(
+        isDeepStrictEqual(
           JSON.parse(await readFile(inputFile, 'utf8')),
           manifest,
-        )
-      )
-        throw new Error('工作流脚本尝试输入发生变化');
+        ),
+        '工作流脚本尝试输入发生变化',
+      );
     }
     try {
       await access(path.join(directory, 'claimed'));
@@ -135,51 +141,17 @@ export class WorkflowScriptRunner {
   async read(
     executionId: string,
     target: 'local' | 'nas' = 'local',
-  ): Promise<ScriptObservation> {
+  ): Promise<WorkflowScriptObservation> {
     if (target === 'nas') {
-      const result = (await this.nas.request(
-        'read',
-        executionId,
-      )) as ScriptObservation;
-      if (
-        result?.executionId !== executionId ||
-        ![
-          'running',
-          'unconfirmed',
-          'succeeded',
-          'failed',
-          'cancelled',
-        ].includes(result.status)
-      )
-        throw new Error('工作流 NAS 脚本回执身份或状态无效');
-      if (result.status === 'running' || result.status === 'unconfirmed')
-        return result;
-      if (
-        !('script' in result) ||
-        (result.status === 'succeeded' && result.exitCode !== 0)
-      )
-        throw new Error('工作流 NAS 脚本退出回执无效');
-      return { ...result, output: normalizeWorkflowPayload(result.output) };
+      const result = await this.nas.request('read', executionId);
+      return normalizeWorkflowScriptObservation(result, executionId, true);
     }
     const directory = this.directory(executionId);
     try {
       const result = JSON.parse(
         await readFile(path.join(directory, 'result.json'), 'utf8'),
       );
-      if (
-        result.executionId !== executionId ||
-        !['succeeded', 'failed', 'cancelled'].includes(result.status) ||
-        !result.script ||
-        (result.status === 'succeeded' && result.exitCode !== 0)
-      )
-        throw new Error('工作流脚本回执身份或状态无效');
-      return {
-        executionId,
-        script: result.script,
-        status: result.status,
-        exitCode: result.exitCode,
-        output: normalizeWorkflowPayload(result.output),
-      };
+      return normalizeWorkflowScriptObservation(result, executionId, false);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -187,15 +159,17 @@ export class WorkflowScriptRunner {
       const heartbeat = JSON.parse(
         await readFile(path.join(directory, 'heartbeat.json'), 'utf8'),
       );
+      const age = Date.now() - Date.parse(heartbeat.observedAt);
       if (
         heartbeat.executionId === executionId &&
-        Date.now() - Date.parse(heartbeat.observedAt) < 10_000
+        age >= 0 &&
+        age < SCRIPT_LIMITS.heartbeatTtlMs
       )
-        return { status: 'running', executionId };
+        return { status: RUN_STATUS.running, executionId };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    return { status: 'unconfirmed', executionId };
+    return { status: RUN_STATUS.unconfirmed, executionId };
   }
 
   /**
@@ -228,8 +202,10 @@ export class WorkflowScriptRunner {
    */
   private directory(executionId: string): string {
     const root = this.config.get<string>('WORKFLOW_SCRIPT_STATE_ROOT') || '';
-    if (!path.isAbsolute(root) || !/^[a-f0-9]{64}$/.test(executionId))
-      throw new Error('工作流脚本状态目录或运行身份无效');
+    requireExecutionState(
+      path.isAbsolute(root) && SCRIPT_PATTERN.sha256.test(executionId),
+      '工作流脚本状态目录或运行身份无效',
+    );
     return path.join(root, executionId);
   }
 }

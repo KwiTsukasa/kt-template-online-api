@@ -1,12 +1,12 @@
+import { requireExecutionState } from '@/common/automation/validation';
 import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  type OnModuleInit,
-} from '@nestjs/common';
+  requireRequest,
+  requireConsistent,
+} from '@/common/automation/validation';
+import { automationDigest } from '@/common/automation/content-digest';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
-import { createHash } from 'node:crypto';
 import { withDatabaseLock } from '@/common/locks/database-lock';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -56,8 +56,10 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
   async upload(input: { filename: unknown; source: unknown; target: unknown }) {
     const declaration = this.inspect(input.filename, input.source);
     const target = input.target;
-    if (target !== 'local' && target !== 'nas')
-      throw new BadRequestException('脚本执行目标不支持');
+    requireRequest(
+      target === 'local' || target === 'nas',
+      '脚本执行目标不支持',
+    );
     const compatible = this.processes
       .catalog()
       .some(
@@ -65,9 +67,8 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
           process.key === declaration.processKey &&
           process.steps.some((step) => step.key === declaration.stepKey),
       );
-    if (!compatible)
-      throw new BadRequestException('脚本声明的业务接口或步骤尚未装配');
-    const lock = `kt:script:${createHash('sha256').update(declaration.key).digest('hex').slice(0, 48)}`;
+    requireRequest(compatible, '脚本声明的业务接口或步骤尚未装配');
+    const lock = `kt:script:${automationDigest(declaration.key).slice(0, 48)}`;
     const result = await withDatabaseLock(
       this.database,
       lock,
@@ -109,8 +110,7 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
         return { ...declaration, version, target };
       },
     );
-    if (!result.acquired)
-      throw new ConflictException('同一脚本正在上传，请稍后重试');
+    requireConsistent(result.acquired, '同一脚本正在上传，请稍后重试');
     return result.value;
   }
 
@@ -121,8 +121,10 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
    */
   private async materialize(asset: WorkflowScriptAsset): Promise<void> {
     const root = this.config.get<string>('WORKFLOW_SCRIPT_STATE_ROOT') || '';
-    if (!path.isAbsolute(root))
-      throw new Error('工作流脚本状态目录需配置绝对路径');
+    requireExecutionState(
+      path.isAbsolute(root),
+      '工作流脚本状态目录需配置绝对路径',
+    );
     const directory = path.join(root, 'scripts', asset.sha256);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     let filename = 'script.mjs';
@@ -134,10 +136,8 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
-    const digest = createHash('sha256')
-      .update(await readFile(scriptPath))
-      .digest('hex');
-    if (digest !== asset.sha256) throw new Error('持久化脚本文件摘要不匹配');
+    const digest = automationDigest(await readFile(scriptPath));
+    requireExecutionState(digest === asset.sha256, '持久化脚本文件摘要不匹配');
     this.scripts.register({
       ...asset.declaration,
       version: asset.version,

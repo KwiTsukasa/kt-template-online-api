@@ -11,7 +11,7 @@ const {
 } = require('../../../../src/modules/workflow-engine/infrastructure/workflow-bpmn.runtime');
 const {
   KT_BPMN_STEP,
-} = require('../../../../src/modules/workflow-engine/contract/workflow-bpmn.types');
+} = require('../../../../src/modules/workflow-engine/constants/bpmn');
 
 (async () => {
   const nodes = [{ $type: 'bpmn:StartEvent', id: 'start' }];

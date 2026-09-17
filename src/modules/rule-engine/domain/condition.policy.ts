@@ -1,7 +1,13 @@
+import { requireDefinition } from '@/common/automation/validation';
+import { FORBIDDEN_OBJECT_KEYS } from '@/common/automation/constants/identity';
 import { definitionRecord } from '@/common/automation/definition.types';
-import type { RuleCondition, RuleConditionTrace, RuleScalar } from '../contract/rule.types';
+import type {
+  RuleCondition,
+  RuleConditionTrace,
+  RuleScalar,
+} from '../contract/rule.types';
 
-const forbiddenKeys = new Set(['__proto__', 'constructor', 'prototype']);
+const forbiddenKeys = FORBIDDEN_OBJECT_KEYS;
 const scalarKinds = new Set(['boolean', 'number', 'string']);
 const comparisonOperators = new Set([
   'eq',
@@ -24,13 +30,12 @@ const numericOperators = new Set(['gt', 'gte', 'lt', 'lte']);
  */
 function ruleScalar(value: unknown): RuleScalar {
   if (value === null) return null;
-  if (
-    !scalarKinds.has(typeof value) ||
-    (typeof value === 'number' && !Number.isFinite(value)) ||
-    (typeof value === 'string' && value.length > 2048)
-  ) {
-    throw new Error('规则比较值必须是有界标量');
-  }
+  requireDefinition(
+    scalarKinds.has(typeof value) &&
+      (typeof value !== 'number' || Number.isFinite(value)) &&
+      (typeof value !== 'string' || value.length <= 2048),
+    '规则比较值必须是有界标量',
+  );
   return value as RuleScalar;
 }
 
@@ -45,16 +50,18 @@ export function normalizeRuleCondition(input: unknown): RuleCondition | null {
   let remaining = 64;
   const visit = (raw: unknown, depth: number): RuleCondition => {
     remaining -= 1;
-    if (remaining < 0 || depth > 8)
-      throw new Error('条件树超过 64 节点或 8 层限制');
+    requireDefinition(
+      remaining >= 0 && depth <= 8,
+      '条件树超过 64 节点或 8 层限制',
+    );
     const item = definitionRecord(raw);
     if (item.type === 'all' || item.type === 'any') {
-      if (
-        !Array.isArray(item.rules) ||
-        !item.rules.length ||
-        item.rules.length > 32
-      )
-        throw new Error('条件组合必须包含 1 至 32 个子条件');
+      requireDefinition(
+        Array.isArray(item.rules) &&
+          item.rules.length &&
+          item.rules.length <= 32,
+        '条件组合必须包含 1 至 32 个子条件',
+      );
       return {
         type: item.type,
         rules: item.rules.map((child) => visit(child, depth + 1)),
@@ -62,37 +69,42 @@ export function normalizeRuleCondition(input: unknown): RuleCondition | null {
     }
     if (item.type === 'not')
       return { type: 'not', rule: visit(item.rule, depth + 1) };
-    if (
-      item.type !== 'compare' ||
-      typeof item.path !== 'string' ||
-      !/^[A-Za-z_][\w-]*(\.[A-Za-z_0-9][\w-]*)*$/.test(item.path) ||
-      item.path.length > 256 ||
-      item.path.split('.').some((key) => forbiddenKeys.has(key))
-    ) {
-      throw new Error('规则路径或节点类型不合法');
-    }
-    if (!comparisonOperators.has(String(item.operator)))
-      throw new Error('规则运算符不支持');
+    requireDefinition(
+      item.type === 'compare' &&
+        typeof item.path === 'string' &&
+        /^[A-Za-z_][\w-]*(\.[A-Za-z_0-9][\w-]*)*$/.test(item.path) &&
+        item.path.length <= 256 &&
+        !item.path.split('.').some((key) => forbiddenKeys.has(key)),
+      '规则路径或节点类型不合法',
+    );
+    requireDefinition(
+      comparisonOperators.has(String(item.operator)),
+      '规则运算符不支持',
+    );
     const operator = item.operator as Extract<
       RuleCondition,
       { type: 'compare' }
     >['operator'];
     let value: RuleScalar | RuleScalar[];
     if (operator === 'in') {
-      if (
-        !Array.isArray(item.value) ||
-        !item.value.length ||
-        item.value.length > 32
-      )
-        throw new Error('集合比较必须包含 1 至 32 个标量');
+      requireDefinition(
+        Array.isArray(item.value) &&
+          item.value.length &&
+          item.value.length <= 32,
+        '集合比较必须包含 1 至 32 个标量',
+      );
       value = item.value.map(ruleScalar);
     } else {
       value = ruleScalar(item.value);
     }
-    if (numericOperators.has(operator) && typeof value !== 'number')
-      throw new Error('大小比较要求数字');
-    if (operator === 'exists' && typeof value !== 'boolean')
-      throw new Error('存在性比较要求布尔值');
+    requireDefinition(
+      !numericOperators.has(operator) || typeof value === 'number',
+      '大小比较要求数字',
+    );
+    requireDefinition(
+      operator !== 'exists' || typeof value === 'boolean',
+      '存在性比较要求布尔值',
+    );
     return { type: 'compare', path: item.path, operator, value };
   };
   return visit(input, 0);
@@ -172,7 +184,9 @@ export function explainRuleCondition(
   const trace: RuleConditionTrace[] = [];
   let matched: boolean;
   if (rule.type === 'all' || rule.type === 'any') {
-    const children = rule.rules.map((child, index) => explainRuleCondition(child, input, `${location}.${index}`));
+    const children = rule.rules.map((child, index) =>
+      explainRuleCondition(child, input, `${location}.${index}`),
+    );
     matched = children.every((child) => child.matched);
     if (rule.type === 'any') matched = children.some((child) => child.matched);
     trace.push(...children.flatMap((child) => child.trace));

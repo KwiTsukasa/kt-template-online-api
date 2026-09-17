@@ -1,13 +1,9 @@
+import type { BPMN_FORMAT } from '../constants/bpmn';
 import type { DataSchema } from '@/common/automation/data-schema';
 import type { PublishedReference } from '@/common/automation/definition.types';
 import type { WorkflowProcessReference } from './workflow-process.interface';
 import type { WorkflowScriptCall } from './workflow-script.types';
 import type { ValueBinding } from './workflow.types';
-
-export const BPMN_FORMAT = 'bpmn20' as const;
-export const KT_BPMN_NAMESPACE = 'https://kwitsukasa.top/schema/workflow/bpmn/1';
-export const KT_BPMN_EXPRESSION = `${KT_BPMN_NAMESPACE}/expression`;
-export const KT_BPMN_STEP = `${KT_BPMN_NAMESPACE}/step`;
 
 export interface WorkflowBpmnDefinition {
   format: typeof BPMN_FORMAT;
@@ -32,19 +28,62 @@ export interface WorkflowBpmnContract {
 }
 
 export type WorkflowBpmnStep =
-  | { kind: 'action'; taskRef: PublishedReference; input: Record<string, ValueBinding> }
-  | { kind: 'human'; businessKey?: string; formRef: PublishedReference | null; writableFields: string[]; input: Record<string, ValueBinding> }
-  | { kind: 'business'; stepKey: string; input: Record<string, ValueBinding>; scripts: WorkflowScriptCall[] }
-  | { kind: 'rule'; ruleRef: PublishedReference; input: Record<string, ValueBinding> }
-  | { kind: 'script'; stepKey: string; scripts: WorkflowScriptCall[]; input: Record<string, ValueBinding> };
+  | {
+      kind: 'action';
+      taskRef: PublishedReference;
+      input: Record<string, ValueBinding>;
+    }
+  | {
+      kind: 'human';
+      businessKey?: string;
+      formRef: PublishedReference | null;
+      writableFields: string[];
+      input: Record<string, ValueBinding>;
+    }
+  | {
+      kind: 'business';
+      stepKey: string;
+      input: Record<string, ValueBinding>;
+      scripts: WorkflowScriptCall[];
+    }
+  | {
+      kind: 'rule';
+      ruleRef: PublishedReference;
+      input: Record<string, ValueBinding>;
+    }
+  | {
+      kind: 'script';
+      stepKey: string;
+      scripts: WorkflowScriptCall[];
+      input: Record<string, ValueBinding>;
+    };
 
 export interface WorkflowBpmnElement {
   $type: string;
   id?: string;
   name?: string;
   $parent?: WorkflowBpmnElement;
+  $descriptor: WorkflowBpmnDescriptor;
+  $instanceOf: (type: string) => boolean;
   get: (name: string) => unknown;
+  set: (name: string, value: unknown) => void;
   [name: string]: any;
+}
+
+export interface WorkflowBpmnProperty {
+  name: string;
+  type: string;
+  ns: { name: string };
+  isVirtual?: boolean;
+  isReference?: boolean;
+  isMany?: boolean;
+  isAttr?: boolean;
+  isBody?: boolean;
+}
+
+export interface WorkflowBpmnDescriptor {
+  properties: readonly WorkflowBpmnProperty[];
+  propertiesByName: Readonly<Record<string, WorkflowBpmnProperty>>;
 }
 
 export interface WorkflowBpmnModel {
@@ -52,7 +91,11 @@ export interface WorkflowBpmnModel {
   root: WorkflowBpmnElement;
   elements: Record<string, WorkflowBpmnElement>;
   processes: WorkflowBpmnElement[];
-  references: Array<{ element: WorkflowBpmnElement; property: string; id: string }>;
+  references: Array<{
+    element: WorkflowBpmnElement;
+    property: string;
+    id: string;
+  }>;
 }
 
 export interface WorkflowBpmnIssue {
@@ -60,14 +103,3 @@ export interface WorkflowBpmnIssue {
   message: string;
   nodeId?: string;
 }
-
-export const KT_BPMN_MODDLE = {
-  name: 'KtWorkflow',
-  uri: KT_BPMN_NAMESPACE,
-  prefix: 'kt',
-  xml: { tagAlias: 'lowerCase' },
-  types: [
-    { name: 'Contract', superClass: ['Element'], properties: [{ name: 'body', type: 'String', isBody: true }] },
-    { name: 'Step', superClass: ['Element'], properties: [{ name: 'body', type: 'String', isBody: true }] },
-  ],
-};

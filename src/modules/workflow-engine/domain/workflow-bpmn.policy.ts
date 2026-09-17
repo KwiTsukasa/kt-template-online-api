@@ -1,16 +1,30 @@
-/// <reference types="../contract/bpmn-moddle" />
-import * as BpmnModdle from 'bpmn-moddle';
+import { bpmnPath } from './workflow-bpmn-path';
+import { requireDefinition } from '@/common/automation/validation';
+import { BPMN_CONDITION_ERRORS } from '../constants/bpmn';
+import { WorkflowBpmnModelIndex } from './workflow-bpmn-index';
 import {
+  BPMN_KIND_GROUPS,
+  BPMN_EXTENSION,
+  BPMN_TYPE,
   BPMN_FORMAT,
   KT_BPMN_EXPRESSION,
   KT_BPMN_MODDLE,
   KT_BPMN_STEP,
+} from '@/modules/workflow-engine/constants/bpmn';
+import { FORBIDDEN_OBJECT_KEYS } from '@/common/automation/constants/identity';
+
+/// <reference types="../contract/bpmn-moddle" />
+import * as BpmnModdle from 'bpmn-moddle';
+import {
   type WorkflowBpmnDefinition,
   type WorkflowBpmnElement,
   type WorkflowBpmnIssue,
   type WorkflowBpmnModel,
 } from '../contract/workflow-bpmn.types';
-import { dehydrateWorkflowBpmn, hydrateWorkflowBpmn } from './workflow-bpmn-model';
+import {
+  dehydrateWorkflowBpmn,
+  hydrateWorkflowBpmn,
+} from './workflow-bpmn-model';
 import { validateBpmnCorrelations } from './workflow-bpmn-correlation';
 import { bpmnConditionType } from './workflow-bpmn-expression';
 
@@ -20,7 +34,9 @@ import { bpmnConditionType } from './workflow-bpmn-expression';
  * @returns 保留标准属性、DI 与命名空间扩展的模型。
  * @throws 格式、长度、标准元素或引用不合法时拒绝接收。
  */
-export async function parseWorkflowBpmn(input: unknown): Promise<WorkflowBpmnModel> {
+export async function parseWorkflowBpmn(
+  input: unknown,
+): Promise<WorkflowBpmnModel> {
   return hydrateWorkflowBpmn(input);
 }
 
@@ -30,17 +46,33 @@ export async function parseWorkflowBpmn(input: unknown): Promise<WorkflowBpmnMod
  * @returns 与编辑和执行共用的结构化 BPMN 定义。
  * @throws XML、实体声明或无法保留的标准元素不合法时拒绝导入。
  */
-export async function importWorkflowBpmnXml(xml: string): Promise<WorkflowBpmnDefinition> {
-  if (typeof xml !== 'string' || !xml.trim() || Buffer.byteLength(xml, 'utf8') > 2 * 1024 * 1024)
-    throw new Error('BPMN XML 不能为空且不能超过 2 MiB');
-  if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml))
-    throw new Error('BPMN XML 不允许 DTD 或实体声明');
+export async function importWorkflowBpmnXml(
+  xml: string,
+): Promise<WorkflowBpmnDefinition> {
+  requireDefinition(
+    typeof xml === 'string' &&
+      xml.trim() &&
+      Buffer.byteLength(xml, 'utf8') <= 2 * 1024 * 1024,
+    'BPMN XML 不能为空且不能超过 2 MiB',
+  );
+  requireDefinition(
+    !/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml),
+    'BPMN XML 不允许 DTD 或实体声明',
+  );
   const moddle = new BpmnModdle({ kt: KT_BPMN_MODDLE });
   const parsed = await moddle.fromXML(xml);
-  if (parsed.warnings.length)
-    throw new Error(`BPMN XML 包含未解析内容：${parsed.warnings.map((item) => item.message).join('；')}`);
-  if (parsed.rootElement.$type !== 'bpmn:Definitions') throw new Error('BPMN XML 根节点必须是 definitions');
-  return hydrateWorkflowBpmn({ format: BPMN_FORMAT, model: dehydrateWorkflowBpmn(parsed.rootElement as WorkflowBpmnElement) }).definition;
+  requireDefinition(
+    !parsed.warnings.length,
+    `BPMN XML 包含未解析内容：${parsed.warnings.map((item) => item.message).join('；')}`,
+  );
+  requireDefinition(
+    parsed.rootElement.$type === BPMN_TYPE.Definitions,
+    'BPMN XML 根节点必须是 definitions',
+  );
+  return hydrateWorkflowBpmn({
+    format: BPMN_FORMAT,
+    model: dehydrateWorkflowBpmn(parsed.rootElement as WorkflowBpmnElement),
+  }).definition;
 }
 
 /**
@@ -49,8 +81,13 @@ export async function importWorkflowBpmnXml(xml: string): Promise<WorkflowBpmnDe
  * @returns 经引用与类型校验的结构化定义。
  * @throws 导出后模型无法完整解析时拒绝保存。
  */
-export async function serializeWorkflowBpmn(root: WorkflowBpmnElement): Promise<WorkflowBpmnDefinition> {
-  return hydrateWorkflowBpmn({ format: BPMN_FORMAT, model: dehydrateWorkflowBpmn(root) }).definition;
+export async function serializeWorkflowBpmn(
+  root: WorkflowBpmnElement,
+): Promise<WorkflowBpmnDefinition> {
+  return hydrateWorkflowBpmn({
+    format: BPMN_FORMAT,
+    model: dehydrateWorkflowBpmn(root),
+  }).definition;
 }
 
 /**
@@ -59,7 +96,9 @@ export async function serializeWorkflowBpmn(root: WorkflowBpmnElement): Promise<
  * @returns 可下载为 .bpmn 文件的标准 XML 内容。
  * @throws 内部模型或引用不合法时拒绝导出。
  */
-export async function exportWorkflowBpmnXml(definition: WorkflowBpmnDefinition): Promise<string> {
+export async function exportWorkflowBpmnXml(
+  definition: WorkflowBpmnDefinition,
+): Promise<string> {
   const model = hydrateWorkflowBpmn(definition);
   const moddle = new BpmnModdle({ kt: KT_BPMN_MODDLE });
   const { xml } = await moddle.toXML(model.root, { format: true });
@@ -73,15 +112,29 @@ export async function exportWorkflowBpmnXml(definition: WorkflowBpmnDefinition):
  * @returns 扩展对象；未配置时为空。
  * @throws 重复扩展、无效 JSON 或危险属性路径时拒绝读取。
  */
-export function readWorkflowBpmnExtension<T>(element: WorkflowBpmnElement, type: 'kt:Contract' | 'kt:Step'): T | null {
-  const entries: WorkflowBpmnElement[] = (element.extensionElements?.values || []).filter((value: WorkflowBpmnElement) => value.$type === type);
+export function readWorkflowBpmnExtension<T>(
+  element: WorkflowBpmnElement,
+  type: typeof BPMN_EXTENSION.Contract | typeof BPMN_EXTENSION.Step,
+): T | null {
+  const entries: WorkflowBpmnElement[] = (
+    element.extensionElements?.values || []
+  ).filter((value: WorkflowBpmnElement) => value.$type === type);
   if (!entries.length) return null;
-  if (entries.length !== 1) throw new Error(`${element.id} 只能有一个 ${type} 扩展`);
+  requireDefinition(
+    entries.length === 1,
+    `${element.id} 只能有一个 ${type} 扩展`,
+  );
   const value = JSON.parse(entries[0].body, (key, item) => {
-    if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('业务扩展包含不允许的属性');
+    requireDefinition(
+      !FORBIDDEN_OBJECT_KEYS.has(key),
+      '业务扩展包含不允许的属性',
+    );
     return item;
   });
-  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('业务扩展必须是对象');
+  requireDefinition(
+    value && !Array.isArray(value) && typeof value === 'object',
+    '业务扩展必须是对象',
+  );
   return value as T;
 }
 
@@ -90,146 +143,434 @@ export function readWorkflowBpmnExtension<T>(element: WorkflowBpmnElement, type:
  * @param model - 已成功解析的 BPMN 元模型。
  * @returns 可定位到标准元素标识的校验问题。
  */
-export function validateWorkflowBpmn(model: WorkflowBpmnModel): WorkflowBpmnIssue[] {
+export function validateWorkflowBpmn(
+  model: WorkflowBpmnModel,
+): WorkflowBpmnIssue[] {
+  const index = new WorkflowBpmnModelIndex(model);
   const issues: WorkflowBpmnIssue[] = validateBpmnCorrelations(model);
-  const elements = Object.values(model.elements);
-  const flows = elements.filter((element) => element.$type === 'bpmn:SequenceFlow');
-  if (!model.processes.some((process) => process.isExecutable)) issues.push({ code: 'process', message: '至少需要一个可执行流程' });
-  for (const element of Object.values(model.elements)) {
-    const report = (code: string, message: string) => issues.push({ code, nodeId: element.id, message });
-    if (element.$type === 'bpmn:SequenceFlow') {
-      const source = element.sourceRef as WorkflowBpmnElement, target = element.targetRef as WorkflowBpmnElement;
-      if (!source || !target) report('flow-reference', '顺序流必须连接两个流程节点');
-      else {
-        if (source.$parent !== target.$parent || source.$parent !== element.$parent) report('flow-scope', '顺序流不能跨越流程或子流程边界');
-        if (source.$type === 'bpmn:EndEvent' || target.$type === 'bpmn:StartEvent' || target.$type === 'bpmn:BoundaryEvent') report('flow-direction', '开始、结束或边界事件的连线方向不合法');
-        if (!source.$instanceOf('bpmn:FlowNode') || !target.$instanceOf('bpmn:FlowNode')) report('flow-kind', '顺序流只能连接活动、事件或网关');
-        if (source.isForCompensation || target.isForCompensation) report('compensation-flow', '补偿活动不能连接顺序流');
-        if (source.triggeredByEvent || target.triggeredByEvent) report('event-subprocess-flow', '事件子流程由事件触发，不能连接外部顺序流');
-        if (source.$type === 'bpmn:ParallelGateway' && element.conditionExpression) report('parallel-condition', '并行网关不能使用条件顺序流');
-        if (element.conditionExpression && source.default !== element && source.$type !== 'bpmn:ComplexGateway') {
-          try {
-            const condition = element.conditionExpression;
-            if (condition.$type !== 'bpmn:FormalExpression' || condition.language !== KT_BPMN_EXPRESSION || typeof condition.body !== 'string') throw new Error('出口条件必须使用工作流 JSON 语言');
-            if (!['boolean', 'unknown'].includes(bpmnConditionType(JSON.parse(condition.body), {}))) throw new Error('出口条件必须返回布尔值');
-          } catch (error) { report('flow-condition', String(error)); }
-        }
-      }
-    }
-    if (element.$type === 'bpmn:MessageFlow') {
-      const sourcePool = bpmnParticipant(model, element.sourceRef), targetPool = bpmnParticipant(model, element.targetRef);
-      if (!sourcePool || !targetPool || sourcePool === targetPool) report('message-scope', '消息流必须连接不同参与者');
-      if (!isMessageEndpoint(element.sourceRef, false) || !isMessageEndpoint(element.targetRef, true)) report('message-kind', '消息流只能连接参与者、活动或方向正确的消息事件');
-    }
-    if (element.$type === 'bpmn:EventBasedGateway') {
-      const outgoing = flows.filter((flow) => flow.sourceRef === element);
-      if (outgoing.length < 2) report('event-gateway-outgoing', '事件网关至少需要两个出口');
-      if (outgoing.some((flow) => flow.conditionExpression)) report('event-gateway-condition', '事件网关出口不能配置规则条件');
-      if (element.instantiate && flows.some((flow) => flow.targetRef === element)) report('event-gateway-instantiate', '用于创建实例的事件网关不能有入口连线');
-      if (element.eventGatewayType === 'Parallel' && !element.instantiate) report('event-gateway-parallel', '并行事件网关只能用于创建流程实例');
-      const targets = outgoing.map((flow) => flow.targetRef).filter(Boolean) as WorkflowBpmnElement[];
-      let receivesMessage = false;
-      let catchesMessage = false;
-      for (const target of targets) {
-        if (flows.some((flow) => flow.targetRef === target && flow.sourceRef !== element)) report('event-gateway-incoming', '事件网关的目标不能有其他入口连线');
-        if (target.$type === 'bpmn:ReceiveTask') {
-          receivesMessage = true;
-          if (elements.some((event) => event.$type === 'bpmn:BoundaryEvent' && event.attachedToRef === target)) report('event-gateway-boundary', '事件网关后的接收任务不能附着边界事件');
-          continue;
-        }
-        if (target.$type !== 'bpmn:IntermediateCatchEvent') {
-          report('event-gateway-target', '事件网关只能连接中间捕获事件或接收任务');
-          continue;
-        }
-        const definitions: WorkflowBpmnElement[] = [...(target.eventDefinitions ?? []), ...(target.eventDefinitionRef ?? [])];
-        if (!definitions.length || definitions.some((event) => !['bpmn:MessageEventDefinition', 'bpmn:SignalEventDefinition', 'bpmn:TimerEventDefinition', 'bpmn:ConditionalEventDefinition'].includes(event.$type))) report('event-gateway-trigger', '事件网关只接受消息、信号、定时和条件捕获事件');
-        if (element.eventGatewayType === 'Parallel' && definitions.some((event) => event.$type !== 'bpmn:MessageEventDefinition')) report('event-gateway-parallel-message', '并行实例化事件网关只接受消息触发');
-        if (definitions.some((event) => event.$type === 'bpmn:MessageEventDefinition')) catchesMessage = true;
-      }
-      if (receivesMessage && catchesMessage) report('event-gateway-mixed-message', '同一事件网关不能混用消息捕获事件和接收任务');
-    }
-    if (element.$type === 'bpmn:Lane') {
-      let scope = element.$parent;
-      while (scope && !scope.$instanceOf('bpmn:FlowElementsContainer')) scope = scope.$parent;
-      for (const node of element.flowNodeRef ?? []) if (!node.$instanceOf('bpmn:FlowNode') || node.$parent !== scope) report('lane-reference', '泳道只能引用同一流程作用域中的节点');
-    }
-    if (element.$type === 'bpmn:Participant' && element.processRef) {
-      if (!element.processRef.$instanceOf('bpmn:Process')) report('pool-reference', '泳池必须引用流程');
-      if (Object.values(model.elements).some((other) => other !== element && other.$type === 'bpmn:Participant' && other.processRef === element.processRef)) report('pool-duplicate', '同一流程不能重复归属多个参与者');
-    }
-    if (element.$type === 'bpmn:BoundaryEvent') {
-      if (!element.attachedToRef?.$instanceOf('bpmn:Activity') || element.attachedToRef.$parent !== element.$parent) report('boundary-scope', '边界事件必须附着在同一作用域的活动上');
-      if (element.attachedToRef?.triggeredByEvent) report('event-subprocess-boundary', '事件子流程不能附着边界事件');
-      if (!element.eventDefinitions?.length) report('boundary-definition', '边界事件必须声明事件类型');
-      if (element.cancelActivity === false && element.eventDefinitions?.some((event: WorkflowBpmnElement) => ['bpmn:ErrorEventDefinition', 'bpmn:CancelEventDefinition'].includes(event.$type))) report('boundary-interrupt', '错误和事务取消边界事件必须中断活动');
-      if (element.eventDefinitions?.some((event: WorkflowBpmnElement) => event.$type === 'bpmn:CompensateEventDefinition')) {
-        const association = Object.values(model.elements).find((item) => item.$type === 'bpmn:Association' && item.sourceRef === element);
-        if (!association?.targetRef?.isForCompensation || association.targetRef.$parent !== element.$parent) report('compensation-handler', '补偿边界事件必须通过关联连接同作用域的补偿活动');
-      }
-    }
-    if (element.$type === 'bpmn:SubProcess' && element.triggeredByEvent) {
-      const starts = (element.flowElements ?? []).filter((child: WorkflowBpmnElement) => child.$type === 'bpmn:StartEvent');
-      if (starts.length !== 1) report('event-subprocess-start', '事件子流程必须包含且只能包含一个开始事件');
-      for (const start of starts) {
-        const definitions = [...(start.eventDefinitions ?? []), ...(start.eventDefinitionRef ?? [])];
-        if (!definitions.length) report('event-subprocess-trigger', '事件子流程的开始事件必须声明触发类型');
-        if (start.isInterrupting === false && definitions.some((event: WorkflowBpmnElement) => event.$type === 'bpmn:ErrorEventDefinition')) report('event-subprocess-error', '错误开始事件必须中断所在作用域');
-      }
-    }
-    if (element.$type === 'bpmn:CancelEventDefinition') {
-      const event = element.$parent;
-      let valid = event?.$type === 'bpmn:EndEvent' && event.$parent?.$type === 'bpmn:Transaction';
-      if (event?.$type === 'bpmn:BoundaryEvent' && event.attachedToRef?.$type === 'bpmn:Transaction') valid = true;
-      if (!valid) report('cancel-scope', '取消事件只适用于事务子流程');
-    }
-    if (element.$type === 'bpmn:TerminateEventDefinition' && element.$parent?.$type !== 'bpmn:EndEvent') report('terminate-scope', '终止事件只能用作结束事件');
-    if (element.$type === 'bpmn:CallActivity' && !model.processes.some((process) => process.id === element.calledElement)) report('call-reference', '调用活动必须引用此发布版本内的已声明流程');
-    if (['bpmn:ServiceTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask'].includes(element.$type) && element.implementation !== KT_BPMN_STEP) report('task-implementation', '任务必须绑定工作流统一执行端口');
-    if (element.$type === 'bpmn:ComplexGateway') {
-      const incoming = flows.filter((flow) => flow.targetRef === element), outgoing = flows.filter((flow) => flow.sourceRef === element);
-      if (!incoming.length || !outgoing.length) report('complex-flow', '复杂网关至少需要一个入口和一个出口');
-      if (element.default && !outgoing.includes(element.default)) report('complex-default', '复杂网关默认路径必须引用自身出口');
-      const paths: Record<string, string> = { 'content.waitingForStart': 'boolean' };
-      for (const flow of incoming) paths[`content.activationCount.${flow.id}`] = 'number';
-      const conditions = [element.activationCondition, ...outgoing.filter((flow) => flow !== element.default && flow.conditionExpression).map((flow) => flow.conditionExpression)];
-      for (const condition of conditions) {
-        try {
-          if (condition?.$type !== 'bpmn:FormalExpression' || condition.language !== KT_BPMN_EXPRESSION || typeof condition.body !== 'string') throw new Error('复杂网关必须配置使用工作流 JSON 语言的激活条件');
-          if (!['boolean', 'unknown'].includes(bpmnConditionType(JSON.parse(condition.body), paths))) throw new Error('复杂网关条件必须返回布尔值');
-        } catch (error) { report('complex-condition', String(error)); }
-      }
-    }
-    if (element.$type === 'bpmn:StartEvent' && element.$parent?.$type === 'bpmn:Process') {
-      if ((element.eventDefinitions || []).some((event: WorkflowBpmnElement) => ['bpmn:ErrorEventDefinition', 'bpmn:CancelEventDefinition', 'bpmn:CompensateEventDefinition'].includes(event.$type))) report('start-event', '此类事件不能启动顶层流程');
-    }
+  if (!model.processes.some((process) => process.isExecutable))
+    issues.push({ code: 'process', message: '至少需要一个可执行流程' });
+  for (const element of index.elements) {
+    const validate = elementValidators[element.$type];
+    if (!validate) continue;
+    validate({
+      element,
+      index,
+      report: (code, message) => {
+        issues.push({ code, nodeId: element.id, message });
+      },
+    });
   }
   return issues;
-}
-
-/**
- * 从节点所属流程定位协作参与者，泳道不会形成独立消息边界。
- * @param model - 带有协作定义的完整模型。
- * @param element - 消息流源或目标。
- * @returns 对应参与者；节点没有参与者时为空。
- */
-function bpmnParticipant(model: WorkflowBpmnModel, element?: WorkflowBpmnElement): WorkflowBpmnElement | undefined {
-  if (!element) return undefined;
-  if (element.$type === 'bpmn:Participant') return element;
-  let process = element;
-  while (process && process.$type !== 'bpmn:Process') process = process.$parent;
-  return Object.values(model.elements).find((candidate) => candidate.$type === 'bpmn:Participant' && candidate.processRef === process);
 }
 
 /**
  * 按消息抛出和捕获方向限制事件端点，网关和泳道不参与消息流。
  * @param element - 消息流的候选端点。
  * @param incoming - 是否作为接收方。
+ * @param index - 共享的事件定义与图关系索引。
  * @returns 端点满足标准消息方向时返回真。
  */
-function isMessageEndpoint(element: WorkflowBpmnElement | undefined, incoming: boolean): boolean {
+function isMessageEndpoint(
+  element: WorkflowBpmnElement | undefined,
+  incoming: boolean,
+  index: WorkflowBpmnModelIndex,
+): boolean {
   if (!element) return false;
-  if (element.$type === 'bpmn:Participant' || element.$instanceOf('bpmn:Activity')) return true;
-  if (!element.eventDefinitions?.some((event: WorkflowBpmnElement) => event.$type === 'bpmn:MessageEventDefinition')) return false;
-  if (incoming) return ['bpmn:StartEvent', 'bpmn:IntermediateCatchEvent', 'bpmn:BoundaryEvent'].includes(element.$type);
-  return ['bpmn:EndEvent', 'bpmn:IntermediateThrowEvent'].includes(element.$type);
+  if (
+    element.$type === BPMN_TYPE.Participant ||
+    element.$instanceOf(BPMN_TYPE.Activity)
+  )
+    return true;
+  if (!index.events.get(element)?.types.has(BPMN_TYPE.MessageEventDefinition))
+    return false;
+  if (incoming) return BPMN_KIND_GROUPS.catchEvents.has(element.$type);
+  return BPMN_KIND_GROUPS.throwEvents.has(element.$type);
+}
+
+type BpmnReporter = (code: string, message: string) => void;
+type BpmnValidationContext = {
+  element: WorkflowBpmnElement;
+  index: WorkflowBpmnModelIndex;
+  report: BpmnReporter;
+};
+
+const elementValidators: Readonly<
+  Record<string, (context: BpmnValidationContext) => void>
+> = {
+  [BPMN_TYPE.SequenceFlow]: validateSequenceFlow,
+  [BPMN_TYPE.MessageFlow]: validateMessageFlow,
+  [BPMN_TYPE.EventBasedGateway]: validateEventGateway,
+  [BPMN_TYPE.Lane]: validateLane,
+  [BPMN_TYPE.Participant]: validateParticipant,
+  [BPMN_TYPE.BoundaryEvent]: validateBoundaryEvent,
+  [BPMN_TYPE.SubProcess]: validateEventSubprocess,
+  [BPMN_TYPE.CancelEventDefinition]: validateCancelEvent,
+  [BPMN_TYPE.TerminateEventDefinition]: validateTerminateEvent,
+  [BPMN_TYPE.CallActivity]: validateCallActivity,
+  [BPMN_TYPE.ServiceTask]: validateTaskImplementation,
+  [BPMN_TYPE.BusinessRuleTask]: validateTaskImplementation,
+  [BPMN_TYPE.SendTask]: validateTaskImplementation,
+  [BPMN_TYPE.ComplexGateway]: validateComplexGateway,
+  [BPMN_TYPE.StartEvent]: validateProcessStart,
+};
+
+/**
+ * 核对顺序流端点、作用域与条件，缺少端点时直接返回该元素的问题。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateSequenceFlow(context: BpmnValidationContext): void {
+  const { element, report } = context;
+
+  const source = element.sourceRef as WorkflowBpmnElement,
+    target = element.targetRef as WorkflowBpmnElement;
+  if (!source || !target) {
+    report('flow-reference', '顺序流必须连接两个流程节点');
+    return;
+  }
+  if (source.$parent !== target.$parent || source.$parent !== element.$parent)
+    report('flow-scope', '顺序流不能跨越流程或子流程边界');
+  if (
+    source.$type === BPMN_TYPE.EndEvent ||
+    target.$type === BPMN_TYPE.StartEvent ||
+    target.$type === BPMN_TYPE.BoundaryEvent
+  )
+    report('flow-direction', '开始、结束或边界事件的连线方向不合法');
+  if (
+    !source.$instanceOf(BPMN_TYPE.FlowNode) ||
+    !target.$instanceOf(BPMN_TYPE.FlowNode)
+  )
+    report('flow-kind', '顺序流只能连接活动、事件或网关');
+  if (source.isForCompensation || target.isForCompensation)
+    report('compensation-flow', '补偿活动不能连接顺序流');
+  if (source.triggeredByEvent || target.triggeredByEvent)
+    report('event-subprocess-flow', '事件子流程由事件触发，不能连接外部顺序流');
+  if (source.$type === BPMN_TYPE.ParallelGateway && element.conditionExpression)
+    report('parallel-condition', '并行网关不能使用条件顺序流');
+  if (
+    element.conditionExpression &&
+    source.default !== element &&
+    source.$type !== BPMN_TYPE.ComplexGateway
+  ) {
+    reportBpmnCondition(
+      element.conditionExpression,
+      {},
+      BPMN_CONDITION_ERRORS.flow,
+      report,
+    );
+  }
+}
+
+/**
+ * 核对消息流两端所属泳池与收发方向，归属查找复用本批索引。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateMessageFlow(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+
+  const sourcePool = index.participant(element.sourceRef),
+    targetPool = index.participant(element.targetRef);
+  if (!sourcePool || !targetPool || sourcePool === targetPool)
+    report('message-scope', '消息流必须连接不同参与者');
+  if (
+    !isMessageEndpoint(element.sourceRef, false, index) ||
+    !isMessageEndpoint(element.targetRef, true, index)
+  )
+    report('message-kind', '消息流只能连接参与者、活动或方向正确的消息事件');
+}
+
+/**
+ * 按已索引的出口核对事件竞争，目标的入口和边界信息不再反复扫描全图。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateEventGateway(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+
+  const outgoing = index.outgoing.get(element) ?? [];
+  if (outgoing.length < 2)
+    report('event-gateway-outgoing', '事件网关至少需要两个出口');
+  if (outgoing.some((flow) => flow.conditionExpression))
+    report('event-gateway-condition', '事件网关出口不能配置规则条件');
+  if (element.instantiate && (index.incoming.get(element)?.length ?? 0) > 0)
+    report('event-gateway-instantiate', '用于创建实例的事件网关不能有入口连线');
+  if (element.eventGatewayType === 'Parallel' && !element.instantiate)
+    report('event-gateway-parallel', '并行事件网关只能用于创建流程实例');
+  const targets = outgoing
+    .map((flow) => flow.targetRef)
+    .filter(Boolean) as WorkflowBpmnElement[];
+  let receivesMessage = false;
+  let catchesMessage = false;
+  for (const target of targets) {
+    if (
+      (index.incomingSources.get(target)?.size ?? 0) > 1 ||
+      !index.incomingSources.get(target)?.has(element)
+    )
+      report('event-gateway-incoming', '事件网关的目标不能有其他入口连线');
+    if (target.$type === BPMN_TYPE.ReceiveTask) {
+      receivesMessage = true;
+      if (index.boundaryHosts.has(target))
+        report(
+          'event-gateway-boundary',
+          '事件网关后的接收任务不能附着边界事件',
+        );
+      continue;
+    }
+    if (target.$type !== BPMN_TYPE.IntermediateCatchEvent) {
+      report('event-gateway-target', '事件网关只能连接中间捕获事件或接收任务');
+      continue;
+    }
+    const events = index.events.get(target);
+    if (!events?.gatewayAllowed)
+      report(
+        'event-gateway-trigger',
+        '事件网关只接受消息、信号、定时和条件捕获事件',
+      );
+    if (
+      element.eventGatewayType === 'Parallel' &&
+      (events?.types.size !== 1 ||
+        !events.types.has(BPMN_TYPE.MessageEventDefinition))
+    )
+      report(
+        'event-gateway-parallel-message',
+        '并行实例化事件网关只接受消息触发',
+      );
+    if (events?.types.has(BPMN_TYPE.MessageEventDefinition))
+      catchesMessage = true;
+  }
+  if (receivesMessage && catchesMessage)
+    report(
+      'event-gateway-mixed-message',
+      '同一事件网关不能混用消息捕获事件和接收任务',
+    );
+}
+
+/**
+ * 核对泳道引用的节点是否属于同一流程容器，共享父链采用缓存定位。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateLane(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+
+  const scope = index.scope(element);
+  for (const node of element.flowNodeRef ?? [])
+    if (!node.$instanceOf(BPMN_TYPE.FlowNode) || node.$parent !== scope)
+      report('lane-reference', '泳道只能引用同一流程作用域中的节点');
+}
+
+/**
+ * 拒绝不存在的流程引用或同一流程重复归属多个泳池。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateParticipant(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+  if (element.processRef) {
+    if (!element.processRef.$instanceOf(BPMN_TYPE.Process))
+      report('pool-reference', '泳池必须引用流程');
+    if ((index.participants.get(element.processRef)?.length ?? 0) > 1)
+      report('pool-duplicate', '同一流程不能重复归属多个参与者');
+  }
+}
+
+/**
+ * 核对边界附着、触发类型和补偿处理器，处理器关联通过索引读取。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateBoundaryEvent(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+
+  if (
+    !element.attachedToRef?.$instanceOf(BPMN_TYPE.Activity) ||
+    element.attachedToRef.$parent !== element.$parent
+  )
+    report('boundary-scope', '边界事件必须附着在同一作用域的活动上');
+  if (element.attachedToRef?.triggeredByEvent)
+    report('event-subprocess-boundary', '事件子流程不能附着边界事件');
+  if (!element.eventDefinitions?.length)
+    report('boundary-definition', '边界事件必须声明事件类型');
+  if (
+    element.cancelActivity === false &&
+    element.eventDefinitions?.some((event: WorkflowBpmnElement) =>
+      BPMN_KIND_GROUPS.interruptingEvents.has(event.$type),
+    )
+  )
+    report('boundary-interrupt', '错误和事务取消边界事件必须中断活动');
+  if (
+    element.eventDefinitions?.some(
+      (event: WorkflowBpmnElement) =>
+        event.$type === BPMN_TYPE.CompensateEventDefinition,
+    )
+  ) {
+    const association = index.associations.get(element)?.[0];
+    if (
+      !association?.targetRef?.isForCompensation ||
+      association.targetRef.$parent !== element.$parent
+    )
+      report(
+        'compensation-handler',
+        '补偿边界事件必须通过关联连接同作用域的补偿活动',
+      );
+  }
+}
+
+/**
+ * 限制事件子流程的开始事件数量与中断语义，普通子流程不受此约束。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateEventSubprocess(context: BpmnValidationContext): void {
+  const { element, report } = context;
+  if (element.triggeredByEvent) {
+    const starts = (element.flowElements ?? []).filter(
+      (child: WorkflowBpmnElement) => child.$type === BPMN_TYPE.StartEvent,
+    );
+    if (starts.length !== 1)
+      report(
+        'event-subprocess-start',
+        '事件子流程必须包含且只能包含一个开始事件',
+      );
+    for (const start of starts) {
+      const definitions = [
+        ...(start.eventDefinitions ?? []),
+        ...(start.eventDefinitionRef ?? []),
+      ];
+      if (!definitions.length)
+        report(
+          'event-subprocess-trigger',
+          '事件子流程的开始事件必须声明触发类型',
+        );
+      if (
+        start.isInterrupting === false &&
+        definitions.some(
+          (event: WorkflowBpmnElement) =>
+            event.$type === BPMN_TYPE.ErrorEventDefinition,
+        )
+      )
+        report('event-subprocess-error', '错误开始事件必须中断所在作用域');
+    }
+  }
+}
+
+/**
+ * 限定事务取消事件所属的结束事件或事务边界。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateCancelEvent(context: BpmnValidationContext): void {
+  const { element, report } = context;
+
+  const event = element.$parent;
+  let valid =
+    event?.$type === BPMN_TYPE.EndEvent &&
+    event.$parent?.$type === BPMN_TYPE.Transaction;
+  if (
+    event?.$type === BPMN_TYPE.BoundaryEvent &&
+    event.attachedToRef?.$type === BPMN_TYPE.Transaction
+  )
+    valid = true;
+  if (!valid) report('cancel-scope', '取消事件只适用于事务子流程');
+}
+
+/**
+ * 仅允许结束事件声明终止整个作用域的语义。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateTerminateEvent(context: BpmnValidationContext): void {
+  const { element, report } = context;
+  if (element.$parent?.$type !== BPMN_TYPE.EndEvent)
+    report('terminate-scope', '终止事件只能用作结束事件');
+}
+
+/**
+ * 用已发布模型内的流程身份索引核对调用活动的目标。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateCallActivity(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+  if (!index.processIds.has(element.calledElement))
+    report('call-reference', '调用活动必须引用此发布版本内的已声明流程');
+}
+
+/**
+ * 限制可执行服务类任务使用工作流统一执行端口。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateTaskImplementation(context: BpmnValidationContext): void {
+  const { element, report } = context;
+  if (element.implementation !== KT_BPMN_STEP)
+    report('task-implementation', '任务必须绑定工作流统一执行端口');
+}
+
+/**
+ * 核对复杂网关入口、默认流和激活表达式，入口计数由本批连线索引建立。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateComplexGateway(context: BpmnValidationContext): void {
+  const { element, index, report } = context;
+
+  const incoming = index.incoming.get(element) ?? [],
+    outgoing = index.outgoing.get(element) ?? [];
+  if (!incoming.length || !outgoing.length)
+    report('complex-flow', '复杂网关至少需要一个入口和一个出口');
+  if (element.default && element.default.sourceRef !== element)
+    report('complex-default', '复杂网关默认路径必须引用自身出口');
+  const paths: Record<string, string> = {
+    'content.waitingForStart': 'boolean',
+  };
+  for (const flow of incoming)
+    paths[bpmnPath(['content', 'activationCount', flow.id])] = 'number';
+  const conditions = [
+    element.activationCondition,
+    ...outgoing
+      .filter((flow) => flow !== element.default && flow.conditionExpression)
+      .map((flow) => flow.conditionExpression),
+  ];
+  for (const condition of conditions) {
+    reportBpmnCondition(
+      condition,
+      paths,
+      BPMN_CONDITION_ERRORS.complex,
+      report,
+    );
+  }
+}
+
+/**
+ * 拒绝用仅限内部作用域的事件启动顶层流程。
+ * @param context - 当前元素、共享模型索引与问题收集端口。
+ */
+function validateProcessStart(context: BpmnValidationContext): void {
+  const { element, report } = context;
+  if (element.$parent?.$type === BPMN_TYPE.Process) {
+    if (
+      (element.eventDefinitions || []).some((event: WorkflowBpmnElement) =>
+        BPMN_KIND_GROUPS.scopedEvents.has(event.$type),
+      )
+    )
+      report('start-event', '此类事件不能启动顶层流程');
+  }
+}
+
+/**
+ * 将条件格式、解析和返回类型错误统一归入对应元素的问题，不在每种网关内重复抛错。
+ * @param condition - 待校验的标准表达式。
+ * @param paths - 当前作用域允许的表达式字段类型。
+ * @param errors - 条件所属场景的错误码与说明。
+ * @param report - 当前元素的问题收集端口。
+ */
+function reportBpmnCondition(
+  condition: WorkflowBpmnElement | undefined,
+  paths: Record<string, string>,
+  errors: (typeof BPMN_CONDITION_ERRORS)[keyof typeof BPMN_CONDITION_ERRORS],
+  report: BpmnReporter,
+): void {
+  try {
+    requireDefinition(
+      condition?.$type === BPMN_TYPE.FormalExpression &&
+        condition.language === KT_BPMN_EXPRESSION &&
+        typeof condition.body === 'string',
+      errors.format,
+    );
+    const type = bpmnConditionType(JSON.parse(condition.body), paths);
+    requireDefinition(type === 'boolean' || type === 'unknown', errors.result);
+  } catch (error) {
+    report(errors.code, String(error));
+  }
 }

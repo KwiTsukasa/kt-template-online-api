@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { requireRequest } from '@/common/automation/validation';
+import { Injectable } from '@nestjs/common';
 import { DataSource, Not, IsNull } from 'typeorm';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -52,14 +53,22 @@ export class TaskDefinitionService {
    */
   async checkForPublish(definition: AtomicTaskDefinition): Promise<void> {
     const handler = this.handlers.resolve(definition.handler);
-    if (!handler || !(await handler.isAvailable()))
-      throw new BadRequestException('处理器版本未加载或已停用');
-    if (!this.matchesContract(definition))
-      throw new BadRequestException('任务的数据契约与处理器版本不匹配');
-    if (definition.timeoutMs > handler.timeoutMs)
-      throw new BadRequestException('任务期限不能超过处理器允许的期限');
-    if (definition.maxAttempts > 1 && !handler.idempotent)
-      throw new BadRequestException('处理器未声明幂等，不能自动重试');
+    requireRequest(
+      handler && (await handler.isAvailable()),
+      '处理器版本未加载或已停用',
+    );
+    requireRequest(
+      this.matchesContract(definition),
+      '任务的数据契约与处理器版本不匹配',
+    );
+    requireRequest(
+      definition.timeoutMs <= handler.timeoutMs,
+      '任务期限不能超过处理器允许的期限',
+    );
+    requireRequest(
+      definition.maxAttempts <= 1 || handler.idempotent,
+      '处理器未声明幂等，不能自动重试',
+    );
   }
 
   /**

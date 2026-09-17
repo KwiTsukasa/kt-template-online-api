@@ -1,79 +1,289 @@
 /// <reference types="../contract/bpmn-moddle" />
 import * as BpmnModdle from 'bpmn-moddle';
-import { BPMN_FORMAT, KT_BPMN_MODDLE, type WorkflowBpmnDefinition, type WorkflowBpmnElement, type WorkflowBpmnModel, type WorkflowBpmnRecord } from '../contract/workflow-bpmn.types';
+import { FORBIDDEN_OBJECT_KEYS } from '@/common/automation/constants/identity';
+import { definitionRecord } from '@/common/automation/definition.types';
+import {
+  rejectDefinition,
+  requireDefinition,
+} from '@/common/automation/validation';
+import {
+  BPMN_FORMAT,
+  BPMN_MODEL_ERROR,
+  BPMN_MODEL_PATTERN,
+  BPMN_PROPERTY_TYPE,
+  BPMN_TYPE,
+  KT_BPMN_MODDLE,
+  WORKFLOW_BPMN_LIMITS,
+} from '../constants/bpmn';
+import type {
+  WorkflowBpmnElement,
+  WorkflowBpmnModel,
+  WorkflowBpmnProperty,
+  WorkflowBpmnRecord,
+} from '../contract/workflow-bpmn.types';
+
+type PropertyAssignment = {
+  property: WorkflowBpmnProperty;
+  value: unknown;
+  slot?: { values: unknown[]; index: number };
+};
+type RestoreFrame = {
+  element: WorkflowBpmnElement;
+  assignments: PropertyAssignment[];
+  position: number;
+  depth: number;
+};
+type PendingReference = {
+  owner: WorkflowBpmnElement;
+  property: WorkflowBpmnProperty;
+  value: unknown;
+};
 
 /**
- * 直接恢复结构化标准模型，元素引用按标识连接；编辑、保存和运行均不经过 XML。
- * @param input - 带标准元素类型、属性和引用的流程文档。
- * @returns 可用于标准校验、X6 映射和执行引擎的内存元模型。
- * @throws 类型、属性、引用、规模或标识非法时拒绝恢复。
+ * 在 JSON 边界核对格式与大小，再用显式工作栈恢复标准元素和引用，全程不经过 XML。
+ * @param input - 带标准类型、属性和引用的流程文档。
+ * @returns 保持规范化字段顺序和引用身份的标准内存模型。
+ * @throws 文档、属性、引用或模型规模不符合工作流契约时拒绝恢复。
  */
 export function hydrateWorkflowBpmn(input: unknown): WorkflowBpmnModel {
-  const source = input as WorkflowBpmnDefinition;
-  if (!source || source.format !== BPMN_FORMAT || !source.model || typeof source.model !== 'object' || Object.hasOwn(source, 'xml')) throw new Error('工作流内部定义必须使用结构化 BPMN 模型');
-  if (Buffer.byteLength(JSON.stringify(source.model), 'utf8') > 2 * 1024 * 1024) throw new Error('BPMN 模型不能超过 2 MiB');
-  const moddle = new BpmnModdle({ kt: KT_BPMN_MODDLE });
-  const elements: Record<string, WorkflowBpmnElement> = Object.create(null);
-  const references: Array<{ owner: WorkflowBpmnElement; property: any; value: unknown }> = [];
-  const resolvedReferences: WorkflowBpmnModel['references'] = [];
-  let count = 0;
-  const restore = (raw: unknown, parent?: WorkflowBpmnElement, depth = 0): WorkflowBpmnElement => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || depth > 32 || ++count > 4096) throw new Error('BPMN 元素结构或规模无效');
-    const record = raw as WorkflowBpmnRecord;
-    if (typeof record.$type !== 'string' || !/^(bpmn|bpmndi|dc|di|kt):/.test(record.$type)) throw new Error('BPMN 元素类型不支持');
-    const element = moddle.create(record.$type) as WorkflowBpmnElement;
+  const source = definitionRecord(input, BPMN_MODEL_ERROR.document);
+  requireDefinition(
+    source.format === BPMN_FORMAT &&
+      source.model &&
+      typeof source.model === 'object' &&
+      !Object.hasOwn(source, 'xml'),
+    BPMN_MODEL_ERROR.document,
+  );
+  requireDefinition(
+    Buffer.byteLength(JSON.stringify(source.model), 'utf8') <=
+      WORKFLOW_BPMN_LIMITS.modelBytes,
+    BPMN_MODEL_ERROR.size,
+  );
+  return new WorkflowModelRestorer().restore(source.model);
+}
+
+class WorkflowModelRestorer {
+  private readonly moddle = new BpmnModdle({ kt: KT_BPMN_MODDLE });
+  private readonly elements: Record<string, WorkflowBpmnElement> =
+    Object.create(null);
+  private readonly references: PendingReference[] = [];
+  private readonly resolvedReferences: WorkflowBpmnModel['references'] = [];
+  private count = 0;
+
+  /**
+   * 以深度优先工作栈写入属性并在元素结束时登记身份，保留原有规范化顺序，引用在元素齐备后解析。
+   * @param raw - 文档的标准模型根记录。
+   * @returns 可执行元模型、引用索引与规范化 JSON，输入对象保持不变。
+   */
+  restore(raw: unknown): WorkflowBpmnModel {
+    const first = this.frame(raw, undefined, 0);
+    const pending = [first];
+    while (pending.length) {
+      const current = pending[pending.length - 1];
+      const assignment = current.assignments[current.position++];
+      if (!assignment) {
+        this.registerIdentity(current.element);
+        pending.pop();
+        continue;
+      }
+      if (assignment.property.isReference) {
+        this.references.push({
+          owner: current.element,
+          property: assignment.property,
+          value: assignment.value,
+        });
+        continue;
+      }
+      let value: unknown;
+      if (assignment.value && typeof assignment.value === 'object') {
+        const child = this.frame(
+          assignment.value,
+          current.element,
+          current.depth + 1,
+        );
+        requireDefinition(
+          assignment.property.type === BPMN_PROPERTY_TYPE.element ||
+            child.element.$instanceOf(assignment.property.type),
+          `${assignment.property.name} ${BPMN_MODEL_ERROR.child}`,
+        );
+        pending.push(child);
+        value = child.element;
+      } else value = this.scalar(assignment.property, assignment.value);
+      if (assignment.slot)
+        assignment.slot.values[assignment.slot.index] = value;
+      else current.element.set(assignment.property.name, value);
+    }
+    const root = first.element;
+    requireDefinition(
+      root.$type === BPMN_TYPE.Definitions,
+      BPMN_MODEL_ERROR.root,
+    );
+    for (const reference of this.references) this.resolveReference(reference);
+    const roots = (root.get('rootElements') ?? []) as WorkflowBpmnElement[];
+    return {
+      definition: { format: BPMN_FORMAT, model: dehydrateWorkflowBpmn(root) },
+      root,
+      elements: this.elements,
+      references: this.resolvedReferences,
+      processes: roots.filter((element) => element.$type === BPMN_TYPE.Process),
+    };
+  }
+
+  /**
+   * 为单个元素准备属性作业，直接复用元模型已有属性索引，多值属性的每个值只产生一个作业。
+   * @param raw - 尚未恢复的标准元素记录。
+   * @param parent - 拥有该元素的父元素；根元素为空。
+   * @param depth - 标准模型的实际包含深度。
+   * @returns 已分配元素与按输入顺序排列的属性作业。
+   */
+  private frame(
+    raw: unknown,
+    parent: WorkflowBpmnElement | undefined,
+    depth: number,
+  ): RestoreFrame {
+    const record = definitionRecord(raw, BPMN_MODEL_ERROR.structure);
+    requireDefinition(
+      depth <= WORKFLOW_BPMN_LIMITS.modelDepth &&
+        ++this.count <= WORKFLOW_BPMN_LIMITS.modelElements,
+      BPMN_MODEL_ERROR.structure,
+    );
+    requireDefinition(
+      typeof record.$type === 'string' &&
+        BPMN_MODEL_PATTERN.type.test(record.$type),
+      BPMN_MODEL_ERROR.type,
+    );
+    let element: WorkflowBpmnElement;
+    try {
+      element = this.moddle.create(record.$type) as WorkflowBpmnElement;
+    } catch (error) {
+      rejectDefinition(String(error));
+    }
     if (parent) element.$parent = parent;
+    const properties = element.$descriptor.propertiesByName;
+    const assignments: PropertyAssignment[] = [];
     for (const [name, value] of Object.entries(record)) {
       if (name === '$type') continue;
-      if (['__proto__', 'constructor', 'prototype'].includes(name)) throw new Error('BPMN 模型包含不允许的属性');
-      const property = element.$descriptor.properties.find((item: any) => item.name === name && !item.isVirtual);
-      if (!property) throw new Error(`${record.$type} 不存在标准属性 ${name}`);
-      if (property.isReference) { references.push({ owner: element, property, value }); continue; }
-      const restoreValue = (item: unknown) => {
-        if (item && typeof item === 'object') {
-          const child = restore(item, element, depth + 1);
-          if (property.type !== 'Element' && !child.$instanceOf(property.type)) throw new Error(`${name} 的元素类型不相容`);
-          return child;
-        }
-        if (property.type === 'Boolean') {
-          if (typeof item !== 'boolean') throw new Error(`${name} 必须是布尔值`);
-          return item;
-        }
-        if (['Integer', 'Real'].includes(property.type)) {
-          if (typeof item !== 'number' || !Number.isFinite(item)) throw new Error(`${name} 必须是有限数值`);
-          if (property.type === 'Integer' && !Number.isSafeInteger(item)) throw new Error(`${name} 必须是整数`);
-          return item;
-        }
-        if ((property.type === 'String' || property.isAttr || property.isBody) && typeof item === 'string') return item;
-        throw new Error(`${name} 的标准属性值类型不合法`);
-      };
-      if (property.isMany) {
-        if (!Array.isArray(value)) throw new Error(`${name} 必须是列表`);
-        element.set(name, value.map(restoreValue));
-      } else element.set(name, restoreValue(value));
+      requireDefinition(
+        !FORBIDDEN_OBJECT_KEYS.has(name),
+        BPMN_MODEL_ERROR.property,
+      );
+      const property = properties[name];
+      requireDefinition(
+        Object.hasOwn(properties, name) &&
+          property.name === name &&
+          !property.isVirtual,
+        `${record.$type} ${BPMN_MODEL_ERROR.undeclared} ${name}`,
+      );
+      if (property.isReference || !property.isMany) {
+        assignments.push({ property, value });
+        continue;
+      }
+      requireDefinition(
+        Array.isArray(value),
+        `${name} ${BPMN_MODEL_ERROR.list}`,
+      );
+      const values = new Array<unknown>(value.length);
+      element.set(name, values);
+      for (let index = 0; index < value.length; index++)
+        assignments.push({
+          property,
+          value: value[index],
+          slot: { values, index },
+        });
     }
-    if (element.id !== undefined) {
-      if (typeof element.id !== 'string' || !/^[\p{L}_][\p{L}\p{M}\p{N}_.-]{0,190}$/u.test(element.id) || Object.hasOwn(elements, element.id)) throw new Error('BPMN 元素标识无效或重复');
-      elements[element.id] = element;
+    return { element, assignments, position: 0, depth };
+  }
+
+  /**
+   * 严格读取标准标量，元模型中的布尔与数字不接受文本转换，属性或正文仍只接受文本。
+   * @param property - 当前标准属性的类型及声明方式。
+   * @param value - 待写入的原始标量。
+   * @returns 校验后的布尔、有限数字或文本。
+   */
+  private scalar(
+    property: WorkflowBpmnProperty,
+    value: unknown,
+  ): boolean | number | string {
+    const { name, type } = property;
+    if (type === BPMN_PROPERTY_TYPE.boolean) {
+      requireDefinition(
+        typeof value === 'boolean',
+        `${name} ${BPMN_MODEL_ERROR.boolean}`,
+      );
+      return value;
     }
-    return element;
-  };
-  const root = restore(source.model);
-  if (root.$type !== 'bpmn:Definitions') throw new Error('BPMN 模型根节点必须是 Definitions');
-  for (const reference of references) {
-    const resolve = (raw: unknown) => {
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length !== 1 || typeof (raw as any).$ref !== 'string') throw new Error('BPMN 引用必须包含唯一的 $ref 标识');
-      const target = elements[(raw as any).$ref];
-      if (!target || !target.$instanceOf(reference.property.type)) throw new Error(`BPMN 引用不存在或类型不相容：${(raw as any).$ref}`);
-      resolvedReferences.push({ element: reference.owner, property: reference.property.ns.name, id: target.id });
+    if (
+      type === BPMN_PROPERTY_TYPE.integer ||
+      type === BPMN_PROPERTY_TYPE.real
+    ) {
+      requireDefinition(
+        typeof value === 'number' && Number.isFinite(value),
+        `${name} ${BPMN_MODEL_ERROR.finite}`,
+      );
+      requireDefinition(
+        type !== BPMN_PROPERTY_TYPE.integer || Number.isSafeInteger(value),
+        `${name} ${BPMN_MODEL_ERROR.integer}`,
+      );
+      return value;
+    }
+    requireDefinition(
+      (type === BPMN_PROPERTY_TYPE.string ||
+        property.isAttr ||
+        property.isBody) &&
+        typeof value === 'string',
+      `${name} ${BPMN_MODEL_ERROR.scalar}`,
+    );
+    return value as string;
+  }
+
+  /**
+   * 在元素属性齐备后登记唯一身份，匿名标准元素不进入引用索引。
+   * @param element - 已完成属性恢复的元素。
+   */
+  private registerIdentity(element: WorkflowBpmnElement): void {
+    if (element.id === undefined) return;
+    requireDefinition(
+      typeof element.id === 'string' &&
+        BPMN_MODEL_PATTERN.id.test(element.id) &&
+        !Object.hasOwn(this.elements, element.id),
+      BPMN_MODEL_ERROR.identity,
+    );
+    this.elements[element.id] = element;
+  }
+
+  /**
+   * 通过统一身份索引解析单值或多值引用，校验结果同时写入元素和引擎引用表。
+   * @param reference - 元素恢复期间保留的引用属性及原始值。
+   */
+  private resolveReference(reference: PendingReference): void {
+    const resolve = (raw: unknown): WorkflowBpmnElement => {
+      const value = definitionRecord(raw, BPMN_MODEL_ERROR.reference);
+      requireDefinition(
+        Object.keys(value).length === 1 && typeof value.$ref === 'string',
+        BPMN_MODEL_ERROR.reference,
+      );
+      const target = this.elements[value.$ref];
+      requireDefinition(
+        target && target.$instanceOf(reference.property.type),
+        `${BPMN_MODEL_ERROR.referenceType}${value.$ref}`,
+      );
+      this.resolvedReferences.push({
+        element: reference.owner,
+        property: reference.property.ns.name,
+        id: target.id,
+      });
       return target;
     };
-    if (reference.property.isMany) {
-      if (!Array.isArray(reference.value)) throw new Error('BPMN 多值引用必须是列表');
-      reference.owner.set(reference.property.name, reference.value.map(resolve));
-    } else reference.owner.set(reference.property.name, resolve(reference.value));
+    if (!reference.property.isMany) {
+      reference.owner.set(reference.property.name, resolve(reference.value));
+      return;
+    }
+    requireDefinition(
+      Array.isArray(reference.value),
+      BPMN_MODEL_ERROR.referenceList,
+    );
+    reference.owner.set(reference.property.name, reference.value.map(resolve));
   }
-  return { definition: { format: BPMN_FORMAT, model: dehydrateWorkflowBpmn(root) }, root, elements, references: resolvedReferences, processes: (root.rootElements ?? []).filter((item: WorkflowBpmnElement) => item.$type === 'bpmn:Process') };
 }
 
 /**
@@ -82,18 +292,22 @@ export function hydrateWorkflowBpmn(input: unknown): WorkflowBpmnModel {
  * @returns 只包含标准属性、命名空间扩展和显式引用的普通对象。
  * @throws 引用元素没有标识时拒绝保存。
  */
-export function dehydrateWorkflowBpmn(element: WorkflowBpmnElement): WorkflowBpmnRecord {
+export function dehydrateWorkflowBpmn(
+  element: WorkflowBpmnElement,
+): WorkflowBpmnRecord {
   const record: WorkflowBpmnRecord = { $type: element.$type };
   for (const property of element.$descriptor.properties) {
     if (property.isVirtual || !Object.hasOwn(element, property.name)) continue;
     const value = element.get(property.name);
     if (value === undefined) continue;
-    const flatten = (item: any): unknown => {
+    const flatten = (item: unknown): unknown => {
       if (property.isReference) {
-        if (!item?.id) throw new Error('BPMN 引用元素必须具有标识');
-        return { $ref: item.id };
+        const target = item as WorkflowBpmnElement;
+        requireDefinition(target?.id, BPMN_MODEL_ERROR.referenceId);
+        return { $ref: target.id };
       }
-      if (item && typeof item === 'object') return dehydrateWorkflowBpmn(item);
+      if (item && typeof item === 'object')
+        return dehydrateWorkflowBpmn(item as WorkflowBpmnElement);
       return item;
     };
     if (Array.isArray(value)) record[property.name] = value.map(flatten);

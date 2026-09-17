@@ -1,69 +1,125 @@
-interface WorkflowSequenceFlow {
+export interface WorkflowSequenceFlow {
   id: string;
   sourceId: string;
   targetId: string;
 }
 
+export interface WorkflowFlowComponent {
+  members: string[];
+  predecessors: Set<number>;
+  successors: Set<number>;
+  cyclic: boolean;
+}
+
 export class WorkflowBpmnFlowIndex {
   private readonly outgoing = new Map<string, WorkflowSequenceFlow[]>();
-  private readonly reachable = new Map<string, Set<string>>();
+  private readonly incoming = new Map<string, WorkflowSequenceFlow[]>();
+  private readonly byId = new Map<string, WorkflowSequenceFlow>();
 
   constructor(flows: readonly WorkflowSequenceFlow[]) {
     for (const flow of flows) {
       const outgoing = this.outgoing.get(flow.sourceId) ?? [];
       outgoing.push(flow);
       this.outgoing.set(flow.sourceId, outgoing);
+      if (!this.outgoing.has(flow.targetId))
+        this.outgoing.set(flow.targetId, []);
+      const incoming = this.incoming.get(flow.targetId) ?? [];
+      incoming.push(flow);
+      this.incoming.set(flow.targetId, incoming);
+      this.byId.set(flow.id, flow);
     }
   }
 
   /**
-   * 查询固定作用域内的顺序依赖，同一源节点的结果复用；自达只有存在实际回环时成立。
-   * @param sourceId - 开始搜索的节点身份。
-   * @param targetId - 需要证明可达的节点身份。
-   * @returns 是否存在至少一条顺序流组成的路径。
+   * 从一组网关入口反向遍历来源节点，在网关处截断回环；所有入口共享一次遍历。
+   * @param gatewayId - 本轮汇合网关，不能跨过其出口访问下一轮。
+   * @param flowIds - 需要查询的入口连线身份。
+   * @returns 能在不经过目标网关的情况下到达任一指定入口的节点集合。
    */
-  reaches(sourceId: string, targetId: string): boolean {
-    let targets = this.reachable.get(sourceId);
-    if (!targets) {
-      targets = new Set([...this.walk(sourceId)].map((flow) => flow.targetId));
-      this.reachable.set(sourceId, targets);
+  originsBefore(gatewayId: string, flowIds: Iterable<string>): Set<string> {
+    const origins = new Set<string>();
+    const pending: string[] = [];
+    for (const id of flowIds) {
+      const flow = this.byId.get(id);
+      if (!flow || flow.targetId !== gatewayId || origins.has(flow.sourceId))
+        continue;
+      origins.add(flow.sourceId);
+      pending.push(flow.sourceId);
     }
-    return targets.has(targetId);
-  }
-
-  /**
-   * 收集当前令牌能到达的网关入口，并在目标网关处停止，避免下一轮回环阻塞本轮汇合。
-   * @param sourceId - 持有令牌的节点身份。
-   * @param gatewayId - 当前正在判断重置的网关身份。
-   * @returns 未经过目标网关出口的可达入口连线集合。
-   */
-  incomingBefore(sourceId: string, gatewayId: string): Set<string> {
-    return new Set(
-      [...this.walk(sourceId, gatewayId)]
-        .filter((flow) => flow.targetId === gatewayId)
-        .map((flow) => flow.id),
-    );
-  }
-
-  /**
-   * 沿已索引的本作用域连线遍历，每个节点最多展开一次，保留回边但不反复遍历。
-   * @param sourceId - 本轮遍历的源节点。
-   * @param stopAtId - 到达后不再展开出口的可选节点。
-   * @returns 遍历中实际经过的连线集合。
-   */
-  private walk(sourceId: string, stopAtId?: string): Set<WorkflowSequenceFlow> {
-    const pending = [sourceId];
-    const visited = new Set<string>();
-    const result = new Set<WorkflowSequenceFlow>();
     for (let position = 0; position < pending.length; position++) {
       const id = pending[position];
-      if (visited.has(id)) continue;
-      visited.add(id);
-      for (const flow of this.outgoing.get(id) ?? []) {
-        result.add(flow);
-        if (flow.targetId !== stopAtId) pending.push(flow.targetId);
+      if (id === gatewayId) continue;
+      for (const flow of this.incoming.get(id) ?? []) {
+        if (origins.has(flow.sourceId)) continue;
+        origins.add(flow.sourceId);
+        pending.push(flow.sourceId);
       }
     }
-    return result;
+    return origins;
+  }
+
+  /**
+   * 将回环收缩成无环依赖图，正反两次迭代深搜各访问节点和边一次，不生成两两可达矩阵。
+   * @param isolated - 可能没有顺序流的活动身份，仍须拥有独立分量。
+   * @returns 节点到分量的映射及分量的直接前驱、后继与回环标记。
+   */
+  condense(isolated: Iterable<string> = []): {
+    componentByNode: Map<string, number>;
+    components: WorkflowFlowComponent[];
+  } {
+    const nodes = new Set([...this.outgoing.keys(), ...isolated]);
+    const visited = new Set<string>();
+    const finished: string[] = [];
+    for (const root of nodes) {
+      if (visited.has(root)) continue;
+      visited.add(root);
+      const stack = [{ id: root, position: 0 }];
+      while (stack.length) {
+        const current = stack[stack.length - 1];
+        const flows = this.outgoing.get(current.id) ?? [];
+        if (current.position >= flows.length) {
+          finished.push(current.id);
+          stack.pop();
+          continue;
+        }
+        const targetId = flows[current.position++].targetId;
+        if (visited.has(targetId)) continue;
+        visited.add(targetId);
+        stack.push({ id: targetId, position: 0 });
+      }
+    }
+    const componentByNode = new Map<string, number>();
+    const components: WorkflowFlowComponent[] = [];
+    for (let position = finished.length - 1; position >= 0; position--) {
+      const root = finished[position];
+      if (componentByNode.has(root)) continue;
+      const id = components.length;
+      const members = [root];
+      componentByNode.set(root, id);
+      for (let cursor = 0; cursor < members.length; cursor++) {
+        for (const flow of this.incoming.get(members[cursor]) ?? []) {
+          if (componentByNode.has(flow.sourceId)) continue;
+          componentByNode.set(flow.sourceId, id);
+          members.push(flow.sourceId);
+        }
+      }
+      components.push({
+        members,
+        predecessors: new Set(),
+        successors: new Set(),
+        cyclic: members.length > 1,
+      });
+    }
+    for (const flow of this.byId.values()) {
+      const source = componentByNode.get(flow.sourceId)!;
+      const target = componentByNode.get(flow.targetId)!;
+      if (source === target) {
+        if (flow.sourceId === flow.targetId) components[source].cyclic = true;
+        continue;
+      }
+      components[source].successors.add(target);
+      components[target].predecessors.add(source);
+    }
+    return { componentByNode, components };
   }
 }

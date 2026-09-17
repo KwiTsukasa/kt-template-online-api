@@ -16,7 +16,7 @@ const {
   KT_BPMN_NAMESPACE,
   KT_BPMN_EXPRESSION,
   KT_BPMN_STEP,
-} = require('../../../src/modules/workflow-engine/contract/workflow-bpmn.types');
+} = require('../../../src/modules/workflow-engine/constants/bpmn');
 
 /**
  * 将单个流程体包成标准 BPMN 文档，扩展只放在独立命名空间。

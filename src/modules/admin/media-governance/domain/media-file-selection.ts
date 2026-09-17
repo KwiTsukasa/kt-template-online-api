@@ -13,6 +13,42 @@ export function automaticMediaFileRole(relativePath: string): 'subtitle' | 'vide
 }
 
 /**
+ * 为服务端生成的治理单元与集号生成映射键，电影空集号和未指定集号保持区分。
+ * @param unitId - 不包含冒号的服务端治理单元身份。
+ * @param episodeNumber - 剧集编号、电影的空集号或尚未指定的值。
+ * @returns 可用于覆盖检查和重复检测的单元内集身份。
+ */
+export function mediaEpisodeKey(unitId: string, episodeNumber: number | null | undefined): string {
+  return `${unitId}:${episodeNumber}`;
+}
+
+/**
+ * 一次遍历保留最大的两项视频；单视频直接采用，多视频只接受正片明显大于小型附带文件的情况。
+ * @param entries - 保留原始索引和大小的来源文件清单。
+ * @returns 可唯一确定的原视频条目；没有视频或无法排除多正片时返回空。
+ */
+export function selectMediaFeatureVideo<T extends { relativePath: string; sizeBytes: number }>(entries: readonly T[]): T | undefined {
+  let largest: T | undefined;
+  let runnerUp: T | undefined;
+  for (const entry of entries) {
+    if (automaticMediaFileRole(entry.relativePath) !== 'video') continue;
+    if (!largest || entry.sizeBytes > largest.sizeBytes) {
+      runnerUp = largest;
+      largest = entry;
+    } else if (!runnerUp || entry.sizeBytes > runnerUp.sizeBytes) {
+      runnerUp = entry;
+    }
+  }
+  if (!largest || !runnerUp) return largest;
+  if (
+    largest.sizeBytes < MEDIA_FILE_SELECTION.minimumFeatureBytes ||
+    runnerUp.sizeBytes > MEDIA_FILE_SELECTION.maximumIncidentalBytes ||
+    largest.sizeBytes < runnerUp.sizeBytes * MEDIA_FILE_SELECTION.minimumDominanceRatio
+  ) return undefined;
+  return largest;
+}
+
+/**
  * 从无显式集号标记的根文件名读取末尾独立方括号或唯一数字，年份和分辨率不参与匹配。
  * @param name - 已排除目录部分的来源文件名。
  * @returns 唯一可判定的集号；没有匹配或存在多个独立数字时返回空。

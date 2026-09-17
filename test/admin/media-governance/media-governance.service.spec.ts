@@ -1,7 +1,7 @@
 import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { HttpException } from '@nestjs/common';
 import { isAutomationRejection } from '../../../src/common/automation/validation';
-import { automaticMediaFileRole } from '../../../src/modules/admin/media-governance/domain/media-file-selection';
+import { automaticMediaFileRole, selectMediaFeatureVideo } from '../../../src/modules/admin/media-governance/domain/media-file-selection';
 import {
   MediaGovernanceService,
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
@@ -245,6 +245,17 @@ describe('MediaGovernanceService', () => {
     expect(automaticMediaFileRole('directory/~syncthing~Show.zh-CN.srt')).toBeNull();
     expect(automaticMediaFileRole('.hidden/Movie.MKV')).toBe('video');
     expect(automaticMediaFileRole('Show.syncthing.zh-CN.SRT')).toBe('subtitle');
+  });
+
+  it('selects the same unique movie without sorting and preserves ambiguity and synchronization exclusions', () => {
+    const feature = { relativePath: 'Movie.mkv', sizeBytes: 1024 ** 3 };
+    const incidental = { relativePath: 'promo.mp4', sizeBytes: 8 * 1024 ** 2 };
+    const synchronized = { ...feature, relativePath: '.syncthing.Movie.mkv' };
+    expect(selectMediaFeatureVideo([incidental, synchronized, feature])).toBe(feature);
+    expect(selectMediaFeatureVideo([feature, incidental])).toBe(feature);
+    expect(selectMediaFeatureVideo([feature, { ...feature, relativePath: 'Other.mkv' }])).toBeUndefined();
+    expect(selectMediaFeatureVideo([incidental])).toBe(incidental);
+    expect(selectMediaFeatureVideo([synchronized])).toBeUndefined();
   });
 
   it.each([

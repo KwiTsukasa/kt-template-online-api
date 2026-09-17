@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AutomationValidationError } from '../../../src/common/automation/validation';
 import { MEDIA_WORKFLOW_ERROR } from '../../../src/modules/admin/media-governance/constants/workflow';
+import { MEDIA_FILE_SELECTION } from '../../../src/modules/admin/media-governance/constants/file-selection';
 import type { WorkflowStepInvocation } from '../../../src/modules/workflow-engine/contract/workflow-process.interface';
 import { createMediaWorkflowFixture } from './media-workflow.fixture';
 
@@ -43,6 +44,92 @@ const fixture = async () => {
 };
 
 describe('媒体工作流的领域失败边界', () => {
+  it('大清单的一一映射检查只线性读取选择项，不能退回逐项全表搜索', async () => {
+    const item = await fixture();
+    const count = 2000;
+    let reads = 0;
+    item.task.governanceProfile = 'embedded';
+    item.source.selectedFileCount = count;
+    item.source.selectedFileIndices = new Proxy(Array.from({ length: count }, (_, index) => index), {
+      get: (target, key, receiver) => {
+        if (typeof key === 'string' && /^\d+$/.test(key)) reads += 1;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    item.source.selectedFileMappings = Array.from({ length: count }, (_, index) => ({
+      index, unitId: item.task.units[0].id, episodeNumber: index + 1,
+      fileRole: 'video', language: null,
+    }));
+    Reflect.get(item.service, 'assertDownloadFileMappings').call(item.service, item.task);
+    expect(reads).toBeLessThanOrEqual(count * 4);
+  });
+
+  it('重复索引即使数量声明相等也不能冒充一一映射', async () => {
+    const item = await fixture();
+    item.task.governanceProfile = 'embedded';
+    item.source.selectedFileCount = 2;
+    item.source.selectedFileIndices = [0, 0];
+    item.source.selectedFileMappings = [1, 2].map((episodeNumber) => ({
+      index: 0, unitId: item.task.units[0].id, episodeNumber, fileRole: 'video', language: null,
+    }));
+    expect(() => Reflect.get(item.service, 'assertDownloadFileMappings').call(item.service, item.task))
+      .toThrow(MEDIA_FILE_SELECTION.invalidMapping);
+  });
+
+  it('字幕合同通过索引匹配固定来源及路径，错误路径是领域拒绝', async () => {
+    const item = await fixture();
+    const unit = item.task.units[0];
+    unit.expectedEpisodeNumbers = [1];
+    item.task.governanceProfile = 'sidecar-linked';
+    item.source.selectedFileCount = 1;
+    item.source.selectedFileIndices = [0];
+    item.source.selectedFileMappings = [{ index: 0, unitId: unit.id, episodeNumber: 1, fileRole: 'video', language: null }];
+    const subtitle = { ...item.source, id: `${item.source.id}-subtitle`, sourceRole: 'supplemental_subtitle' as const,
+      releaseGroup: 'fixture', selectedFileIndices: [1],
+      manifest: [{ index: 1, relativePath: 'Show.S01E01.zh-CN.ass', sizeBytes: 1024, executable: false }],
+      selectedFileMappings: [{ index: 1, unitId: unit.id, episodeNumber: 1, fileRole: 'subtitle' as const, language: 'zh-CN' as const }],
+    };
+    item.task.sources.push(subtitle);
+    unit.subtitleContract = {
+      expectedEpisodeNumbers: [1], releaseGroup: 'fixture', sourceId: subtitle.id, sourceIds: [subtitle.id],
+      mappings: [{ episodeNumber: 1, relativePath: subtitle.manifest[0].relativePath }],
+    };
+    const check = () => Reflect.get(item.service, 'assertDownloadFileMappings').call(item.service, item.task);
+    expect(check).not.toThrow();
+    unit.subtitleContract.mappings[0].relativePath = 'wrong.ass';
+    expect(check).toThrow(AutomationValidationError);
+    expect(check).toThrow(MEDIA_FILE_SELECTION.subtitleMappingMismatch);
+  });
+
+  it.each(
+    (['download', 'governance', 'acceptance', 'closed'] as const).flatMap((stage) =>
+      ['source.inspect', 'source.probe-runtime'].map((stepKey) => ({ stage, stepKey }))),
+  )('拒绝在 $stage 阶段准备 $stepKey，不能回退阶段或触及已有载荷', async ({ stage, stepKey }) => {
+    const item = await fixture();
+    item.task.stage = stage;
+    item.task.progress.completedBytes = 1024;
+    item.invocation.stepKey = stepKey;
+    const reserve = jest.fn();
+    Reflect.set(item.service, 'reserveExecution', reserve);
+    const before = JSON.stringify(item.task);
+    await expect(item.service.prepareWorkflowStep(item.invocation)).rejects.toThrow(MEDIA_WORKFLOW_ERROR.sourceStageInvalid);
+    expect(reserve).not.toHaveBeenCalled();
+    expect(JSON.stringify(item.task)).toBe(before);
+  });
+
+  it.each([
+    [{ sourceIndex: 2 }, MEDIA_WORKFLOW_ERROR.sourceIndexUnavailable],
+    [{ sourceId: 'missing' }, MEDIA_WORKFLOW_ERROR.sourceUnavailable],
+    [{ sourceIndex: 1, sourceId: 'missing' }, MEDIA_WORKFLOW_ERROR.sourceSelectorConflict],
+  ])('来源选择参数无效时结束为可识别的领域拒绝 (%j)', async (input, message) => {
+    const item = await fixture();
+    item.invocation.stepKey = 'source.inspect';
+    item.invocation.input = { revision: item.task.revision, ...input };
+    const outcome = await item.service.prepareWorkflowStep(item.invocation).catch((error: unknown) => error);
+    expect(outcome).toBeInstanceOf(AutomationValidationError);
+    expect(outcome).toMatchObject({ message });
+  });
+
   it('来源不可用时在自动映射前拒绝，重复调用不改写修订或文件选择', async () => {
     const item = await fixture();
     const before = JSON.stringify(item.task);

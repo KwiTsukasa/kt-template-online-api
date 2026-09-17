@@ -12,7 +12,12 @@ import { throwVbenError } from '@/common';
 import { requireDefinition } from '@/common/automation/validation';
 import { MEDIA_FILE_SELECTION } from '../constants/file-selection';
 import { MEDIA_WORKFLOW_ERROR } from '../constants/workflow';
-import { automaticMediaFileRole, resolveMediaFileEpisode } from '../domain/media-file-selection';
+import {
+  automaticMediaFileRole,
+  mediaEpisodeKey,
+  resolveMediaFileEpisode,
+  selectMediaFeatureVideo,
+} from '../domain/media-file-selection';
 import type {
   WorkflowBusinessIdentity,
   WorkflowCompletionContext,
@@ -399,24 +404,27 @@ export class MediaGovernanceService implements OnModuleInit {
       throwVbenError('媒体任务仍有未结束的步骤', HttpStatus.CONFLICT);
     let sources = task.sources.filter((source) => source.descriptorTombstonedAt === null);
     if (typeof invocation.input.sourceIndex === 'number') {
-      if (invocation.input.sourceId) throwVbenError('来源序号和来源身份只能选择一种', HttpStatus.BAD_REQUEST);
+      requireDefinition(!invocation.input.sourceId, MEDIA_WORKFLOW_ERROR.sourceSelectorConflict);
       sources.sort((left, right) => left.id.localeCompare(right.id));
       const source = sources[invocation.input.sourceIndex - 1];
-      if (!source) throwVbenError('来源序号超出任务范围', HttpStatus.CONFLICT);
+      requireDefinition(source, MEDIA_WORKFLOW_ERROR.sourceIndexUnavailable);
       sources = [source];
     }
     if (typeof invocation.input.sourceId === 'string' && invocation.input.sourceId) {
-      sources = [this.findSource(task, invocation.input.sourceId)];
+      const source = task.sources.find((item) => item.id === invocation.input.sourceId);
+      requireDefinition(source, MEDIA_WORKFLOW_ERROR.sourceUnavailable);
+      sources = [source];
     }
     const command = { expectedRevision: task.revision };
     switch (invocation.stepKey) {
       case 'source.inspect':
       case 'source.probe-runtime': {
-        if (!sources.length || sources.some((source) => source.descriptorTombstonedAt !== null))
-          throwVbenError('媒体步骤没有可用来源', HttpStatus.CONFLICT);
-        if (sources.length !== 1) throwVbenError('来源步骤必须明确选择一个来源', HttpStatus.BAD_REQUEST);
-        if (invocation.stepKey === 'source.probe-runtime' && sources.some((source) => source.manifestState !== 'inspected'))
-          throwVbenError('必须先检查来源清单', HttpStatus.CONFLICT);
+        requireDefinition(task.stage === 'intake', MEDIA_WORKFLOW_ERROR.sourceStageInvalid);
+        const source = sources[0];
+        requireDefinition(source && source.descriptorTombstonedAt === null, MEDIA_WORKFLOW_ERROR.sourceUnavailable);
+        requireDefinition(sources.length === 1, MEDIA_WORKFLOW_ERROR.sourceAmbiguous);
+        if (invocation.stepKey === 'source.probe-runtime')
+          requireDefinition(source.manifestState === 'inspected', MEDIA_WORKFLOW_ERROR.manifestRequired);
         await this.reserveExecution(task, invocation.stepKey, sources, invocation);
         break;
       }
@@ -2580,134 +2588,84 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 按下载来源身份核对文件映射、视频覆盖与字幕合同完整性。
-   * @param task - 用于按下载来源身份核对文件映射、视频覆盖与字幕合同完整性的领域对象，包含 `sources`、`units`、`governanceProfile`、`mediaType` 字段。
+   * 用一次身份索引核对一一映射、视频覆盖及字幕合同，不按每一集反复扫描完整来源与清单。
+   * @param task - 持有已检查清单、明确文件映射和治理单元的权威任务。
+   * @throws 选择重复或遗漏、视频缺失、中文字幕或固定字幕合同不完整时抛出领域拒绝。
    */
   private assertDownloadFileMappings(task: MediaGovernanceTask) {
+    const videoUnits = new Set<string>();
+    const chineseEpisodes = new Set<string>();
+    const movieSubtitleSources = new Map<string, Set<string>>();
+    const needsSubtitles = task.governanceProfile !== 'embedded';
     for (const source of task.sources) {
-      const mappedIndices = source.selectedFileMappings.map(
-        (mapping) => mapping.index,
+      const selected = new Set(source.selectedFileIndices);
+      const mapped = new Set(source.selectedFileMappings.map((mapping) => mapping.index));
+      requireDefinition(
+        source.selectedFileCount > 0 &&
+        selected.size === source.selectedFileCount &&
+        source.selectedFileIndices.length === selected.size &&
+        mapped.size === selected.size &&
+        source.selectedFileMappings.length === mapped.size &&
+        [...mapped].every((index) => selected.has(index)),
+        MEDIA_FILE_SELECTION.invalidMapping,
       );
-      if (
-        source.selectedFileCount === 0 ||
-        source.selectedFileMappings.length !== source.selectedFileCount ||
-        mappedIndices.some(
-          (index) => !source.selectedFileIndices.includes(index),
-        ) ||
-        source.selectedFileIndices.some(
-          (index) => !mappedIndices.includes(index),
-        )
-      ) {
-        throwVbenError('来源文件尚未完成一对一治理映射', HttpStatus.CONFLICT);
-      }
-    }
-    const primaryVideos = task.sources
-      .filter((source) => source.sourceRole === 'primary_media')
-      .flatMap((source) => source.selectedFileMappings)
-      .filter((mapping) => mapping.fileRole === 'video');
-    for (const unit of task.units) {
-      const videos = primaryVideos.filter(
-        (mapping) => mapping.unitId === unit.id,
-      );
-      if (videos.length === 0) {
-        throwVbenError(
-          `${unit.seasonNumber ?? '电影单元'} 缺少已映射视频`,
-          HttpStatus.CONFLICT,
-        );
-      }
-    }
-    if (task.governanceProfile === 'embedded') return;
-    const subtitleMappings = task.sources.flatMap((source) =>
-      source.selectedFileMappings
-        .filter(
-          (mapping) =>
-            mapping.fileRole === 'subtitle' &&
-            (mapping.language === 'zh-CN' || mapping.language === 'zh-TW'),
-        )
-        .map((mapping) => ({ mapping, source })),
-    );
-    for (const unit of task.units) {
-      let expectedEpisodes: Array<null | number> = [null];
-      if (task.mediaType === 'tv') {
-        expectedEpisodes = unit.expectedEpisodeNumbers;
-      }
-      const missing = expectedEpisodes.filter(
-        (episodeNumber) =>
-          !subtitleMappings.some(
-            ({ mapping }) =>
-              mapping.unitId === unit.id &&
-              mapping.episodeNumber === episodeNumber,
-          ),
-      );
-      if (missing.length > 0) {
-        throwVbenError(
-          `${unit.seasonNumber ?? '电影单元'} 中文字幕映射不完整`,
-          HttpStatus.CONFLICT,
-        );
-      }
-      if (task.governanceProfile !== 'sidecar-linked') continue;
-      if (task.mediaType !== 'tv') {
-        const sourceIds = new Set(
-          subtitleMappings
-            .filter(
-              ({ mapping, source }) =>
-                mapping.unitId === unit.id &&
-                mapping.episodeNumber === null &&
-                mapping.language === 'zh-CN' &&
-                source.sourceRole === 'supplemental_subtitle' &&
-                Boolean(source.releaseGroup),
-            )
-            .map(({ source }) => source.id),
-        );
-        if (sourceIds.size !== 1) {
-          throwVbenError(
-            '电影外挂简体中文字幕必须由唯一补充来源提供',
-            HttpStatus.CONFLICT,
-          );
+      for (const mapping of source.selectedFileMappings) {
+        if (source.sourceRole === 'primary_media' && mapping.fileRole === 'video')
+          videoUnits.add(mapping.unitId);
+        if (!needsSubtitles || mapping.fileRole !== 'subtitle') continue;
+        if (mapping.language === 'zh-CN' || mapping.language === 'zh-TW')
+          chineseEpisodes.add(mediaEpisodeKey(mapping.unitId, mapping.episodeNumber));
+        if (
+          mapping.episodeNumber === null && mapping.language === 'zh-CN' &&
+          source.sourceRole === 'supplemental_subtitle' && source.releaseGroup
+        ) {
+          const owners = movieSubtitleSources.get(mapping.unitId) ?? new Set<string>();
+          owners.add(source.id);
+          movieSubtitleSources.set(mapping.unitId, owners);
         }
+      }
+    }
+    for (const unit of task.units) {
+      const label = unit.seasonNumber ?? MEDIA_FILE_SELECTION.movieUnitLabel;
+      requireDefinition(videoUnits.has(unit.id), MEDIA_FILE_SELECTION.missingVideo(label));
+      if (!needsSubtitles) continue;
+      let episodes: Array<null | number> = [null];
+      if (task.mediaType === 'tv') episodes = unit.expectedEpisodeNumbers;
+      requireDefinition(
+        episodes.every((episode) => chineseEpisodes.has(mediaEpisodeKey(unit.id, episode))),
+        MEDIA_FILE_SELECTION.missingSubtitle(label),
+      );
+    }
+    if (task.governanceProfile !== 'sidecar-linked') return;
+    const sources = new Map(task.sources.map((source) => {
+      const subtitles = new Map<string, typeof source.selectedFileMappings[number]>();
+      for (const mapping of source.selectedFileMappings) {
+        const key = mediaEpisodeKey(mapping.unitId, mapping.episodeNumber);
+        if (mapping.fileRole === 'subtitle' && !subtitles.has(key)) subtitles.set(key, mapping);
+      }
+      return [source.id, {
+        source, subtitles,
+        files: new Map(source.manifest.map((entry) => [entry.index, entry])),
+      }] as const;
+    }));
+    for (const unit of task.units) {
+      if (task.mediaType !== 'tv') {
+        requireDefinition(movieSubtitleSources.get(unit.id)?.size === 1, MEDIA_FILE_SELECTION.movieSubtitleSource);
         continue;
       }
       const contract = unit.subtitleContract;
-      if (
-        !contract ||
-        contract.expectedEpisodeNumbers.length !== expectedEpisodes.length ||
-        contract.expectedEpisodeNumbers.some(
-          (episode, index) => episode !== expectedEpisodes[index],
-        )
-      ) {
-        throwVbenError(
-          `${unit.seasonNumber ?? '电影单元'} 缺少完整字幕合同`,
-          HttpStatus.CONFLICT,
-        );
-      }
-      const contractSource = task.sources.find(
-        (source) => source.id === contract.sourceId,
+      const expected = unit.expectedEpisodeNumbers;
+      requireDefinition(
+        contract && contract.expectedEpisodeNumbers.length === expected.length &&
+        contract.expectedEpisodeNumbers.every((episode, index) => episode === expected[index]),
+        MEDIA_FILE_SELECTION.missingSubtitleContract(unit.seasonNumber ?? MEDIA_FILE_SELECTION.movieUnitLabel),
       );
-      if (
-        !contractSource ||
-        contractSource.releaseGroup !== contract.releaseGroup
-      ) {
-        throwVbenError('字幕合同来源或发布组不匹配', HttpStatus.CONFLICT);
-      }
+      const linked = sources.get(contract.sourceId);
+      requireDefinition(linked && linked.source.releaseGroup === contract.releaseGroup, MEDIA_FILE_SELECTION.subtitleSourceMismatch);
       for (const mapping of contract.mappings) {
-        const selectedMapping = contractSource.selectedFileMappings.find(
-          (candidate) =>
-            candidate.fileRole === 'subtitle' &&
-            candidate.unitId === unit.id &&
-            candidate.episodeNumber === mapping.episodeNumber,
-        );
-        let manifestEntry = null;
-        if (selectedMapping) {
-          manifestEntry = contractSource.manifest.find(
-            (entry) => entry.index === selectedMapping.index,
-          );
-        }
-        if (
-          !manifestEntry ||
-          manifestEntry.relativePath !== mapping.relativePath
-        ) {
-          throwVbenError('字幕合同与密封文件映射不一致', HttpStatus.CONFLICT);
-        }
+        const selected = linked.subtitles.get(mediaEpisodeKey(unit.id, mapping.episodeNumber));
+        const entry = linked.files.get(selected?.index ?? -1);
+        requireDefinition(entry && entry.relativePath === mapping.relativePath, MEDIA_FILE_SELECTION.subtitleMappingMismatch);
       }
     }
   }
@@ -3190,35 +3148,10 @@ export class MediaGovernanceService implements OnModuleInit {
         }
       }
     } else {
-      const videoEntries = source.manifest
-        .filter(
-          (entry) => automaticMediaFileRole(entry.relativePath) === 'video',
-        )
-        .toSorted((left, right) => right.sizeBytes - left.sizeBytes);
-      let selectedVideo = videoEntries[0];
-      if (videoEntries.length > 1) {
-        const runnerUp = videoEntries[1];
-        const minimumFeatureBytes = 512 * 1024 * 1024;
-        const maximumIncidentalBytes = 64 * 1024 * 1024;
-        const minimumDominanceRatio = 8;
-        if (
-          !selectedVideo ||
-          !runnerUp ||
-          selectedVideo.sizeBytes < minimumFeatureBytes ||
-          runnerUp.sizeBytes > maximumIncidentalBytes ||
-          selectedVideo.sizeBytes < runnerUp.sizeBytes * minimumDominanceRatio
-        ) {
-          selectedVideo = undefined;
-        }
-      }
-      if (!selectedVideo) {
-        throwVbenError(
-          '电影来源无法唯一自动判断正片，请手动选择',
-          HttpStatus.CONFLICT,
-        );
-      }
+      const selectedVideo = selectMediaFeatureVideo(source.manifest);
+      requireDefinition(selectedVideo, MEDIA_FILE_SELECTION.movieAmbiguous);
       const unit = task.units[0];
-      if (!unit) throwVbenError('任务缺少治理单元', HttpStatus.CONFLICT);
+      requireDefinition(unit, MEDIA_FILE_SELECTION.unitMissing);
       mappings.push({
         fileRole: 'video',
         index: selectedVideo.index,
@@ -3227,12 +3160,12 @@ export class MediaGovernanceService implements OnModuleInit {
     }
     const videoKeys = mappings
       .filter((mapping) => mapping.fileRole === 'video')
-      .map((mapping) => `${mapping.unitId}:${mapping.episodeNumber}`);
+      .map((mapping) => mediaEpisodeKey(mapping.unitId, mapping.episodeNumber));
     const subtitleKeys = mappings
       .filter((mapping) => mapping.fileRole === 'subtitle')
       .map(
         (mapping) =>
-          `${mapping.unitId}:${mapping.episodeNumber}:${mapping.language}`,
+          `${mediaEpisodeKey(mapping.unitId, mapping.episodeNumber)}:${mapping.language}`,
       );
     requireDefinition(
       mappings.some((mapping) => mapping.fileRole === 'video') &&

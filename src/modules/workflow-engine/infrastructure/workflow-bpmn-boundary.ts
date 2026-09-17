@@ -1,9 +1,10 @@
 import { Activity, BoundaryEvent, CompensateEventDefinition } from 'bpmn-elements';
 import { BoundaryEventBehaviour } from 'bpmn-elements/events';
 import { WorkflowConcurrentTaskBehaviour } from './workflow-bpmn-task';
+import { configureWorkflowCompensationThrow } from './workflow-bpmn-compensation';
 
 /**
- * 普通并发任务只补偿成功的业务实例，排除容器完成、错误和撤销，并过滤旧快照中的同类队列记录。
+ * 普通并发任务逐个补偿成功实例，显式循环完成后整体补偿一次；同时排除错误、撤销及旧队列中的容器记录。
  * @param activity - 当前捕获或抛出补偿事件的活动。
  * @param definition - 标准补偿事件定义。
  * @param context - 活动及补偿关联所在的流程上下文。
@@ -11,7 +12,12 @@ import { WorkflowConcurrentTaskBehaviour } from './workflow-bpmn-task';
  */
 export function WorkflowCompensateEventDefinition(activity: any, definition: any, context: any): any {
   const source: any = new CompensateEventDefinition(activity, definition, context);
-  if (activity.isThrowing || !activity.attachedTo?.ktConcurrentTask) return source;
+  if (activity.isThrowing) {
+    configureWorkflowCompensationThrow(source, activity, definition, context);
+    return source;
+  }
+  const host = activity.attachedTo;
+  const looped = Boolean(host?.behaviour.loopCharacteristics);
   for (const method of ['_onCollect', '_onCollected']) {
     const receive = source[method].bind(source);
     source[method] = (routingKey: string, message: any) => {
@@ -19,7 +25,17 @@ export function WorkflowCompensateEventDefinition(activity: any, definition: any
       if (routingKey === 'execute.completed') {
         const content = message.content;
         if (content.ktTaskDiscarded || content.error) return;
-        if (content.isRootScope && content.preventComplete && content.ignoreOutbound) return;
+        if (looped && !content.isRootScope) return;
+        if (host?.ktConcurrentTask && !looped && content.isRootScope && content.preventComplete && content.ignoreOutbound) return;
+        if (method === '_onCollect') {
+          let order = 0;
+          for (const sibling of context.getActivities(activity.parent.id)) {
+            for (const record of sibling.broker.getQueue('compensate-q')?.getState()?.messages ?? []) {
+              order = Math.max(order, record.content.ktCompensationOrder ?? 0);
+            }
+          }
+          message = { ...message, content: { ...content, ktCompensationOrder: order + 1 } };
+        }
       }
       return receive(routingKey, message);
     };

@@ -80,3 +80,50 @@ test('旧版已保存的补偿队列过滤容器完成，保留两个成功实�
   await cancelAndCompensate(model, result, 2);
   assert.equal(JSON.stringify(result.checkpoint), persisted);
 });
+
+const makeLoopModel = async (mode, cardinality = 3) => {
+  const document = (await makeModel()).definition;
+  const transaction = document.model.rootElements[0].flowElements.find(item => item.id === 'Tx');
+  transaction.flowElements = transaction.flowElements.filter(item => !['A', 'B', 'Fork_B', 'B_Host', 'A_Host'].includes(item.id));
+  const entrance = transaction.flowElements.find(item => item.id === 'Fork_A');
+  entrance.id = 'Fork_Host';
+  entrance.targetRef = ref('Host');
+  let loop = { $type: 'bpmn:MultiInstanceLoopCharacteristics', isSequential: mode === 'sequential', loopCardinality: { $type: 'bpmn:FormalExpression', body: String(cardinality) } };
+  if (mode === 'standard') loop = { $type: 'bpmn:StandardLoopCharacteristics', testBefore: false, loopMaximum: cardinality };
+  transaction.flowElements.find(item => item.id === 'Host').loopCharacteristics = loop;
+  const model = await parseWorkflowBpmn(document);
+  assert.deepEqual(validateWorkflowBpmn(model), []);
+  return model;
+};
+
+for (const mode of ['parallel', 'sequential', 'standard']) for (const outcome of ['completed', 'cancelled', 'error', 'legacy']) {
+  test(`${mode} 循环 ${outcome} 时按外层活动成功状态补偿，不能把每次迭代额外派发为补偿`, async () => {
+    const model = await makeLoopModel(mode);
+    const current = adapter.WorkflowCompensateEventDefinition;
+    let result;
+    try {
+      if (outcome === 'legacy') adapter.WorkflowCompensateEventDefinition = require('bpmn-elements').CompensateEventDefinition;
+      result = await advanceWorkflowBpmn(model, null, {});
+      const first = result.jobs.find(job => job.elementId === 'Host');
+      result = await finish(model, result, [first]);
+      if (outcome === 'completed' || outcome === 'legacy') {
+        for (let count = 0; count < 3 && result.jobs.some(job => job.elementId === 'Host'); count += 1) result = await finish(model, result, result.jobs.filter(job => job.elementId === 'Host'));
+        assert.equal(result.checkpoint.outputs.Host.items.length, 3);
+      }
+      if (outcome === 'error') {
+        const host = result.jobs.find(job => job.elementId === 'Host');
+        result = await advanceWorkflowBpmn(model, restore(result), {}, [{ executionId: host.executionId, error: { code: 'BAD', message: 'loop rejected' } }]);
+      }
+    } finally { adapter.WorkflowCompensateEventDefinition = current; }
+    let expected = 0;
+    if (outcome === 'completed' || outcome === 'legacy') expected = 1;
+    await cancelAndCompensate(model, result, expected);
+  });
+}
+
+for (const mode of ['parallel', 'sequential']) test(`零次${mode}多实例活动成功完成，关联补偿只执行一次`, async () => {
+  const model = await makeLoopModel(mode, 0);
+  const result = await advanceWorkflowBpmn(model, null, {});
+  assert.deepEqual(result.jobs.map(job => job.elementId), ['Trigger']);
+  await cancelAndCompensate(model, result, 1);
+});

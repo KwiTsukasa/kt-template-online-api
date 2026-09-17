@@ -165,28 +165,20 @@ async function execute(input) {
   const { readPrivateLine } = await import(
     pathToFileURL(path.join(root, 'private-file.mjs')).href
   );
+  const { MediaExecutorApiClient } = await import(
+    pathToFileURL(path.join(root, 'media-api-client.mjs')).href
+  );
   const config = parseRunnerConfig(JSON.parse(configBytes.toString('utf8')));
   if (!config.manifestExecutor.startsWith(root + '/'))
     throw new Error('MEDIA_CONFIG_RELEASE_MISMATCH');
-  const response = await fetch(
-    config.apiBaseUrl + '/internal/media-governance/executor/workflow/envelope',
-    {
-      method: 'POST',
-      signal: AbortSignal.timeout(15_000),
-      headers: {
-        'content-type': 'application/json',
-        'x-kt-media-executor-secret': readPrivateLine(
-          config.internalSecretFile,
-        ),
-      },
-      body: JSON.stringify({
-        ...input.params,
-        executionKey: input.context.executionKey,
-      }),
-    },
-  );
-  if (!response.ok) throw new Error('MEDIA_ENVELOPE_REJECTED');
-  const envelope = validateExecutionEnvelope(await response.json());
+  const api = new MediaExecutorApiClient({
+    baseUrl: config.apiBaseUrl,
+    internalSecret: readPrivateLine(config.internalSecretFile),
+  });
+  const envelope = validateExecutionEnvelope(await api.workflowEnvelope({
+    ...input.params,
+    executionKey: input.context.executionKey,
+  }));
   const actionMatches =
     envelope.action === input.context.stepKey ||
     (input.context.stepKey === 'governance.rebase' &&

@@ -11,6 +11,7 @@ import {
 import { throwVbenError } from '@/common';
 import { requireDefinition } from '@/common/automation/validation';
 import { MEDIA_FILE_SELECTION } from '../constants/file-selection';
+import { MEDIA_WORKFLOW_ERROR } from '../constants/workflow';
 import { resolveMediaFileEpisode } from '../domain/media-file-selection';
 import type {
   WorkflowBusinessIdentity,
@@ -389,7 +390,10 @@ export class MediaGovernanceService implements OnModuleInit {
         throwVbenError('工作流步骤密封身份不一致', HttpStatus.CONFLICT);
       return this.workflowScriptParameters(existing);
     }
-    this.assertRevision(task, Number(invocation.input.revision));
+    requireDefinition(
+      task.revision === Number(invocation.input.revision),
+      MEDIA_WORKFLOW_ERROR.revisionChanged,
+    );
     this.assertExecutionMode(task, invocation);
     if (task.activeRunId)
       throwVbenError('媒体任务仍有未结束的步骤', HttpStatus.CONFLICT);
@@ -417,6 +421,7 @@ export class MediaGovernanceService implements OnModuleInit {
         break;
       }
       case 'source.download':
+        this.assertDownloadSources(task);
         if (invocation.input.autoSelect === true) {
           this.normalizeExplicitEmbeddedRssSources(task);
           for (const source of task.sources.filter((item) => item.descriptorTombstonedAt === null)) {
@@ -470,6 +475,13 @@ export class MediaGovernanceService implements OnModuleInit {
     if (!evidence || evidence.taskId !== task.id || evidence.status !== 'succeeded' ||
       !evidence.evidenceSha256 || receipt?.output.evidenceSha256 !== evidence.evidenceSha256)
       throwVbenError('媒体步骤尚无匹配的成功证据', HttpStatus.CONFLICT);
+    if (envelope.action === 'source.probe-runtime') {
+      const sources = new Map(task.sources.map((source) => [source.id, source]));
+      requireDefinition(envelope.sources.every(({ sourceId }) => {
+        const source = sources.get(sourceId);
+        return source && this.isSourceDownloadable(source);
+      }), MEDIA_WORKFLOW_ERROR.probeRejected);
+    }
     return { taskId: task.id, revision: task.revision, mediaRunId: runId, evidenceSha256: evidence.evidenceSha256 };
   }
 
@@ -2520,6 +2532,24 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
+   * 在自动映射和预留下载之前统一拒绝未完成检查或不可用的来源，避免无效重试先改写任务修订。
+   * @param task - 即将为工作流准备下载的权威任务。
+   * @throws 主来源缺失、已停用或任一来源未通过清单与可用性检查时抛出领域拒绝。
+   */
+  private assertDownloadSources(task: MediaGovernanceTask): void {
+    const primary = task.sources.find((source) => source.sourceRole === 'primary_media');
+    requireDefinition(
+      primary && primary.descriptorTombstonedAt === null && this.isSourceDownloadable(primary),
+      MEDIA_WORKFLOW_ERROR.primaryNotReady,
+    );
+    requireDefinition(task.sources.every((source) =>
+      source.descriptorTombstonedAt === null &&
+      source.manifestState === 'inspected' &&
+      this.isSourceDownloadable(source),
+    ), MEDIA_WORKFLOW_ERROR.sourcesNotReady);
+  }
+
+  /**
    * 核对来源与文件映射后为工作流密封隔离下载授权，不自行派发或续步。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于下载任务的结构化输入，包含 `expectedRevision` 字段。
@@ -2537,26 +2567,7 @@ export class MediaGovernanceService implements OnModuleInit {
     if (task.runState === 'running') {
       throwVbenError('任务已有运行中的操作', HttpStatus.CONFLICT);
     }
-    const primary = task.sources.find(
-      (source) => source.sourceRole === 'primary_media',
-    );
-    if (
-      !primary ||
-      primary.descriptorTombstonedAt !== null ||
-      !this.isSourceDownloadable(primary)
-    ) {
-      throwVbenError('主媒体来源尚未通过运行时探针', HttpStatus.CONFLICT);
-    }
-    if (
-      task.sources.some(
-        (source) =>
-          source.descriptorTombstonedAt !== null ||
-          source.manifestState !== 'inspected' ||
-          !this.isSourceDownloadable(source),
-      )
-    ) {
-      throwVbenError('仍有来源未完成清单检查或运行时探针', HttpStatus.CONFLICT);
-    }
+    this.assertDownloadSources(task);
     this.assertDownloadFileMappings(task);
     {
       let action: 'source.download' | 'source.resume' = 'source.download';

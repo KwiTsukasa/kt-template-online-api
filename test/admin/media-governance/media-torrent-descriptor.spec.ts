@@ -55,4 +55,23 @@ describe('media torrent descriptor direct subtitle web-seed', () => {
       ),
     ).toThrow('torrent-descriptor-direct-payload-invalid');
   });
+
+  it('accepts an empty optional web-seed list without changing info or manifest identity', () => {
+    const original = Buffer.from(
+      'd4:infod5:filesld6:lengthi1024e4:pathl15:Show.S01E01.mkveed6:lengthi2048e4:pathl15:Show.S01E02.mkveee4:name4:Showee',
+    );
+    const withEmptyList = Buffer.concat([
+      original.subarray(0, -1), Buffer.from('8:url-listlee'),
+    ]);
+    const expected = parseTorrentDescriptor(original);
+    const parsed = parseTorrentDescriptor(withEmptyList);
+    expect(parsed.directSubtitleWebSeed).toBeNull();
+    expect(parsed.infoHash).toBe(expected.infoHash);
+    expect(parsed.manifest).toEqual(expected.manifest);
+    expect(parsed.manifestSha256).toBe(expected.manifestSha256);
+    expect(parsed.descriptorSha256).not.toBe(expected.descriptorSha256);
+    expect(() => parseTorrentDescriptor(Buffer.concat([
+      original.subarray(0, -1), Buffer.from('17:kt-direct-payload1:x8:url-listlee'),
+    ]))).toThrow('torrent-descriptor-direct-payload-invalid');
+  });
 });

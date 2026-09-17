@@ -291,7 +291,7 @@ function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
  * @param root - 已解析的 torrent 根字典。
  * @param info - 参与 info-hash 的 torrent 字典。
  * @param manifest - 已通过路径和文件类型校验的清单。
- * @returns 唯一安全 web-seed 的地址、内联载荷、分片长度和逐片 SHA-1；没有 web-seed 时返回 `null`。
+ * @returns 唯一安全 web-seed 的地址、内联载荷、分片长度和逐片 SHA-1；缺失或空地址列表且没有私有正文时返回 `null`。
  * @throws 当 web-seed 不是唯一 Assrt HTTPS 单字幕文件，或内联载荷与 piece 合同不一致时抛出。
  */
 function parseDirectSubtitleWebSeed(
@@ -301,7 +301,7 @@ function parseDirectSubtitleWebSeed(
 ) {
   const raw = root.get('url-list');
   const rawPayload = root.get('kt-direct-payload');
-  if (raw === undefined) {
+  if (raw === undefined || (Array.isArray(raw) && raw.length === 0)) {
     if (rawPayload !== undefined) {
       throw new Error('torrent-descriptor-direct-payload-invalid');
     }

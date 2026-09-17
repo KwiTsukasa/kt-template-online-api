@@ -15,7 +15,7 @@ import { WorkflowEventBasedGateway } from './workflow-bpmn-event-gateway';
 import { WorkflowComplexGateway } from './workflow-bpmn-complex';
 import { WorkflowEventSubProcess } from './workflow-bpmn-event-subprocess';
 import { WorkflowConcurrentTask } from './workflow-bpmn-task';
-import { repeatingBpmnEvent } from './workflow-bpmn-boundary';
+import { migrateBpmnBoundaryState, repeatingBpmnEvent, WorkflowConcurrentBoundary } from './workflow-bpmn-boundary';
 import { bpmnMessageProcess } from '../domain/workflow-bpmn-correlation';
 
 export interface WorkflowBpmnCheckpoint {
@@ -199,7 +199,7 @@ export async function advanceWorkflowBpmn(
   const engine = new Engine({
     moddleContext: { rootElement: executionRoot, elementsById: model.elements, references: model.references, warnings: [] } as any,
     moddleOptions: { kt: KT_BPMN_MODDLE },
-    elements: { SignalEventDefinition: repeatingBpmnEvent(SignalEventDefinition, boundaryOccurrences), MessageEventDefinition: repeatingBpmnEvent(MessageEventDefinition, boundaryOccurrences), EscalationEventDefinition: repeatingBpmnEvent(EscalationEventDefinition, boundaryOccurrences), ServiceTask: WorkflowConcurrentTask, BusinessRuleTask: WorkflowConcurrentTask, SendTask: WorkflowConcurrentTask, ScriptTask: WorkflowConcurrentTask, UserTask: WorkflowConcurrentTask, ManualTask: Task, SubProcess: WorkflowEventSubProcess, InclusiveGateway: WorkflowInclusiveGateway, ComplexGateway: WorkflowComplexGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
+    elements: { BoundaryEvent: WorkflowConcurrentBoundary, SignalEventDefinition: repeatingBpmnEvent(SignalEventDefinition, boundaryOccurrences), MessageEventDefinition: repeatingBpmnEvent(MessageEventDefinition, boundaryOccurrences), EscalationEventDefinition: repeatingBpmnEvent(EscalationEventDefinition, boundaryOccurrences), ServiceTask: WorkflowConcurrentTask, BusinessRuleTask: WorkflowConcurrentTask, SendTask: WorkflowConcurrentTask, ScriptTask: WorkflowConcurrentTask, UserTask: WorkflowConcurrentTask, ManualTask: Task, SubProcess: WorkflowEventSubProcess, InclusiveGateway: WorkflowInclusiveGateway, ComplexGateway: WorkflowComplexGateway, EventBasedGateway: WorkflowEventBasedGateway, StandardLoopCharacteristics: WorkflowStandardLoop, MultiInstanceLoopCharacteristics: WorkflowMultiInstance },
     variables,
     expressions,
     timers,
@@ -365,7 +365,7 @@ export async function advanceWorkflowBpmn(
     }, { noAck: true });
   try {
     if (checkpoint) {
-      engine.recover(checkpoint.engine);
+      engine.recover(migrateBpmnBoundaryState(checkpoint.engine, model.elements));
       await engine.resume();
     } else await engine.execute();
     discardOtherEntries();

@@ -12,13 +12,16 @@ export function WorkflowConcurrentTask(definition: any, context: any) {
   let Behaviour: any = ServiceTaskBehaviour;
   if (definition.type === 'bpmn:UserTask') Behaviour = UserTaskBehaviour;
   if (definition.behaviour?.loopCharacteristics) return new Activity(Behaviour, definition, context);
-  return new Activity(WorkflowConcurrentTaskBehaviour, definition, context);
+  const activity = new Activity(WorkflowConcurrentTaskBehaviour, definition, context);
+  (activity as any).ktConcurrentTask = true;
+  return activity;
 }
 
-class WorkflowConcurrentTaskBehaviour {
-  private root: any;
+export class WorkflowConcurrentTaskBehaviour {
+  protected root: any;
   private arrivals: any[] = [];
-  private instances = new Map<string, any>();
+  protected instances = new Map<string, any>();
+  private restored: Record<string, any> = {};
   private running = false;
   private scheduled = false;
   private legacy: any;
@@ -36,8 +39,9 @@ class WorkflowConcurrentTaskBehaviour {
       return;
     }
     if (!message.content.isRootScope) {
-      const source = this.behaviour();
+      const source = this.behaviour(message);
       this.instances.set(message.content.executionId, source);
+      if (this.restored[message.content.executionId]) source.recover?.(this.restored[message.content.executionId]);
       source.execute(message);
       return;
     }
@@ -53,8 +57,12 @@ class WorkflowConcurrentTaskBehaviour {
       }
       if (completed.fields.redelivered) return;
       this.instances.delete(content.executionId);
-      broker.publish('execution', 'execute.outbound.take', { ...content, ignoreOutbound: false, outbound: undefined });
-      broker.publish('event', 'activity.end', { ...content, state: 'end' });
+      broker.cancel(`_kt-task-instance-${content.executionId}`);
+      if (!content.ktTaskDiscarded) {
+        broker.publish('execution', 'execute.outbound.take', { ...content, ignoreOutbound: false, outbound: undefined });
+        broker.publish('event', 'activity.end', { ...content, state: 'end' });
+      }
+      broker.publish('event', 'activity.instance.leave', { ...content, state: 'leave' });
       this.schedule();
     }, { noAck: true, consumerTag: '_kt-task-completed', priority: 500 });
     broker.subscribeTmp('api', `activity.*.${this.root.executionId}`, (_: string, incoming: any) => {
@@ -73,12 +81,12 @@ class WorkflowConcurrentTaskBehaviour {
   }
 
   /**
-   * 保存未展开的入口和根身份，具体实例由引擎执行队列保存。
+   * 保存入口、根身份及独立监听器队列，普通任务实例继续由引擎执行队列保存。
    * @returns 可恢复的活动状态；旧实例继续使用原行为状态。
    */
   getState() {
     if (this.legacy) return this.legacy.getState?.() ?? {};
-    return { taskInstances: { root: structuredClone(this.root), arrivals: structuredClone(this.arrivals) } };
+    return { taskInstances: { root: structuredClone(this.root), arrivals: structuredClone(this.arrivals), instances: Object.fromEntries([...this.instances].filter(([, source]) => source.getState).map(([id, source]) => [id, source.getState()])) } };
   }
 
   /**
@@ -93,15 +101,57 @@ class WorkflowConcurrentTaskBehaviour {
     }
     this.root = state.taskInstances.root;
     this.arrivals = state.taskInstances.arrivals ?? [];
+    this.restored = state.taskInstances.instances ?? {};
   }
 
   /**
-   * 为人工办理或受控脚本选择已有引擎行为，每个实例各自保存订阅与回调。
+   * 将等待事件的操作发送给对应独立监听器，普通任务仍使用容器的实例接口。
+   * @param message - 带有准确执行身份的接口消息。
+   * @returns 已匹配的监听器接口，未匹配时由引擎提供默认接口。
+   */
+  getApi(message: any): any {
+    if (message.content.executionId === this.root?.executionId) return;
+    for (const source of this.instances.values()) {
+      const api = source.getApi?.(message);
+      if (api) return api;
+    }
+  }
+
+  /**
+   * 实例报错先交给其边界处理；局部撤销不走其他实例的出口，未捕获错误仍使流程失败。
+   * @param message - 当前独立实例的执行消息；旧快照恢复时为空。
    * @returns 当前任务类别的原生行为实例。
    */
-  private behaviour(): any {
-    if (this.activity.type === 'bpmn:UserTask') return new UserTaskBehaviour(this.activity);
-    return new ServiceTaskBehaviour(this.activity);
+  protected behaviour(message?: any): any {
+    let activity = this.activity;
+    if (message) {
+      const broker = this.activity.broker;
+      const instanceBroker = new Proxy(broker, { get: (target, key) => {
+        if (key === 'publish') return (exchange: string, routingKey: string, content: any, properties: any) => {
+          if (exchange === 'execution' && routingKey === 'execute.error') {
+            broker.publish('event', 'activity.error', content, { ...properties, type: 'error', mandatory: false });
+            if (!this.instances.has(content.executionId)) return;
+          }
+          if (exchange === 'execution' && routingKey === 'execute.discard') {
+            broker.publish('event', 'activity.discard', { ...content, state: 'discard' });
+            return broker.publish('execution', 'execute.completed', { ...content, error: undefined, ktTaskDiscarded: true });
+          }
+          return broker.publish(exchange, routingKey, content, properties);
+        };
+        const value = Reflect.get(target, key, target);
+        if (typeof value === 'function') return value.bind(target);
+        return value;
+      } });
+      activity = new Proxy(activity, { get: (target, key) => {
+        if (key === 'broker') return instanceBroker;
+        return Reflect.get(target, key, target);
+      } });
+      broker.subscribeTmp('api', `activity.discard.${message.content.executionId}`, () => {
+        if (this.instances.has(message.content.executionId)) instanceBroker.publish('execution', 'execute.discard', message.content);
+      }, { noAck: true, consumerTag: `_kt-task-instance-${message.content.executionId}`, priority: -100 });
+    }
+    if (this.activity.type === 'bpmn:UserTask') return new UserTaskBehaviour(activity);
+    return new ServiceTaskBehaviour(activity);
   }
 
   /**
@@ -118,6 +168,7 @@ class WorkflowConcurrentTaskBehaviour {
     });
     const content = { ...root, executionId: `${root.executionId}_${randomUUID()}`, isRootScope: false, ignoreOutbound: false, ktTaskInstance: true, inbound, parent };
     this.activity.broker.publish('event', 'activity.execution.start', content);
+    this.activity.broker.publish('event', 'activity.instance.enter', content);
     this.activity.broker.publish('execution', 'execute.start', content);
   }
 

@@ -1,6 +1,18 @@
 import { MEDIA_FILE_SELECTION } from '../constants/file-selection';
 
 /**
+ * 在扩展名分类前排除同步程序保留的临时路径，所有自动视频与字幕选择使用同一候选边界。
+ * @param relativePath - 已规范化为正斜杠的来源清单相对路径。
+ * @returns 可自动选择的视频或字幕角色；同步临时文件及其他类型返回空。
+ */
+export function automaticMediaFileRole(relativePath: string): 'subtitle' | 'video' | null {
+  if (MEDIA_FILE_SELECTION.synchronizationTemporaryPath.test(relativePath)) return null;
+  if (MEDIA_FILE_SELECTION.videoSuffix.test(relativePath)) return 'video';
+  if (MEDIA_FILE_SELECTION.subtitleSuffix.test(relativePath)) return 'subtitle';
+  return null;
+}
+
+/**
  * 从无显式集号标记的根文件名读取末尾独立方括号或唯一数字，年份和分辨率不参与匹配。
  * @param name - 已排除目录部分的来源文件名。
  * @returns 唯一可判定的集号；没有匹配或存在多个独立数字时返回空。

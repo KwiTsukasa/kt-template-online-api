@@ -1,6 +1,7 @@
 import { createMediaWorkflowFixture } from './media-workflow.fixture';
 import { HttpException } from '@nestjs/common';
 import { isAutomationRejection } from '../../../src/common/automation/validation';
+import { automaticMediaFileRole } from '../../../src/modules/admin/media-governance/domain/media-file-selection';
 import {
   MediaGovernanceService,
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
@@ -205,6 +206,45 @@ describe('MediaGovernanceService', () => {
     expect(source.selectedFileIndices).toEqual([1, 2]);
     expect(source.selectedFileMappings.map(({ episodeNumber, unitId }) => ({ episodeNumber, unitId })))
       .toEqual([1, 2].map((episodeNumber) => ({ episodeNumber, unitId: task.units[0].id })));
+  });
+
+  it.each(['.syncthing.', '~syncthing~'])('excludes %s synchronization copies without renumbering the sealed source', async (prefix) => {
+    const task = await service.create({ mediaType: 'tv', seasonNumbers: ['S01'], titleHint: '同步文件排除' });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media', expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${'a'.repeat(40)}`,
+      seasonNumbers: ['S01'], sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    const episodes = Array.from({ length: 10 }, (_, index) => `Show.S01E${String(index + 1).padStart(2, '0')}.mkv`);
+    source.manifest = [`${prefix}${episodes[9]}`, ...episodes, '推广.mkv', 'readme.txt']
+      .map((relativePath, index) => ({ relativePath, index, executable: false, sizeBytes: 1024 }));
+    const manifest = JSON.stringify(source.manifest);
+    await service.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' });
+    expect(source.selectedFileIndices).toEqual(Array.from({ length: 10 }, (_, index) => index + 1));
+    expect(source.selectedFileMappings.map((entry) => entry.episodeNumber)).toEqual(Array.from({ length: 10 }, (_, index) => index + 1));
+    expect(JSON.stringify(source.manifest)).toBe(manifest);
+  });
+
+  it('keeps ordinary duplicate episodes as a business rejection', async () => {
+    const task = await service.create({ mediaType: 'tv', seasonNumbers: ['S01'], titleHint: '普通重复集' });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media', expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${'b'.repeat(40)}`, seasonNumbers: ['S01'], sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = ['Show.S01E01.mkv', 'Show.S01E01.REPACK.mkv']
+      .map((relativePath, index) => ({ relativePath, index, executable: false, sizeBytes: 1024 }));
+    await expect(service.applyAutomaticSourceSelection(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }))
+      .rejects.toThrow('来源自动选择存在重复或不完整映射');
+    expect(source.selectedFileMappings).toEqual([]);
+  });
+
+  it('shares synchronization exclusions with movie and subtitle candidate classification', () => {
+    expect(automaticMediaFileRole('directory/.syncthing.Movie.mkv')).toBeNull();
+    expect(automaticMediaFileRole('directory/~syncthing~Show.zh-CN.srt')).toBeNull();
+    expect(automaticMediaFileRole('.hidden/Movie.MKV')).toBe('video');
+    expect(automaticMediaFileRole('Show.syncthing.zh-CN.SRT')).toBe('subtitle');
   });
 
   it.each([

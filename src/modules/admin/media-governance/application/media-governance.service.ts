@@ -12,7 +12,7 @@ import { throwVbenError } from '@/common';
 import { requireDefinition } from '@/common/automation/validation';
 import { MEDIA_FILE_SELECTION } from '../constants/file-selection';
 import { MEDIA_WORKFLOW_ERROR } from '../constants/workflow';
-import { resolveMediaFileEpisode } from '../domain/media-file-selection';
+import { automaticMediaFileRole, resolveMediaFileEpisode } from '../domain/media-file-selection';
 import type {
   WorkflowBusinessIdentity,
   WorkflowCompletionContext,
@@ -3097,10 +3097,10 @@ export class MediaGovernanceService implements OnModuleInit {
       /(?:^|[^a-z0-9])(?:sc[_+&-]?tc|chs[_+&-]?cht|简繁内封|简繁内嵌|内封|内嵌)(?:[^a-z0-9]|$)/iu;
     const explicitlyEmbedded = primarySources.every((source) => {
       const videos = source.manifest.filter(
-        (entry) => this.selectedFileRole(entry.relativePath) === 'video',
+        (entry) => automaticMediaFileRole(entry.relativePath) === 'video',
       );
       const hasSidecarSubtitle = source.manifest.some(
-        (entry) => this.selectedFileRole(entry.relativePath) === 'subtitle',
+        (entry) => automaticMediaFileRole(entry.relativePath) === 'subtitle',
       );
       return (
         videos.length > 0 &&
@@ -3165,7 +3165,7 @@ export class MediaGovernanceService implements OnModuleInit {
         if (unitId) sourceUnits.set(season, unitId);
       }
       for (const entry of source.manifest) {
-        const role = this.selectedFileRole(entry.relativePath);
+        const role = automaticMediaFileRole(entry.relativePath);
         const episode = resolveMediaFileEpisode(entry.relativePath, sourceUnits);
         if (!role || !episode) continue;
         if (role === 'subtitle') {
@@ -3192,7 +3192,7 @@ export class MediaGovernanceService implements OnModuleInit {
     } else {
       const videoEntries = source.manifest
         .filter(
-          (entry) => this.selectedFileRole(entry.relativePath) === 'video',
+          (entry) => automaticMediaFileRole(entry.relativePath) === 'video',
         )
         .toSorted((left, right) => right.sizeBytes - left.sizeBytes);
       let selectedVideo = videoEntries[0];
@@ -3274,22 +3274,6 @@ export class MediaGovernanceService implements OnModuleInit {
       throwVbenError('来源标识无效', HttpStatus.BAD_REQUEST);
     }
     return String(sourceId);
-  }
-
-  /**
-   * 根据扩展名识别自动选择可处理的视频或字幕角色，其他文件保持未选。
-   * @param relativePath - 来源清单相对路径。
-   * @returns 视频、字幕或空角色。
-   */
-  private selectedFileRole(relativePath: string) {
-    const lower = relativePath.toLowerCase();
-    if (/\.(?:avi|m2ts|m4v|mkv|mov|mp4|ts|webm)$/u.test(lower)) {
-      return 'video' as const;
-    }
-    if (/\.(?:ass|ssa|srt|sup|vtt)$/u.test(lower)) {
-      return 'subtitle' as const;
-    }
-    return null;
   }
 
   /**

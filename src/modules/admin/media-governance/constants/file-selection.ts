@@ -1,4 +1,7 @@
 export const MEDIA_FILE_SELECTION = Object.freeze({
+  synchronizationTemporaryPath: /(?:^|\/)(?:\.syncthing\.|~syncthing~)/iu,
+  videoSuffix: /\.(?:avi|m2ts|m4v|mkv|mov|mp4|ts|webm)$/iu,
+  subtitleSuffix: /\.(?:ass|ssa|srt|sup|vtt)$/iu,
   episodeMarker:
     /(?:^|[^a-z0-9])(?:S(\d{1,2}))?E(?:P)?\s*(\d{1,4})(?![a-z0-9])/giu,
   episodeRange: /^\s*[-~–]\s*(?:E(?:P)?)?\d/iu,

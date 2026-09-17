@@ -1,5 +1,9 @@
 import { resolve } from 'node:path';
 import {
+  closeMysqlLockConnection,
+  withMysqlConnectionLock,
+} from '../common/locks/database-lock';
+import {
   createConnection,
   type Connection,
   type RowDataPacket,
@@ -61,112 +65,118 @@ export async function migrateTaskAutomation(
   connection: Connection,
   options: AutomationMigrationOptions,
 ) {
-  let locked = false;
-  try {
-    const [locks] = await connection.query<RowDataPacket[]>(
-      'SELECT GET_LOCK(?, 10) acquired',
-      [LOCK],
-    );
-    locked = Number(locks[0]?.acquired) === 1;
-    if (!locked) throw new Error('无法取得自动化切换锁');
-    const [identities] = await connection.query<RowDataPacket[]>(
-      'SELECT DATABASE() databaseName,@@server_uuid serverUuid',
-    );
-    const identity = {
-      databaseName: String(identities[0].databaseName),
-      serverUuid: String(identities[0].serverUuid),
-    };
-    const tables = await ensureAutomationSchema(connection, options.sqlRoot);
-    await ensureMigrationCheckpoint(connection);
-    const previous = await readMigrationCheckpoint<Record<string, any>>(
-      connection,
-      'cutover:complete',
-    );
-    if (previous && previous.state !== 'complete')
-      throw new Error('此切换已回滚，需重新核对旧系统增量后制定再次切换');
-    if (
-      previous &&
-      (previous.payload.databaseName !== identity.databaseName ||
-        previous.payload.serverUuid !== identity.serverUuid)
-    )
-      throw new Error('自动化迁移检查点属于其他数据库身份');
-    await saveMigrationCheckpoint(
-      connection,
-      'cutover:identity',
-      identity,
-      'sealed',
-    );
-    const backups: string[] = [];
-    for (const table of ['plugin_task', 'plugin_task_run']) {
-      if ((await readAutomationColumns(connection, table)).size)
-        backups.push(await preserveLegacyTaskTable(connection, table));
-    }
-    const pluginQueue = await snapshotAndPauseQueue(
-      connection,
-      options.queues.pluginTasks,
-    );
-    const reminderQueue = await snapshotAndPauseQueue(
-      connection,
-      options.queues.reminders,
-    );
-    verifyPluginQueue(pluginQueue);
-    if (previous) {
+  const result = await withMysqlConnectionLock(
+    connection,
+    LOCK,
+    10,
+    async () => {
+      const [identities] = await connection.query<RowDataPacket[]>(
+        'SELECT DATABASE() databaseName,@@server_uuid serverUuid',
+      );
+      const identity = {
+        databaseName: String(identities[0].databaseName),
+        serverUuid: String(identities[0].serverUuid),
+      };
+      const tables = await ensureAutomationSchema(connection, options.sqlRoot);
+      await ensureMigrationCheckpoint(connection);
+      const previous = await readMigrationCheckpoint<Record<string, any>>(
+        connection,
+        'cutover:complete',
+      );
+      if (previous && previous.state !== 'complete')
+        throw new Error('此切换已回滚，需重新核对旧系统增量后制定再次切换');
+      if (
+        previous &&
+        (previous.payload.databaseName !== identity.databaseName ||
+          previous.payload.serverUuid !== identity.serverUuid)
+      )
+        throw new Error('自动化迁移检查点属于其他数据库身份');
+      await saveMigrationCheckpoint(
+        connection,
+        'cutover:identity',
+        identity,
+        'sealed',
+      );
+      const backups: string[] = [];
+      for (const table of ['plugin_task', 'plugin_task_run']) {
+        if ((await readAutomationColumns(connection, table)).size)
+          backups.push(await preserveLegacyTaskTable(connection, table));
+      }
+      const pluginQueue = await snapshotAndPauseQueue(
+        connection,
+        options.queues.pluginTasks,
+      );
+      const reminderQueue = await snapshotAndPauseQueue(
+        connection,
+        options.queues.reminders,
+      );
+      verifyPluginQueue(pluginQueue);
+      if (previous) {
+        await connection.beginTransaction();
+        try {
+          const menus = await migrateAutomationMenus(
+            connection,
+            options.sqlRoot,
+          );
+          await connection.commit();
+          return {
+            ...previous.payload,
+            moduleTables: tables.length,
+            navigation: menus.navigation,
+            menus,
+            status: 'ready',
+            repeated: true,
+          };
+        } catch (error) {
+          await connection.rollback();
+          throw error;
+        }
+      }
       await connection.beginTransaction();
       try {
+        let result: Record<string, unknown>;
+        if (previous) result = previous.payload;
+        else {
+          const tasks = await migrateLegacyPluginTasks(
+            connection,
+            pluginQueue.wasPaused,
+          );
+          const reminders = await migrateLegacyReminders(
+            connection,
+            reminderQueue,
+          );
+          result = {
+            ...identity,
+            moduleTables: tables.length,
+            tasks,
+            reminders,
+            backups,
+            oldQueues: 'paused-and-preserved',
+          };
+        }
         const menus = await migrateAutomationMenus(connection, options.sqlRoot);
+        if (!previous)
+          await saveMigrationCheckpoint(
+            connection,
+            'cutover:complete',
+            { ...result, menus },
+            'complete',
+          );
         await connection.commit();
         return {
-          ...previous.payload,
-          moduleTables: tables.length,
-          navigation: menus.navigation,
+          ...result,
           menus,
           status: 'ready',
-          repeated: true,
+          repeated: Boolean(previous),
         };
       } catch (error) {
         await connection.rollback();
         throw error;
       }
-    }
-    await connection.beginTransaction();
-    try {
-      let result: Record<string, unknown>;
-      if (previous) result = previous.payload;
-      else {
-        const tasks = await migrateLegacyPluginTasks(
-          connection,
-          pluginQueue.wasPaused,
-        );
-        const reminders = await migrateLegacyReminders(
-          connection,
-          reminderQueue,
-        );
-        result = {
-          ...identity,
-          moduleTables: tables.length,
-          tasks,
-          reminders,
-          backups,
-          oldQueues: 'paused-and-preserved',
-        };
-      }
-      const menus = await migrateAutomationMenus(connection, options.sqlRoot);
-      if (!previous)
-        await saveMigrationCheckpoint(
-          connection,
-          'cutover:complete',
-          { ...result, menus },
-          'complete',
-        );
-      await connection.commit();
-      return { ...result, menus, status: 'ready', repeated: Boolean(previous) };
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    }
-  } finally {
-    if (locked) await connection.query('SELECT RELEASE_LOCK(?)', [LOCK]);
-  }
+    },
+  );
+  if (!result.acquired) throw new Error('无法取得自动化切换锁');
+  return result.value;
 }
 
 /**
@@ -209,30 +219,29 @@ async function main(): Promise<void> {
       process.argv.includes('--navigation-only') ||
       process.argv.includes('--rollback-navigation')
     ) {
-      const [locks] = await connection.query<RowDataPacket[]>(
-        'SELECT GET_LOCK(?,10) acquired',
-        [LOCK],
+      const result = await withMysqlConnectionLock(
+        connection,
+        LOCK,
+        10,
+        async () => {
+          await ensureMigrationCheckpoint(connection);
+          await connection.beginTransaction();
+          try {
+            let navigation: unknown;
+            if (process.argv.includes('--rollback-navigation'))
+              navigation = await restoreAutomationNavigation(connection);
+            else navigation = await migrateAutomationNavigation(connection);
+            await connection.commit();
+            process.stdout.write(JSON.stringify({ navigation }) + '\n');
+            return;
+          } catch (error) {
+            await connection.rollback();
+            throw error;
+          }
+        },
       );
-      if (Number(locks[0]?.acquired) !== 1)
-        throw new Error('无法取得导航迁移锁');
-      try {
-        await ensureMigrationCheckpoint(connection);
-        await connection.beginTransaction();
-        try {
-          let navigation: unknown;
-          if (process.argv.includes('--rollback-navigation'))
-            navigation = await restoreAutomationNavigation(connection);
-          else navigation = await migrateAutomationNavigation(connection);
-          await connection.commit();
-          process.stdout.write(JSON.stringify({ navigation }) + '\n');
-          return;
-        } catch (error) {
-          await connection.rollback();
-          throw error;
-        }
-      } finally {
-        await connection.query('SELECT RELEASE_LOCK(?)', [LOCK]);
-      }
+      if (!result.acquired) throw new Error('无法取得导航迁移锁');
+      return;
     }
     const pluginTasks = openLegacyQueue('plugin-task');
     queues.push(pluginTasks);
@@ -251,7 +260,7 @@ async function main(): Promise<void> {
     try {
       await Promise.all(queues.map((queue) => queue.close()));
     } finally {
-      await connection.end();
+      await closeMysqlLockConnection(connection);
     }
   }
 }

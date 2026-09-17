@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
+import { withDatabaseLock } from '@/common/locks/database-lock';
 import { DataSource, In } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
 import { validateDataValues } from '@/common/automation/data-schema';
@@ -54,7 +55,8 @@ export class TaskExecutionService implements TaskExecutionPort {
    */
   async start(request: TaskExecutionRequest): Promise<AtomicRunView> {
     validateDefinitionInput(() => definitionRecord(request));
-    if (!request.parentRunId || !request.nodeId) throw new BadRequestException('内置动作只能由工作流活动发起');
+    if (!request.parentRunId || !request.nodeId)
+      throw new BadRequestException('内置动作只能由工作流活动发起');
     const reference = validateDefinitionInput(() =>
       publishedReference(request.taskRef),
     );
@@ -161,8 +163,12 @@ export class TaskExecutionService implements TaskExecutionPort {
    */
   async details(runId: string) {
     const run = await this.read(runId);
-    const attempts = await this.database.getRepository(AtomicTaskAttempt).find({ where: { runId }, order: { attemptNo: 'ASC' } });
-    const review = await this.database.getRepository(AtomicTaskRunReview).findOneBy({ runId });
+    const attempts = await this.database
+      .getRepository(AtomicTaskAttempt)
+      .find({ where: { runId }, order: { attemptNo: 'ASC' } });
+    const review = await this.database
+      .getRepository(AtomicTaskRunReview)
+      .findOneBy({ runId });
     return { ...run, attempts, review };
   }
 
@@ -178,43 +184,59 @@ export class TaskExecutionService implements TaskExecutionPort {
     const input = validateDefinitionInput(() => definitionRecord(body));
     if (!/^[1-9]\d{0,19}$/.test(String(actorId)))
       throw new BadRequestException('核对操作人身份不合法');
-    if (!['effect-confirmed', 'no-effect', 'compensated'].includes(String(input.resolution)) ||
-      Object.keys(input).some(key => !['resolution', 'reason'].includes(key)))
+    if (
+      !['effect-confirmed', 'no-effect', 'compensated'].includes(
+        String(input.resolution),
+      ) ||
+      Object.keys(input).some((key) => !['resolution', 'reason'].includes(key))
+    )
       throw new BadRequestException('核对结论或请求字段不合法');
-    if (typeof input.reason !== 'string' || !input.reason.trim() || input.reason.trim().length > 2048)
+    if (
+      typeof input.reason !== 'string' ||
+      !input.reason.trim() ||
+      input.reason.trim().length > 2048
+    )
       throw new BadRequestException('请填写核对结论与业务证据说明');
     const resolution = input.resolution as AtomicTaskRunReview['resolution'];
     const reason = input.reason.trim();
     const snapshot = await this.read(runId);
-    const connection = this.database.createQueryRunner();
     const lock = `kt:task:${snapshot.taskId}`;
-    let acquired = false;
-    try {
-      await connection.connect();
-      const rows = await connection.query('SELECT GET_LOCK(?,0) acquired', [lock]);
-      acquired = Number(rows[0]?.acquired) === 1;
-      if (!acquired) throw new ConflictException('该任务仍有处理器执行，请等待退出后核对');
-      await connection.startTransaction();
-      try {
-        const existing = await connection.manager.findOneBy(AtomicTaskRunReview, { runId });
-        if (existing) {
-          if (existing.reviewedBy !== actorId || existing.resolution !== resolution || existing.reason !== reason)
-            throw new ConflictException('此运行已有不同核对记录，不能覆盖');
-        } else {
-          const run = await connection.manager.findOneBy(AtomicTaskRun, { id: runId });
-          if (!run || run.status !== 'failed' || !run.requiresReview)
-            throw new ConflictException('仅允许核对结果未知的失败运行');
-          await connection.manager.insert(AtomicTaskRunReview, { runId, reviewedBy: actorId, resolution, reason });
-          await connection.manager.update(AtomicTaskRun, { id: runId }, { requiresReview: false });
-        }
-        await connection.commitTransaction();
-      } catch (error) {
-        await connection.rollbackTransaction(); throw error;
-      }
-    } finally {
-      try { if (acquired) await connection.query('SELECT RELEASE_LOCK(?)', [lock]); }
-      finally { await connection.release(); }
-    }
+    const result = await withDatabaseLock(
+      this.database,
+      lock,
+      0,
+      (connection) =>
+        connection.transaction(async (manager) => {
+          const existing = await manager.findOneBy(AtomicTaskRunReview, {
+            runId,
+          });
+          if (existing) {
+            if (
+              existing.reviewedBy !== actorId ||
+              existing.resolution !== resolution ||
+              existing.reason !== reason
+            )
+              throw new ConflictException('此运行已有不同核对记录，不能覆盖');
+          } else {
+            const run = await manager.findOneBy(AtomicTaskRun, { id: runId });
+            if (!run || run.status !== 'failed' || !run.requiresReview)
+              throw new ConflictException('仅允许核对结果未知的失败运行');
+            await manager.insert(AtomicTaskRunReview, {
+              runId,
+              reviewedBy: actorId,
+              resolution,
+              reason,
+            });
+            await manager.update(
+              AtomicTaskRun,
+              { id: runId },
+              { requiresReview: false },
+            );
+          }
+        }),
+    );
+    if (!result.acquired)
+      throw new ConflictException('该任务仍有处理器执行，请等待退出后核对');
     return this.details(runId);
   }
 
@@ -251,20 +273,15 @@ export class TaskExecutionService implements TaskExecutionPort {
    * @param canExecute - 工作流对父实例和活动令牌的持续授权检查。
    * @throws 无法持久化执行状态时让队列保留失败证据。
    */
-  async process(runId: string, canExecute: () => Promise<boolean>): Promise<void> {
+  async process(
+    runId: string,
+    canExecute: () => Promise<boolean>,
+  ): Promise<void> {
     const repository = this.database.getRepository(AtomicTaskRun);
     const snapshot = await repository.findOneBy({ id: runId });
     if (!snapshot || !['pending', 'running'].includes(snapshot.status)) return;
-    const connection = this.database.createQueryRunner();
     const lock = `kt:task:${snapshot.taskId}`;
-    let acquired = false;
-    try {
-      await connection.connect();
-      const rows = await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [
-        lock,
-      ]);
-      acquired = Number(rows[0]?.acquired) === 1;
-      if (!acquired) return;
+    await withDatabaseLock(this.database, lock, 0, async (_manager, lease) => {
       const run = await repository.findOneBy({ id: runId });
       if (!run || !['pending', 'running'].includes(run.status)) return;
       if (run.status === 'running') {
@@ -306,20 +323,12 @@ export class TaskExecutionService implements TaskExecutionPort {
         return;
       }
       await this.executeAttempt(run, async () => {
-        const rows = await connection.query(
-          'SELECT IS_USED_LOCK(?) = CONNECTION_ID() AS owned',
-          [lock],
-        );
-        if (!(await canExecute())) await repository.update({ id: run.id }, { cancelRequested: true });
-        return Number(rows[0]?.owned) === 1;
+        const owned = await lease.isOwned();
+        if (!(await canExecute()))
+          await repository.update({ id: run.id }, { cancelRequested: true });
+        return owned;
       });
-    } finally {
-      try {
-        if (acquired) await connection.query('SELECT RELEASE_LOCK(?)', [lock]);
-      } finally {
-        await connection.release();
-      }
-    }
+    });
   }
 
   /**
@@ -377,25 +386,23 @@ export class TaskExecutionService implements TaskExecutionPort {
       );
       return;
     }
-    const attempt = this.database
-      .getRepository(AtomicTaskAttempt)
-      .create({
-        id: createSnowflakeId(),
-        runId: run.id,
-        attemptNo: run.attemptCount + 1,
-        status: 'running',
-        handlerKey: handler.key,
-        handlerVersion: handler.version,
-        runtimeIdentity: String(
-          this.config.get('RELEASE_ID') ||
-            this.config.get('IMAGE_TAG') ||
-            this.config.get('GIT_COMMIT') ||
-            'local-unversioned',
-        ).slice(0, 191),
-        startedAt: new Date(),
-        finishedAt: null,
-        errorMessage: null,
-      });
+    const attempt = this.database.getRepository(AtomicTaskAttempt).create({
+      id: createSnowflakeId(),
+      runId: run.id,
+      attemptNo: run.attemptCount + 1,
+      status: 'running',
+      handlerKey: handler.key,
+      handlerVersion: handler.version,
+      runtimeIdentity: String(
+        this.config.get('RELEASE_ID') ||
+          this.config.get('IMAGE_TAG') ||
+          this.config.get('GIT_COMMIT') ||
+          'local-unversioned',
+      ).slice(0, 191),
+      startedAt: new Date(),
+      finishedAt: null,
+      errorMessage: null,
+    });
     await this.database.transaction(async (manager) => {
       await manager.insert(AtomicTaskAttempt, attempt);
       await manager.update(
@@ -425,7 +432,10 @@ export class TaskExecutionService implements TaskExecutionPort {
           if (!current || !(await ownsLock())) {
             controlFailure = true;
             controller.abort();
-          } else if (current.cancelRequested || (await runs.findOneBy({ id: run.id }))?.cancelRequested) {
+          } else if (
+            current.cancelRequested ||
+            (await runs.findOneBy({ id: run.id }))?.cancelRequested
+          ) {
             cancellation = true;
             controller.abort();
           }

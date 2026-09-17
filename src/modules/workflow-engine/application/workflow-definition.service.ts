@@ -1,7 +1,11 @@
 import type { DefinitionProvision } from '@/common/automation/definition-provision.port';
 import type { WorkflowBpmnDefinition } from '../contract/workflow-bpmn.types';
 import { bpmnCardinalityBinding } from '../domain/workflow-bpmn-expression';
-import { TASK_EXECUTION, type TaskExecutionPort } from '@/modules/task-execution/contract/task-execution.port';
+import { WORKFLOW_BPMN_LIMITS } from '../domain/workflow-bpmn-limits';
+import {
+  TASK_EXECUTION,
+  type TaskExecutionPort,
+} from '@/modules/task-execution/contract/task-execution.port';
 import {
   BadRequestException,
   Inject,
@@ -43,8 +47,17 @@ import {
 } from '../infrastructure/persistence/workflow.entities';
 import { WorkflowProcessRegistry } from './workflow-process.registry';
 import { WorkflowScriptRegistry } from './workflow-script.registry';
-import { isBpmnWorkflow, normalizeWorkflowDocument, readBpmnContract, readBpmnStep, workflowContract } from '../domain/workflow-document.policy';
-import { parseWorkflowBpmn, validateWorkflowBpmn } from '../domain/workflow-bpmn.policy';
+import {
+  isBpmnWorkflow,
+  normalizeWorkflowDocument,
+  readBpmnContract,
+  readBpmnStep,
+  workflowContract,
+} from '../domain/workflow-document.policy';
+import {
+  parseWorkflowBpmn,
+  validateWorkflowBpmn,
+} from '../domain/workflow-bpmn.policy';
 
 @Injectable()
 export class WorkflowDefinitionService {
@@ -54,7 +67,9 @@ export class WorkflowDefinitionService {
     database: DataSource,
     @Inject(RULE_ENGINE) private readonly rules: RuleEnginePort,
     @Inject(FORM_DEFINITIONS) private readonly forms: FormDefinitionPort,
-    @Optional() @Inject(TASK_EXECUTION) private readonly tasks: TaskExecutionPort,
+    @Optional()
+    @Inject(TASK_EXECUTION)
+    private readonly tasks: TaskExecutionPort,
     @Optional()
     private readonly processes: WorkflowProcessRegistry = new WorkflowProcessRegistry(),
     @Optional()
@@ -65,7 +80,8 @@ export class WorkflowDefinitionService {
       WorkflowDraft,
       WorkflowRevision,
       normalizeWorkflowDocument,
-      (definition, reference, manager) => this.activateBusinessVersion(definition, reference, manager),
+      (definition, reference, manager) =>
+        this.activateBusinessVersion(definition, reference, manager),
     );
   }
 
@@ -75,7 +91,9 @@ export class WorkflowDefinitionService {
    * @returns 创建或复用的工作流资源及其发布版本。
    */
   provision(input: DefinitionProvision<WorkflowBpmnDefinition>) {
-    return this.definitions.provision(input, (definition) => this.checkForPublish(definition));
+    return this.definitions.provision(input, (definition) =>
+      this.checkForPublish(definition),
+    );
   }
 
   /**
@@ -84,14 +102,23 @@ export class WorkflowDefinitionService {
    * @param reference - 本次插入的不可变发布版本。
    * @param manager - 持有发布事务的数据库管理器。
    */
-  private async activateBusinessVersion(definition: WorkflowDocument, reference: PublishedReference, manager: EntityManager): Promise<void> {
+  private async activateBusinessVersion(
+    definition: WorkflowDocument,
+    reference: PublishedReference,
+    manager: EntityManager,
+  ): Promise<void> {
     const contract = await workflowContract(definition);
     if (!contract.processRef) return;
     await manager.query(
       `INSERT INTO automation_workflow_business_binding (process_key, scope_id, process_version, workflow_id, workflow_version, revision)
        VALUES (?, 'business', ?, ?, ?, 1)
        ON DUPLICATE KEY UPDATE process_version = VALUES(process_version), workflow_id = VALUES(workflow_id), workflow_version = VALUES(workflow_version), revision = revision + 1`,
-      [contract.processRef.key, contract.processRef.version, reference.id, reference.version],
+      [
+        contract.processRef.key,
+        contract.processRef.version,
+        reference.id,
+        reference.version,
+      ],
     );
   }
 
@@ -112,11 +139,17 @@ export class WorkflowDefinitionService {
    * @returns 包含节点和字段位置的完整错误清单。
    */
   async validate(input: unknown): Promise<WorkflowValidation> {
-    if (!isBpmnWorkflow(input)) return {
-      valid: false,
-      order: [],
-      issues: [{ code: 'retired-format', message: '仅支持 BPMN 2.0 流程模型，旧自定义图已停用' }],
-    };
+    if (!isBpmnWorkflow(input))
+      return {
+        valid: false,
+        order: [],
+        issues: [
+          {
+            code: 'retired-format',
+            message: '仅支持 BPMN 2.0 流程模型，旧自定义图已停用',
+          },
+        ],
+      };
     return this.validateBpmn(input);
   }
 
@@ -139,7 +172,9 @@ export class WorkflowDefinitionService {
    * @returns 标准元素、脚本版本或数据契约的定位问题。
    * @throws 步骤契约或引用无效时在内部抛错并转换为定位问题，不向调用者泄漏执行异常。
    */
-  private async validateBpmn(input: WorkflowDocument): Promise<WorkflowValidation> {
+  private async validateBpmn(
+    input: WorkflowDocument,
+  ): Promise<WorkflowValidation> {
     const issues: WorkflowIssue[] = [];
     try {
       const model = await parseWorkflowBpmn(input);
@@ -148,61 +183,159 @@ export class WorkflowDefinitionService {
       let process = null;
       if (contract.processRef) {
         process = this.processes.resolve(contract.processRef);
-        if (!isDeepStrictEqual(process.inputSchema, contract.inputSchema) || !isDeepStrictEqual(process.outputSchema, contract.outputSchema)) issues.push({ code: 'process-contract', message: '流程输入输出必须遵守业务接口契约' });
+        if (
+          !isDeepStrictEqual(process.inputSchema, contract.inputSchema) ||
+          !isDeepStrictEqual(process.outputSchema, contract.outputSchema)
+        )
+          issues.push({
+            code: 'process-contract',
+            message: '流程输入输出必须遵守业务接口契约',
+          });
       }
       const outputs = new Map<string, DataSchema>();
-      const inputs: Array<{ id: string; schema: DataSchema; values: Record<string, ValueBinding> }> = [];
+      const inputs: Array<{
+        id: string;
+        schema: DataSchema;
+        values: Record<string, ValueBinding>;
+      }> = [];
       for (const element of Object.values(model.elements)) {
         try {
           const step = readBpmnStep(element);
           if (!step) {
-            if (['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask', 'bpmn:SendTask', 'bpmn:UserTask'].includes(element.$type)) throw new Error('可执行任务必须绑定工作流步骤');
+            if (
+              [
+                'bpmn:ServiceTask',
+                'bpmn:ScriptTask',
+                'bpmn:BusinessRuleTask',
+                'bpmn:SendTask',
+                'bpmn:UserTask',
+              ].includes(element.$type)
+            )
+              throw new Error('可执行任务必须绑定工作流步骤');
             continue;
           }
           if (step.kind === 'human') {
             if (step.formRef) {
               const form = await this.forms.resolve(step.formRef);
-              if (step.writableFields.some((key) => !form.dataSchema.fields.some((field) => field.key === key))) throw new Error('人工任务引用了表单不存在的可写字段');
-              const initialSchema = { fields: form.dataSchema.fields.map((field) => ({ ...field, required: field.required && !step.writableFields.includes(field.key) })) };
-              inputs.push({ id: element.id, schema: initialSchema, values: step.input });
+              if (
+                step.writableFields.some(
+                  (key) =>
+                    !form.dataSchema.fields.some((field) => field.key === key),
+                )
+              )
+                throw new Error('人工任务引用了表单不存在的可写字段');
+              const initialSchema = {
+                fields: form.dataSchema.fields.map((field) => ({
+                  ...field,
+                  required:
+                    field.required && !step.writableFields.includes(field.key),
+                })),
+              };
+              inputs.push({
+                id: element.id,
+                schema: initialSchema,
+                values: step.input,
+              });
               outputs.set(element.id, form.dataSchema);
-            } else outputs.set(element.id, { fields: [{ key: 'confirmed', label: '已确认', type: 'boolean', required: true }] });
+            } else
+              outputs.set(element.id, {
+                fields: [
+                  {
+                    key: 'confirmed',
+                    label: '已确认',
+                    type: 'boolean',
+                    required: true,
+                  },
+                ],
+              });
             if (step.businessKey) {
-              const capability = process?.humanSteps?.find((item) => item.key === step.businessKey);
-              if (!capability || !process.acceptHumanStep) throw new Error('业务未实现此人工办理能力');
+              const capability = process?.humanSteps?.find(
+                (item) => item.key === step.businessKey,
+              );
+              if (!capability || !process.acceptHumanStep)
+                throw new Error('业务未实现此人工办理能力');
               const schema = outputs.get(element.id)!;
-              if (schema.fields.some((field) => capability.outputSchema.fields.some((businessField) => businessField.key === field.key))) throw new Error('表单字段不能覆盖业务权威结果字段');
-              outputs.set(element.id, { fields: [...schema.fields, ...capability.outputSchema.fields] });
+              if (
+                schema.fields.some((field) =>
+                  capability.outputSchema.fields.some(
+                    (businessField) => businessField.key === field.key,
+                  ),
+                )
+              )
+                throw new Error('表单字段不能覆盖业务权威结果字段');
+              outputs.set(element.id, {
+                fields: [...schema.fields, ...capability.outputSchema.fields],
+              });
             }
           } else if (step.kind === 'action') {
             if (!this.tasks) throw new Error('内置动作能力未装配');
             const action = await this.tasks.resolve(step.taskRef);
             if (!action.available) throw new Error('内置动作能力当前不可用');
-            inputs.push({ id: element.id, schema: action.inputSchema, values: step.input });
+            inputs.push({
+              id: element.id,
+              schema: action.inputSchema,
+              values: step.input,
+            });
             outputs.set(element.id, action.outputSchema);
           } else if (step.kind === 'rule') {
-            if (element.$type !== 'bpmn:BusinessRuleTask') throw new Error('规则求值必须使用业务规则任务');
+            if (element.$type !== 'bpmn:BusinessRuleTask')
+              throw new Error('规则求值必须使用业务规则任务');
             const rule = await this.rules.resolve(step.ruleRef);
-            inputs.push({ id: element.id, schema: rule.factSchema, values: step.input });
-            if (rule.mode === 'condition') outputs.set(element.id, { fields: [{ key: 'result', label: '规则结果', type: 'boolean', required: true }] });
+            inputs.push({
+              id: element.id,
+              schema: rule.factSchema,
+              values: step.input,
+            });
+            if (rule.mode === 'condition')
+              outputs.set(element.id, {
+                fields: [
+                  {
+                    key: 'result',
+                    label: '规则结果',
+                    type: 'boolean',
+                    required: true,
+                  },
+                ],
+              });
           } else {
             if (!process) throw new Error('脚本任务必须绑定业务流程接口');
-            const descriptor = process.steps.find((candidate) => candidate.key === step.stepKey);
+            const descriptor = process.steps.find(
+              (candidate) => candidate.key === step.stepKey,
+            );
             if (!descriptor) throw new Error('业务接口未实现引用步骤');
-            if (!step.scripts.length) throw new Error('步骤必须声明有序的固定脚本版本');
+            if (!step.scripts.length)
+              throw new Error('步骤必须声明有序的固定脚本版本');
             for (const call of step.scripts) {
-              const script = this.scripts.check(call, process.key, step.stepKey);
+              const script = this.scripts.check(
+                call,
+                process.key,
+                step.stepKey,
+              );
               const values: Record<string, ValueBinding> = {};
-              for (const [key, value] of Object.entries(script.defaults)) values[key] = { type: 'literal', value };
+              for (const [key, value] of Object.entries(script.defaults))
+                values[key] = { type: 'literal', value };
               Object.assign(values, call.params);
-              const schema = { fields: script.paramsSchema.fields.map((field) => ({ ...field, required: field.required && Object.hasOwn(values, field.key) })) };
+              const schema = {
+                fields: script.paramsSchema.fields.map((field) => ({
+                  ...field,
+                  required: field.required && Object.hasOwn(values, field.key),
+                })),
+              };
               inputs.push({ id: element.id, schema, values });
             }
-            inputs.push({ id: element.id, schema: descriptor.inputSchema, values: step.input });
+            inputs.push({
+              id: element.id,
+              schema: descriptor.inputSchema,
+              values: step.input,
+            });
             outputs.set(element.id, descriptor.outputSchema);
           }
         } catch (error) {
-          issues.push({ nodeId: element.id, code: 'step-contract', message: String(error) });
+          issues.push({
+            nodeId: element.id,
+            code: 'step-contract',
+            message: String(error),
+          });
         }
       }
       for (const element of Object.values(model.elements)) {
@@ -210,22 +343,74 @@ export class WorkflowDefinitionService {
         if (!cardinality) continue;
         try {
           const binding = bpmnCardinalityBinding(cardinality.body);
-          this.checkBindings({ fields: [{ key: 'count', label: '实例数量', type: 'integer', required: true, min: 0, max: 1000 }] }, { count: binding }, contract.inputSchema, outputs, issues, element.id);
+          this.checkBindings(
+            {
+              fields: [
+                {
+                  key: 'count',
+                  label: '实例数量',
+                  type: 'integer',
+                  required: true,
+                  min: 0,
+                  max: WORKFLOW_BPMN_LIMITS.maxInstances,
+                },
+              ],
+            },
+            { count: binding },
+            contract.inputSchema,
+            outputs,
+            issues,
+            element.id,
+          );
         } catch (error) {
-          issues.push({ nodeId: element.id, code: 'loop-cardinality', message: String(error) });
+          issues.push({
+            nodeId: element.id,
+            code: 'loop-cardinality',
+            message: String(error),
+          });
         }
       }
-      for (const target of inputs) this.checkBindings(target.schema, target.values, contract.inputSchema, outputs, issues, target.id, Boolean(model.elements[target.id]?.loopCharacteristics));
-      this.checkBindings(contract.outputSchema, contract.output, contract.inputSchema, outputs, issues);
-      if (contract.processRef && contract.formRef) issues.push({ code: 'business-form', message: '业务创建即入流，表单必须配置在流程人工节点中' });
+      for (const target of inputs)
+        this.checkBindings(
+          target.schema,
+          target.values,
+          contract.inputSchema,
+          outputs,
+          issues,
+          target.id,
+          Boolean(model.elements[target.id]?.loopCharacteristics),
+        );
+      this.checkBindings(
+        contract.outputSchema,
+        contract.output,
+        contract.inputSchema,
+        outputs,
+        issues,
+      );
+      if (contract.processRef && contract.formRef)
+        issues.push({
+          code: 'business-form',
+          message: '业务创建即入流，表单必须配置在流程人工节点中',
+        });
       if (contract.formRef) {
         const form = await this.forms.resolve(contract.formRef);
         const bindings: Record<string, ValueBinding> = {};
-        for (const [key, field] of Object.entries(contract.formMapping)) bindings[key] = { type: 'input', field };
+        for (const [key, field] of Object.entries(contract.formMapping))
+          bindings[key] = { type: 'input', field };
         let submissionSchema = contract.inputSchema;
         if (process) submissionSchema = process.launchSchema ?? { fields: [] };
-        this.checkBindings(submissionSchema, bindings, form.dataSchema, new Map(), issues);
-      } else if (Object.keys(contract.formMapping).length) issues.push({ code: 'form-reference', message: '字段映射需要固定表单版本' });
+        this.checkBindings(
+          submissionSchema,
+          bindings,
+          form.dataSchema,
+          new Map(),
+          issues,
+        );
+      } else if (Object.keys(contract.formMapping).length)
+        issues.push({
+          code: 'form-reference',
+          message: '字段映射需要固定表单版本',
+        });
     } catch (error) {
       issues.push({ code: 'bpmn-schema', message: String(error) });
     }
@@ -278,8 +463,13 @@ export class WorkflowDefinitionService {
           continue;
         }
         if (binding.type === 'iteration') {
-          if (!iterationAvailable || !['integer', 'number'].includes(field.type))
-            throw new Error(`${field.label}：循环序号只能用于循环活动的数值字段`);
+          if (
+            !iterationAvailable ||
+            !['integer', 'number'].includes(field.type)
+          )
+            throw new Error(
+              `${field.label}：循环序号只能用于循环活动的数值字段`,
+            );
           continue;
         }
         let references = [binding];
@@ -287,13 +477,25 @@ export class WorkflowDefinitionService {
         let hasRequiredSource = false;
         for (const reference of references) {
           let source: DataField | undefined;
-          if (reference.type === 'input') source = input.fields.find((candidate) => candidate.key === reference.field);
-          if (reference.type === 'node') source = outputs.get(reference.nodeId)?.fields.find((candidate) => candidate.key === reference.field);
-          if (!source || (source.type !== field.type && !(source.type === 'integer' && field.type === 'number')) || source.format !== field.format)
+          if (reference.type === 'input')
+            source = input.fields.find(
+              (candidate) => candidate.key === reference.field,
+            );
+          if (reference.type === 'node')
+            source = outputs
+              .get(reference.nodeId)
+              ?.fields.find((candidate) => candidate.key === reference.field);
+          if (
+            !source ||
+            (source.type !== field.type &&
+              !(source.type === 'integer' && field.type === 'number')) ||
+            source.format !== field.format
+          )
             throw new Error(`${field.label}：来源字段不存在或类型不相容`);
           if (source.required) hasRequiredSource = true;
         }
-        if (field.required && !hasRequiredSource) throw new Error(`${field.label}：必填目标不能依赖可缺失字段`);
+        if (field.required && !hasRequiredSource)
+          throw new Error(`${field.label}：必填目标不能依赖可缺失字段`);
       } catch (error) {
         issues.push({
           nodeId,

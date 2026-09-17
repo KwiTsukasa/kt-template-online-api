@@ -1,4 +1,8 @@
 import { readFileSync } from 'node:fs';
+import {
+  closeMysqlLockConnection,
+  withMysqlConnectionLock,
+} from '../common/locks/database-lock';
 import { join, resolve } from 'node:path';
 import {
   createConnection,
@@ -173,38 +177,41 @@ export async function runMediaGovernanceSeriesWorkMigration(): Promise<{
     supportBigNumbers: true,
     user: readRequiredEnvironment('DB_USERNAME'),
   });
-  let lockAcquired = false;
   try {
-    const [lockRows] = await connection.query<RowDataPacket[]>(
-      'SELECT GET_LOCK(?, 60) AS acquired',
-      [MIGRATION_LOCK],
+    const result = await withMysqlConnectionLock(
+      connection,
+      MIGRATION_LOCK,
+      60,
+      async () => {
+        for (const migrationFile of MIGRATION_FILES) {
+          await executeMysqlScript(
+            connection,
+            readMigrationFile(migrationFile),
+          );
+        }
+        const verificationResults: MediaGovernanceSeriesWorkMigrationVerification =
+          {};
+        for (const verificationFile of VERIFICATION_FILES) {
+          Object.assign(
+            verificationResults,
+            await readVerificationResults(
+              connection,
+              readMigrationFile(verificationFile),
+            ),
+          );
+        }
+        const verification =
+          assertMediaGovernanceSeriesWorkMigrationVerification(
+            verificationResults,
+          );
+        return { migrated: true, verification };
+      },
     );
-    lockAcquired = Number(lockRows[0]?.acquired) === 1;
-    if (!lockAcquired) {
+    if (!result.acquired)
       throw new Error('无法取得媒体 Series-first 数据库迁移锁');
-    }
-    for (const migrationFile of MIGRATION_FILES) {
-      await executeMysqlScript(connection, readMigrationFile(migrationFile));
-    }
-    const verificationResults: MediaGovernanceSeriesWorkMigrationVerification =
-      {};
-    for (const verificationFile of VERIFICATION_FILES) {
-      Object.assign(
-        verificationResults,
-        await readVerificationResults(
-          connection,
-          readMigrationFile(verificationFile),
-        ),
-      );
-    }
-    const verification =
-      assertMediaGovernanceSeriesWorkMigrationVerification(verificationResults);
-    return { migrated: true, verification };
+    return result.value;
   } finally {
-    if (lockAcquired) {
-      await connection.query('SELECT RELEASE_LOCK(?)', [MIGRATION_LOCK]);
-    }
-    await connection.end();
+    await closeMysqlLockConnection(connection);
   }
 }
 

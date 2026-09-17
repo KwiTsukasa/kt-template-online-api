@@ -1,4 +1,5 @@
 import { MultiInstanceLoopCharacteristics } from 'bpmn-elements';
+import { requireBpmnInstanceCount } from '../domain/workflow-bpmn-limits';
 
 /**
  * 在派生多实例前校验实际数量，动态字段与固定数量遵守同一上限。
@@ -11,12 +12,15 @@ export function WorkflowMultiInstance(activity: any, definition: any) {
   const loop = new MultiInstanceLoopCharacteristics(activity, definition);
   const execute = loop.execute.bind(loop);
   loop.execute = (message) => {
-    if (!message.fields?.redelivered && definition.behaviour.loopCardinality !== undefined) {
+    if (
+      !message.fields?.redelivered &&
+      definition.behaviour.loopCardinality !== undefined
+    ) {
       const expression = definition.behaviour.loopCardinality;
       let count = activity.environment.resolveExpression(expression, message);
-      if (typeof expression === 'string' && /^\d+$/.test(expression)) count = Number(expression);
-      if (typeof count !== 'number') throw new Error('多实例数量必须为零至一千的整数');
-      if (!Number.isSafeInteger(count) || count < 0 || count > 1000) throw new Error('多实例数量必须为零至一千的整数');
+      if (typeof expression === 'string' && /^\d+$/.test(expression))
+        count = Number(expression);
+      requireBpmnInstanceCount(count);
     }
     return execute(message);
   };
@@ -35,12 +39,27 @@ export function WorkflowStandardLoop(activity: any, definition: any) {
   const behaviour = { ...original, isSequential: true };
   delete behaviour.loopCondition;
   delete behaviour.testBefore;
-  if (original.loopCondition) behaviour.completionCondition = JSON.stringify({ op: 'not', value: JSON.parse(original.loopCondition) });
-  const loop = new MultiInstanceLoopCharacteristics(activity, { ...definition, behaviour });
+  if (original.loopCondition)
+    behaviour.completionCondition = JSON.stringify({
+      op: 'not',
+      value: JSON.parse(original.loopCondition),
+    });
+  const loop = new MultiInstanceLoopCharacteristics(activity, {
+    ...definition,
+    behaviour,
+  });
   const execute = loop.execute.bind(loop);
   loop.execute = (message) => {
-    if (original.testBefore && original.loopCondition && !message.fields?.redelivered && !activity.environment.resolveExpression(original.loopCondition, message)) {
-      activity.broker.publish('execution', 'execute.completed', { ...message.content, output: [] });
+    if (
+      original.testBefore &&
+      original.loopCondition &&
+      !message.fields?.redelivered &&
+      !activity.environment.resolveExpression(original.loopCondition, message)
+    ) {
+      activity.broker.publish('execution', 'execute.completed', {
+        ...message.content,
+        output: [],
+      });
       return;
     }
     return execute(message);

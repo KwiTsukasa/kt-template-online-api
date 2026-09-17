@@ -28,6 +28,7 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 
 - [必要 API 约定](API.md)，完整 DTO/参数见运行服务的 Swagger `/api` 和 OpenAPI `/api-json`。
 - [中央项目文档](../../docs/projects/api/index.md)：详细合同、运维参考和历史设计。
+- [API 全局锁](../../docs/projects/api/global-locks.md)：数据库和 Redis 锁的统一入口、等待、续期与清理合同。
 - 源码：`src/modules/`；初始化与迁移：`sql/`；有界运维入口：`scripts/`；测试：`test/`。
 
 ## 来源与许可证

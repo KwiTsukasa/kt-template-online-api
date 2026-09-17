@@ -23,13 +23,14 @@ module.exports = {
         'test/plugins/runtime/hermes-agent/**/*.mjs',
         'test/modules/automation/*.test.mjs',
         'test/modules/automation/*.test.cjs',
+        'test/modules/automation/ablation/*.cjs',
       ],
       parserOptions: {
         project: null,
       },
     },
     {
-      files: ['test/modules/automation/*.test.cjs'],
+      files: ['test/modules/automation/*.test.cjs', 'test/modules/automation/ablation/*.cjs'],
       rules: {
         '@typescript-eslint/no-require-imports': 'off',
       },

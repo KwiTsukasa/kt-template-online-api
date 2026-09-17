@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LockModule } from './common/locks/lock.module';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
@@ -84,6 +85,7 @@ export function buildTypeOrmOptions(configService: ConfigService) {
     }),
     CommonModule,
     SecurityBoundaryModule,
+    LockModule,
     RuntimeModule,
     AutomationApplicationModule,
     AdminModule,

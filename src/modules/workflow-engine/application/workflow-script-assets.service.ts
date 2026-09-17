@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { createHash } from 'node:crypto';
+import { withDatabaseLock } from '@/common/locks/database-lock';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { validateDefinitionInput } from '@/common/automation/definition.repository';
@@ -54,7 +55,8 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
    */
   async upload(input: { filename: unknown; source: unknown; target: unknown }) {
     const declaration = this.inspect(input.filename, input.source);
-    if (input.target !== 'local' && input.target !== 'nas')
+    const target = input.target;
+    if (target !== 'local' && target !== 'nas')
       throw new BadRequestException('脚本执行目标不支持');
     const compatible = this.processes
       .catalog()
@@ -65,60 +67,51 @@ export class WorkflowScriptAssetsService implements OnModuleInit {
       );
     if (!compatible)
       throw new BadRequestException('脚本声明的业务接口或步骤尚未装配');
-    const connection = this.database.createQueryRunner();
     const lock = `kt:script:${createHash('sha256').update(declaration.key).digest('hex').slice(0, 48)}`;
-    let acquired = false;
-    try {
-      await connection.connect();
-      acquired =
-        Number(
-          (
-            await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [lock])
-          )[0]?.acquired,
-        ) === 1;
-      if (!acquired)
-        throw new ConflictException('同一脚本正在上传，请稍后重试');
-      const repository = connection.manager.getRepository(WorkflowScriptAsset);
-      const existing = await repository.findOneBy({
-        key: declaration.key,
-        sha256: declaration.sha256,
-        target: input.target,
-      });
-      if (existing) {
-        await this.materialize(existing);
-        return {
-          ...existing.declaration,
-          version: existing.version,
-          target: existing.target,
-        };
-      }
-      const latest = await repository.findOne({
-        where: { key: declaration.key },
-        order: { version: 'DESC' },
-      });
-      let version = 1;
-      if (latest) version = latest.version + 1;
-      const asset = repository.create({
-        key: declaration.key,
-        version,
-        sha256: declaration.sha256,
-        target: input.target,
-        declaration,
-        source: normalizeWorkflowScriptSource(
-          input.filename as string,
-          input.source as string,
-        ),
-      });
-      await repository.insert(asset);
-      await this.materialize(asset);
-      return { ...declaration, version, target: input.target };
-    } finally {
-      try {
-        if (acquired) await connection.query('SELECT RELEASE_LOCK(?)', [lock]);
-      } finally {
-        await connection.release();
-      }
-    }
+    const result = await withDatabaseLock(
+      this.database,
+      lock,
+      0,
+      async (manager) => {
+        const repository = manager.getRepository(WorkflowScriptAsset);
+        const existing = await repository.findOneBy({
+          key: declaration.key,
+          sha256: declaration.sha256,
+          target,
+        });
+        if (existing) {
+          await this.materialize(existing);
+          return {
+            ...existing.declaration,
+            version: existing.version,
+            target: existing.target,
+          };
+        }
+        const latest = await repository.findOne({
+          where: { key: declaration.key },
+          order: { version: 'DESC' },
+        });
+        let version = 1;
+        if (latest) version = latest.version + 1;
+        const asset = repository.create({
+          key: declaration.key,
+          version,
+          sha256: declaration.sha256,
+          target,
+          declaration,
+          source: normalizeWorkflowScriptSource(
+            input.filename as string,
+            input.source as string,
+          ),
+        });
+        await repository.insert(asset);
+        await this.materialize(asset);
+        return { ...declaration, version, target };
+      },
+    );
+    if (!result.acquired)
+      throw new ConflictException('同一脚本正在上传，请稍后重试');
+    return result.value;
   }
 
   /**

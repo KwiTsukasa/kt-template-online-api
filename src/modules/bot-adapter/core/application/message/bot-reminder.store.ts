@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, In, MoreThan, type EntityManager } from 'typeorm';
 import { createHash } from 'node:crypto';
+import { withDatabaseLock } from '@/common/locks/database-lock';
 import { BotReminder } from '../../infrastructure/persistence/message/bot-reminder.entity';
 import type { BotReminderData } from '../../contract/message/bot-reminder.port';
 
@@ -83,7 +84,7 @@ export class BotReminderStore {
   }
 
   /**
-   * 在独占数据库连接上持有有界身份锁，所有路径都释放连接与锁。
+   * 将提醒或发起人身份映射到既有资源键，由全局锁能力管理连接和互斥生命周期。
    * @param identity - 发起人或提醒的独立互斥身份。
    * @param operation - 使用锁所属连接执行的操作。
    * @returns 操作完成后的返回值。
@@ -93,25 +94,11 @@ export class BotReminderStore {
     identity: string,
     operation: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
-    const runner = this.database.createQueryRunner();
     const key =
       'kt:remind:' +
       createHash('sha256').update(identity).digest('hex').slice(0, 48);
-    await runner.connect();
-    let locked = false;
-    try {
-      const rows = await runner.query('SELECT GET_LOCK(?, 10) AS acquired', [
-        key,
-      ]);
-      locked = Number(rows[0]?.acquired) === 1;
-      if (!locked) throw new Error('提醒正在处理，请稍后重试');
-      return await operation(runner.manager);
-    } finally {
-      if (locked)
-        await runner
-          .query('SELECT RELEASE_LOCK(?)', [key])
-          .catch(() => undefined);
-      await runner.release();
-    }
+    const result = await withDatabaseLock(this.database, key, 10, operation);
+    if (!result.acquired) throw new Error('提醒正在处理，请稍后重试');
+    return result.value;
   }
 }

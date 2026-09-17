@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Activity } from 'bpmn-elements';
 import { ServiceTaskBehaviour, UserTaskBehaviour } from 'bpmn-elements/tasks';
+import { workflowBpmnChildParent } from './workflow-bpmn-scope';
 
 /**
  * 为普通业务活动的每个入口令牌创建独立实例，显式循环仍交由标准循环行为处理。
@@ -11,8 +12,13 @@ import { ServiceTaskBehaviour, UserTaskBehaviour } from 'bpmn-elements/tasks';
 export function WorkflowConcurrentTask(definition: any, context: any) {
   let Behaviour: any = ServiceTaskBehaviour;
   if (definition.type === 'bpmn:UserTask') Behaviour = UserTaskBehaviour;
-  if (definition.behaviour?.loopCharacteristics) return new Activity(Behaviour, definition, context);
-  const activity = new Activity(WorkflowConcurrentTaskBehaviour, definition, context);
+  if (definition.behaviour?.loopCharacteristics)
+    return new Activity(Behaviour, definition, context);
+  const activity = new Activity(
+    WorkflowConcurrentTaskBehaviour,
+    definition,
+    context,
+  );
   (activity as any).ktConcurrentTask = true;
   return activity;
 }
@@ -41,38 +47,64 @@ export class WorkflowConcurrentTaskBehaviour {
     if (!message.content.isRootScope) {
       const source = this.behaviour(message);
       this.instances.set(message.content.executionId, source);
-      if (this.restored[message.content.executionId]) source.recover?.(this.restored[message.content.executionId]);
+      if (this.restored[message.content.executionId])
+        source.recover?.(this.restored[message.content.executionId]);
       source.execute(message);
       return;
     }
     if (this.running) return;
     this.running = true;
-    this.root = { ...message.content, preventComplete: true, ignoreOutbound: true };
+    this.root = {
+      ...message.content,
+      preventComplete: true,
+      ignoreOutbound: true,
+    };
     const broker = this.activity.broker;
-    broker.subscribeTmp('execution', 'execute.completed', (_: string, completed: any) => {
-      const content = completed.content;
-      if (content.isRootScope) {
-        this.stop();
-        return;
-      }
-      if (completed.fields.redelivered) return;
-      this.instances.delete(content.executionId);
-      broker.cancel(`_kt-task-instance-${content.executionId}`);
-      if (!content.ktTaskDiscarded) {
-        broker.publish('execution', 'execute.outbound.take', { ...content, ignoreOutbound: false, outbound: undefined });
-        broker.publish('event', 'activity.end', { ...content, state: 'end' });
-      }
-      broker.publish('event', 'activity.instance.leave', { ...content, state: 'leave' });
-      this.schedule();
-    }, { noAck: true, consumerTag: '_kt-task-completed', priority: 500 });
-    broker.subscribeTmp('api', `activity.*.${this.root.executionId}`, (_: string, incoming: any) => {
-      if (['stop', 'discard', 'cancel'].includes(incoming.properties.type)) this.stop();
-    }, { noAck: true, consumerTag: '_kt-task-api', priority: 300 });
-    broker.getQueue('inbound-q').consume((_: string, incoming: any) => {
-      this.arrivals.push(structuredClone(incoming.content));
-      incoming.ack();
-      this.schedule();
-    }, { consumerTag: '_kt-task-inbound', exclusive: true, prefetch: 1 });
+    broker.subscribeTmp(
+      'execution',
+      'execute.completed',
+      (_: string, completed: any) => {
+        const content = completed.content;
+        if (content.isRootScope) {
+          this.stop();
+          return;
+        }
+        if (completed.fields.redelivered) return;
+        this.instances.delete(content.executionId);
+        broker.cancel(`_kt-task-instance-${content.executionId}`);
+        if (!content.ktTaskDiscarded) {
+          broker.publish('execution', 'execute.outbound.take', {
+            ...content,
+            ignoreOutbound: false,
+            outbound: undefined,
+          });
+          broker.publish('event', 'activity.end', { ...content, state: 'end' });
+        }
+        broker.publish('event', 'activity.instance.leave', {
+          ...content,
+          state: 'leave',
+        });
+        this.schedule();
+      },
+      { noAck: true, consumerTag: '_kt-task-completed', priority: 500 },
+    );
+    broker.subscribeTmp(
+      'api',
+      `activity.*.${this.root.executionId}`,
+      (_: string, incoming: any) => {
+        if (['stop', 'discard', 'cancel'].includes(incoming.properties.type))
+          this.stop();
+      },
+      { noAck: true, consumerTag: '_kt-task-api', priority: 300 },
+    );
+    broker.getQueue('inbound-q').consume(
+      (_: string, incoming: any) => {
+        this.arrivals.push(structuredClone(incoming.content));
+        incoming.ack();
+        this.schedule();
+      },
+      { consumerTag: '_kt-task-inbound', exclusive: true, prefetch: 1 },
+    );
     if (!message.fields.redelivered) {
       broker.publish('execution', 'execute.concurrent', this.root);
       this.spawn(message.content.inbound ?? []);
@@ -86,7 +118,17 @@ export class WorkflowConcurrentTaskBehaviour {
    */
   getState() {
     if (this.legacy) return this.legacy.getState?.() ?? {};
-    return { taskInstances: { root: structuredClone(this.root), arrivals: structuredClone(this.arrivals), instances: Object.fromEntries([...this.instances].filter(([, source]) => source.getState).map(([id, source]) => [id, source.getState()])) } };
+    return {
+      taskInstances: {
+        root: structuredClone(this.root),
+        arrivals: structuredClone(this.arrivals),
+        instances: Object.fromEntries(
+          [...this.instances]
+            .filter(([, source]) => source.getState)
+            .map(([id, source]) => [id, source.getState()]),
+        ),
+      },
+    };
   }
 
   /**
@@ -126,31 +168,70 @@ export class WorkflowConcurrentTaskBehaviour {
     let activity = this.activity;
     if (message) {
       const broker = this.activity.broker;
-      const instanceBroker = new Proxy(broker, { get: (target, key) => {
-        if (key === 'publish') return (exchange: string, routingKey: string, content: any, properties: any) => {
-          if (exchange === 'execution' && routingKey === 'execute.error') {
-            broker.publish('event', 'activity.error', content, { ...properties, type: 'error', mandatory: false });
-            if (!this.instances.has(content.executionId)) return;
-          }
-          if (exchange === 'execution' && routingKey === 'execute.discard') {
-            broker.publish('event', 'activity.discard', { ...content, state: 'discard' });
-            return broker.publish('execution', 'execute.completed', { ...content, error: undefined, ktTaskDiscarded: true });
-          }
-          return broker.publish(exchange, routingKey, content, properties);
-        };
-        const value = Reflect.get(target, key, target);
-        if (typeof value === 'function') return value.bind(target);
-        return value;
-      } });
-      activity = new Proxy(activity, { get: (target, key) => {
-        if (key === 'broker') return instanceBroker;
-        return Reflect.get(target, key, target);
-      } });
-      broker.subscribeTmp('api', `activity.discard.${message.content.executionId}`, () => {
-        if (this.instances.has(message.content.executionId)) instanceBroker.publish('execution', 'execute.discard', message.content);
-      }, { noAck: true, consumerTag: `_kt-task-instance-${message.content.executionId}`, priority: -100 });
+      const instanceBroker = new Proxy(broker, {
+        get: (target, key) => {
+          if (key === 'publish')
+            return (
+              exchange: string,
+              routingKey: string,
+              content: any,
+              properties: any,
+            ) => {
+              if (exchange === 'execution' && routingKey === 'execute.error') {
+                broker.publish('event', 'activity.error', content, {
+                  ...properties,
+                  type: 'error',
+                  mandatory: false,
+                });
+                if (!this.instances.has(content.executionId)) return;
+              }
+              if (
+                exchange === 'execution' &&
+                routingKey === 'execute.discard'
+              ) {
+                broker.publish('event', 'activity.discard', {
+                  ...content,
+                  state: 'discard',
+                });
+                return broker.publish('execution', 'execute.completed', {
+                  ...content,
+                  error: undefined,
+                  ktTaskDiscarded: true,
+                });
+              }
+              return broker.publish(exchange, routingKey, content, properties);
+            };
+          const value = Reflect.get(target, key, target);
+          if (typeof value === 'function') return value.bind(target);
+          return value;
+        },
+      });
+      activity = new Proxy(activity, {
+        get: (target, key) => {
+          if (key === 'broker') return instanceBroker;
+          return Reflect.get(target, key, target);
+        },
+      });
+      broker.subscribeTmp(
+        'api',
+        `activity.discard.${message.content.executionId}`,
+        () => {
+          if (this.instances.has(message.content.executionId))
+            instanceBroker.publish(
+              'execution',
+              'execute.discard',
+              message.content,
+            );
+        },
+        {
+          noAck: true,
+          consumerTag: `_kt-task-instance-${message.content.executionId}`,
+          priority: -100,
+        },
+      );
     }
-    if (this.activity.type === 'bpmn:UserTask') return new UserTaskBehaviour(activity);
+    if (this.activity.type === 'bpmn:UserTask')
+      return new UserTaskBehaviour(activity);
     return new ServiceTaskBehaviour(activity);
   }
 
@@ -160,13 +241,16 @@ export class WorkflowConcurrentTaskBehaviour {
    */
   private spawn(inbound: any[]): void {
     const root = this.root;
-    const parent = { id: root.id, type: root.type, executionId: root.executionId, path: [] as any[] };
-    if (root.parent) parent.path = [root.parent, ...(root.parent.path ?? [])].map((item) => {
-      const ancestor = { ...item };
-      delete ancestor.path;
-      return ancestor;
-    });
-    const content = { ...root, executionId: `${root.executionId}_${randomUUID()}`, isRootScope: false, ignoreOutbound: false, ktTaskInstance: true, inbound, parent };
+    const parent = workflowBpmnChildParent(root);
+    const content = {
+      ...root,
+      executionId: `${root.executionId}_${randomUUID()}`,
+      isRootScope: false,
+      ignoreOutbound: false,
+      ktTaskInstance: true,
+      inbound,
+      parent,
+    };
     this.activity.broker.publish('event', 'activity.execution.start', content);
     this.activity.broker.publish('event', 'activity.instance.enter', content);
     this.activity.broker.publish('execution', 'execute.start', content);
@@ -181,7 +265,10 @@ export class WorkflowConcurrentTaskBehaviour {
       if (!this.running) return;
       const arrivals = this.arrivals.splice(0);
       if (arrivals.length) {
-        this.activity.broker.publish('event', 'activity.enter', { ...this.root, inbound: arrivals });
+        this.activity.broker.publish('event', 'activity.enter', {
+          ...this.root,
+          inbound: arrivals,
+        });
         for (const arrival of arrivals) this.spawn([arrival]);
       }
       if (this.instances.size || this.arrivals.length) return;

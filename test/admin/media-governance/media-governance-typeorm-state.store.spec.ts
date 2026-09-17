@@ -163,13 +163,33 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       [MediaGovernanceDescriptorRevisionEntity, descriptors],
       [MediaGovernanceTaskEpisodeBindingEntity, taskEpisodeBindings],
     ]);
+    const lockOrder: string[] = [];
+    const manager = {
+      getRepository: (entity: unknown) => repositories.get(entity),
+    };
+    const transaction = async (work: (value: unknown) => Promise<unknown>) => {
+      lockOrder.push('begin');
+      const result = await work(manager);
+      lockOrder.push('commit');
+      return result;
+    };
     const dataSource = {
-      transaction: async (work: (manager: unknown) => Promise<unknown>) =>
-        work({
-          getRepository: (entity: unknown) => repositories.get(entity),
-          query: async (sql: string) =>
-            sql.includes('GET_LOCK') ? [{ acquired: 1 }] : [{ released: 1 }],
-        }),
+      transaction,
+      createQueryRunner: () => ({
+        connect: async () => ({ destroy: jest.fn() }),
+        release: async () => {
+          lockOrder.push('connection-release');
+        },
+        manager: { ...manager, transaction },
+        query: async (sql: string) => {
+          if (sql.includes('GET_LOCK')) {
+            lockOrder.push('acquire');
+            return [{ acquired: 1 }];
+          }
+          lockOrder.push('release');
+          return [{ released: 1 }];
+        },
+      }),
     };
     const store = new MediaGovernanceTypeOrmStateStore(
       dataSource as never,
@@ -189,7 +209,15 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     });
     await store.saveTask(task);
 
+    const lockStart = lockOrder.length;
     task.workItemId = await store.reserveWorkItemId(task.id);
+    expect(lockOrder.slice(lockStart)).toEqual([
+      'acquire',
+      'begin',
+      'commit',
+      'release',
+      'connection-release',
+    ]);
     expect(task.workItemId).toBe('media-063');
     await expect(store.reserveWorkItemId(task.id)).resolves.toBe('media-063');
 
@@ -259,9 +287,12 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     task.activeRunId = envelope.runId;
     await store.reserveRunDispatch(task, envelope);
     expect(outbox.rows.get(envelope.runId)).toMatchObject({
-      executionId: envelope.replayKey, attempts: 0,
+      executionId: envelope.replayKey,
+      attempts: 0,
     });
-    await expect(store.acknowledgeRunDispatch(envelope.runId, 'jenkins-queue-1001')).rejects.toThrow('identity-mismatch');
+    await expect(
+      store.acknowledgeRunDispatch(envelope.runId, 'jenkins-queue-1001'),
+    ).rejects.toThrow('identity-mismatch');
     await store.acknowledgeRunDispatch(envelope.runId, envelope.replayKey);
     expect(outbox.rows.get(envelope.runId)).toMatchObject({
       attempts: 1,
@@ -305,8 +336,22 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     task.activeRunId = null;
     task.revision += 1;
     task.runState = 'blocked';
-    await expect(store.stopWorkflowRun(task, envelope.runId, envelope.replayKey, 'cancelled')).resolves.toBe(true);
-    await expect(store.stopWorkflowRun(task, envelope.runId, envelope.replayKey, 'cancelled')).resolves.toBe(false);
+    await expect(
+      store.stopWorkflowRun(
+        task,
+        envelope.runId,
+        envelope.replayKey,
+        'cancelled',
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      store.stopWorkflowRun(
+        task,
+        envelope.runId,
+        envelope.replayKey,
+        'cancelled',
+      ),
+    ).resolves.toBe(false);
     task.revision += 1;
     source.descriptorTombstonedAt = '2026-08-11T12:20:00.000Z';
     const cleanupEnvelope = buildMediaGovernanceExecutionEnvelope({
@@ -430,14 +475,20 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     ).rejects.toThrow('identity-mismatch');
     expect(tasks.rows.has(task.id)).toBe(true);
 
-    await expect(store.deleteTask({
-      expectedRevision: task.revision,
-      expectedWorkItemId: 'media-063',
-      taskId: task.id,
-      beforeDelete: async () => { throw new Error('workflow-active'); },
-    })).rejects.toThrow('workflow-active');
+    await expect(
+      store.deleteTask({
+        expectedRevision: task.revision,
+        expectedWorkItemId: 'media-063',
+        taskId: task.id,
+        beforeDelete: async () => {
+          throw new Error('workflow-active');
+        },
+      }),
+    ).rejects.toThrow('workflow-active');
     expect(tasks.rows.has(task.id)).toBe(true);
-    expect([...sources.rows.values()].some((row) => row.taskId === task.id)).toBe(true);
+    expect(
+      [...sources.rows.values()].some((row) => row.taskId === task.id),
+    ).toBe(true);
 
     await expect(
       store.deleteTask({

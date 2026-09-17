@@ -4,11 +4,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { withDatabaseLock } from '@/common/locks/database-lock';
 import { isDeepStrictEqual } from 'node:util';
 import { DataSource, In, type EntityManager } from 'typeorm';
-import {
-  definitionRecord,
-} from '@/common/automation/definition.types';
+import { definitionRecord } from '@/common/automation/definition.types';
 import { validateDataValues } from '@/common/automation/data-schema';
 import { validateDefinitionInput } from '@/common/automation/definition.repository';
 import type {
@@ -22,7 +21,10 @@ import { WorkflowRun } from '../infrastructure/persistence/workflow-run.entities
 import { WorkflowRevision } from '../infrastructure/persistence/workflow.entities';
 import { WorkflowExecutionService } from './workflow-execution.service';
 import { WorkflowProcessRegistry } from './workflow-process.registry';
-import type { WorkflowBusinessMessage, WorkflowMessageIngress } from '../contract/workflow-message.types';
+import type {
+  WorkflowBusinessMessage,
+  WorkflowMessageIngress,
+} from '../contract/workflow-message.types';
 import { businessMessageIngress } from '../domain/workflow-message.policy';
 
 @Injectable()
@@ -41,14 +43,26 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
    * @param manager - 同一业务删除事务的数据库管理器。
    * @throws 没有活动事务或业务对象仍有未结束流程时拒绝删除。
    */
-  async assertIdle(processRef: WorkflowProcessReference, scopeId: string, subjectId: string, manager: EntityManager): Promise<void> {
+  async assertIdle(
+    processRef: WorkflowProcessReference,
+    scopeId: string,
+    subjectId: string,
+    manager: EntityManager,
+  ): Promise<void> {
     this.checkScope(processRef, scopeId);
-    if (!manager.queryRunner?.isTransactionActive) throw new BadRequestException('删除业务对象必须核对同一事务的工作流状态');
+    if (!manager.queryRunner?.isTransactionActive)
+      throw new BadRequestException('删除业务对象必须核对同一事务的工作流状态');
     const active = await manager.getRepository(WorkflowRun).findOne({
-      where: { businessSubjectKey: this.subjectKey(processRef, scopeId, subjectId), status: In(['pending', 'running', 'waiting']) },
+      where: {
+        businessSubjectKey: this.subjectKey(processRef, scopeId, subjectId),
+        status: In(['pending', 'running', 'waiting']),
+      },
       lock: { mode: 'pessimistic_write' },
     });
-    if (active) throw new ConflictException('任务工作流尚未结束，请先取消流程并等待步骤退出');
+    if (active)
+      throw new ConflictException(
+        '任务工作流尚未结束，请先取消流程并等待步骤退出',
+      );
   }
 
   /**
@@ -133,10 +147,26 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
    * @returns 新建或已匹配流程的身份，重复消息始终返回原实例。
    * @throws 外部事务尚未提交时拒绝跨实例投递，避免释放业务锁后出现不可见回执。
    */
-  async receiveMessage(processRef: WorkflowProcessReference, context: WorkflowLaunchContext, message: WorkflowBusinessMessage): Promise<{ runId: string }> {
-    if (context.transaction) throw new BadRequestException('业务消息请在对象事务提交后投递');
-    const ingress = validateDefinitionInput(() => businessMessageIngress(message, [processRef.key, context.scopeId, context.subjectId]));
-    return this.enter(processRef, context, `message:${ingress.ingressKey}`, ingress);
+  async receiveMessage(
+    processRef: WorkflowProcessReference,
+    context: WorkflowLaunchContext,
+    message: WorkflowBusinessMessage,
+  ): Promise<{ runId: string }> {
+    if (context.transaction)
+      throw new BadRequestException('业务消息请在对象事务提交后投递');
+    const ingress = validateDefinitionInput(() =>
+      businessMessageIngress(message, [
+        processRef.key,
+        context.scopeId,
+        context.subjectId,
+      ]),
+    );
+    return this.enter(
+      processRef,
+      context,
+      `message:${ingress.ingressKey}`,
+      ingress,
+    );
   }
 
   /**
@@ -148,11 +178,18 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
    * @returns 本次操作对应的唯一流程身份。
    * @throws 幂等键冲突、绑定失效、业务身份漂移或活动实例归属不符时拒绝进入。
    */
-  private async enter(processRef: WorkflowProcessReference, context: WorkflowLaunchContext, executionKey: string, message?: WorkflowMessageIngress): Promise<{ runId: string }> {
+  private async enter(
+    processRef: WorkflowProcessReference,
+    context: WorkflowLaunchContext,
+    executionKey: string,
+    message?: WorkflowMessageIngress,
+  ): Promise<{ runId: string }> {
     this.checkScope(processRef, context.scopeId);
-    const subjectValid = Boolean(context.subjectId) && context.subjectId.length <= 96;
+    const subjectValid =
+      Boolean(context.subjectId) && context.subjectId.length <= 96;
     const actorValid = Boolean(context.actorId) && context.actorId.length <= 96;
-    const revisionValid = Number.isSafeInteger(context.revision) && context.revision >= 1;
+    const revisionValid =
+      Number.isSafeInteger(context.revision) && context.revision >= 1;
     if (!subjectValid || !actorValid || !revisionValid)
       throw new BadRequestException('发起流程的业务对象、修订或操作者无效');
     if (
@@ -164,8 +201,14 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
     const values = definitionRecord(context.values);
     let formEntries: Array<[string, unknown]> | null = null;
     if (context.formValues !== undefined)
-      formEntries = Object.entries(definitionRecord(context.formValues)).sort(([a], [b]) => a.localeCompare(b));
-    const subjectKey = this.subjectKey(processRef, context.scopeId, context.subjectId);
+      formEntries = Object.entries(definitionRecord(context.formValues)).sort(
+        ([a], [b]) => a.localeCompare(b),
+      );
+    const subjectKey = this.subjectKey(
+      processRef,
+      context.scopeId,
+      context.subjectId,
+    );
     const requestKey = `business:${this.digest([processRef.key, context.scopeId, executionKey])}`;
     const requestHash = this.digest([
       processRef,
@@ -177,105 +220,131 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
       formEntries,
       context.bindingRevision ?? null,
     ]);
-    const connection = this.database.createQueryRunner();
     const lock = `kt:business:${subjectKey.slice(0, 48)}`;
     let lockWaitSeconds = 0;
     if (message) lockWaitSeconds = 3;
-    let acquired = false;
-    try {
-      await connection.connect();
-      acquired =
-        Number(
-          (
-            await connection.query('SELECT GET_LOCK(?, ?) AS acquired', [lock, lockWaitSeconds])
-          )[0]?.acquired,
-        ) === 1;
-      if (!acquired)
-        throw new ConflictException('同一业务对象正在发起流程，请稍后重试');
-      if (message) {
-        const accepted = await connection.manager.getRepository(WorkflowRun).createQueryBuilder('run')
-          .where('run.businessSubjectKey = :subjectKey', { subjectKey })
-          .andWhere("JSON_CONTAINS(run.bpmn_state, :receipt, '$.messages')", { receipt: JSON.stringify({ ingressKey: message.ingressKey }) })
-          .getOne();
-        if (accepted) {
-          const receipt = accepted.bpmnState.messages.find((item) => item.ingressKey === message.ingressKey);
-          if (receipt.ingressHash !== message.ingressHash) throw new ConflictException('业务消息投递键已经用于不同内容');
-          return { runId: accepted.id };
+    const result = await withDatabaseLock(
+      this.database,
+      lock,
+      lockWaitSeconds,
+      async (manager) => {
+        if (message) {
+          const accepted = await manager
+            .getRepository(WorkflowRun)
+            .createQueryBuilder('run')
+            .where('run.businessSubjectKey = :subjectKey', { subjectKey })
+            .andWhere("JSON_CONTAINS(run.bpmn_state, :receipt, '$.messages')", {
+              receipt: JSON.stringify({ ingressKey: message.ingressKey }),
+            })
+            .getOne();
+          if (accepted) {
+            const receipt = accepted.bpmnState.messages.find(
+              (item) => item.ingressKey === message.ingressKey,
+            );
+            if (receipt.ingressHash !== message.ingressHash)
+              throw new ConflictException('业务消息投递键已经用于不同内容');
+            return { runId: accepted.id };
+          }
+          const active = await manager.findOneBy(WorkflowRun, {
+            businessSubjectKey: subjectKey,
+            status: In(['pending', 'running', 'waiting']),
+          });
+          if (active) {
+            if (
+              active.businessContext?.processRef.key !== processRef.key ||
+              active.businessContext.processRef.version !== processRef.version
+            )
+              throw new ConflictException(
+                '同一业务对象正在执行其他业务接口的流程',
+              );
+            await this.execution.receiveBusinessMessage(active.id, message);
+            return { runId: active.id };
+          }
         }
-        const active = await connection.manager.findOneBy(WorkflowRun, { businessSubjectKey: subjectKey, status: In(['pending', 'running', 'waiting']) });
-        if (active) {
-          if (active.businessContext?.processRef.key !== processRef.key || active.businessContext.processRef.version !== processRef.version)
-            throw new ConflictException('同一业务对象正在执行其他业务接口的流程');
-          await this.execution.receiveBusinessMessage(active.id, message);
-          return { runId: active.id };
+        const existing = await manager.findOneBy(WorkflowRun, {
+          executionKey: createHash('sha256').update(requestKey).digest('hex'),
+        });
+        if (existing) {
+          if (existing.businessContext?.requestHash !== requestHash)
+            throw new ConflictException('业务请求键已经用于不同内容');
+          return { runId: existing.id };
         }
-      }
-      const existing = await connection.manager.findOneBy(WorkflowRun, {
-        executionKey: createHash('sha256').update(requestKey).digest('hex'),
-      });
-      if (existing) {
-        if (existing.businessContext?.requestHash !== requestHash)
-          throw new ConflictException('业务请求键已经用于不同内容');
-        return { runId: existing.id };
-      }
-      if (
-        await connection.manager.existsBy(WorkflowRun, {
-          businessSubjectKey: subjectKey,
-          status: In(['pending', 'running', 'waiting']),
-        })
-      )
-        throw new ConflictException('该业务对象已有未结束工作流');
-      const binding = await this.binding(processRef);
-      if (!binding) throw new BadRequestException('业务尚未绑定已发布工作流');
-      if (context.bindingRevision !== undefined && context.bindingRevision !== binding.revision)
-        throw new ConflictException('业务流程绑定已变更，请刷新后重新填写');
-      if (context.formValues !== undefined && context.bindingRevision === undefined)
-        throw new BadRequestException('表单提交必须提供填写时的绑定修订');
-      const process = this.processes.resolve(processRef);
-      const submission = await this.execution.submission(binding.workflowRef, context.formValues);
-      const launchValues = { ...values };
-      for (const [key, value] of Object.entries(submission.values)) {
-        if (Object.hasOwn(launchValues, key) && !isDeepStrictEqual(launchValues[key], value))
-          throw new BadRequestException('表单与业务入口的同名参数不一致');
-        launchValues[key] = value;
-      }
-      if (submission.formValues)
-        validateDefinitionInput(() => validateDataValues(process.launchSchema ?? { fields: [] }, launchValues));
-      const prepared = await process.prepare({ ...context, values: launchValues });
-      const preparedInput = validateDefinitionInput(() =>
-        validateDataValues(process.inputSchema, prepared.input),
-      );
-      if (
-        prepared.identity.scopeId !== context.scopeId ||
-        prepared.identity.subjectId !== context.subjectId ||
-        prepared.identity.revision !== context.revision
-      )
-        throw new ConflictException(
-          '业务接口返回的对象身份或修订与发起请求不一致',
+        if (
+          await manager.existsBy(WorkflowRun, {
+            businessSubjectKey: subjectKey,
+            status: In(['pending', 'running', 'waiting']),
+          })
+        )
+          throw new ConflictException('该业务对象已有未结束工作流');
+        const binding = await this.binding(processRef);
+        if (!binding) throw new BadRequestException('业务尚未绑定已发布工作流');
+        if (
+          context.bindingRevision !== undefined &&
+          context.bindingRevision !== binding.revision
+        )
+          throw new ConflictException('业务流程绑定已变更，请刷新后重新填写');
+        if (
+          context.formValues !== undefined &&
+          context.bindingRevision === undefined
+        )
+          throw new BadRequestException('表单提交必须提供填写时的绑定修订');
+        const process = this.processes.resolve(processRef);
+        const submission = await this.execution.submission(
+          binding.workflowRef,
+          context.formValues,
         );
-      return await this.execution.startBusiness(
-        binding.workflowRef,
-        preparedInput,
-        requestKey,
-        {
-          ...prepared.identity,
-          actorId: context.actorId,
-          processRef,
-          bindingRevision: binding.revision,
-          requestHash,
-        },
-        subjectKey,
-        submission.formValues,
-        context.transaction,
-        message,
-      );
-    } finally {
-      try {
-        if (acquired) await connection.query('SELECT RELEASE_LOCK(?)', [lock]);
-      } finally {
-        await connection.release();
-      }
-    }
+        const launchValues = { ...values };
+        for (const [key, value] of Object.entries(submission.values)) {
+          if (
+            Object.hasOwn(launchValues, key) &&
+            !isDeepStrictEqual(launchValues[key], value)
+          )
+            throw new BadRequestException('表单与业务入口的同名参数不一致');
+          launchValues[key] = value;
+        }
+        if (submission.formValues)
+          validateDefinitionInput(() =>
+            validateDataValues(
+              process.launchSchema ?? { fields: [] },
+              launchValues,
+            ),
+          );
+        const prepared = await process.prepare({
+          ...context,
+          values: launchValues,
+        });
+        const preparedInput = validateDefinitionInput(() =>
+          validateDataValues(process.inputSchema, prepared.input),
+        );
+        if (
+          prepared.identity.scopeId !== context.scopeId ||
+          prepared.identity.subjectId !== context.subjectId ||
+          prepared.identity.revision !== context.revision
+        )
+          throw new ConflictException(
+            '业务接口返回的对象身份或修订与发起请求不一致',
+          );
+        return await this.execution.startBusiness(
+          binding.workflowRef,
+          preparedInput,
+          requestKey,
+          {
+            ...prepared.identity,
+            actorId: context.actorId,
+            processRef,
+            bindingRevision: binding.revision,
+            requestHash,
+          },
+          subjectKey,
+          submission.formValues,
+          context.transaction,
+          message,
+        );
+      },
+    );
+    if (!result.acquired)
+      throw new ConflictException('同一业务对象正在发起流程，请稍后重试');
+    return result.value;
   }
 
   /**
@@ -303,9 +372,17 @@ export class WorkflowBusinessService implements WorkflowBusinessPort {
    * @param subjectId - 范围内的固定业务对象。
    * @returns 用于实例查询与并发互斥的稳定摘要。
    */
-  private subjectKey(reference: WorkflowProcessReference, scopeId: string, subjectId: string): string {
+  private subjectKey(
+    reference: WorkflowProcessReference,
+    scopeId: string,
+    subjectId: string,
+  ): string {
     const process = this.processes.resolve(reference);
-    return this.digest([process.concurrencyGroup ?? reference.key, scopeId, subjectId]);
+    return this.digest([
+      process.concurrencyGroup ?? reference.key,
+      scopeId,
+      subjectId,
+    ]);
   }
 
   /**

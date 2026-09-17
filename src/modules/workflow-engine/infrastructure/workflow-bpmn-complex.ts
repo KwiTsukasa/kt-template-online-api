@@ -1,4 +1,6 @@
 import { Activity } from 'bpmn-elements';
+import { WORKFLOW_BPMN_LIMITS } from '../domain/workflow-bpmn-limits';
+import { WorkflowBpmnFlowIndex } from './workflow-bpmn-flow-index';
 
 interface ComplexState {
   waitingForStart: boolean;
@@ -18,13 +20,25 @@ export function WorkflowComplexGateway(definition: any, context: any) {
 }
 
 class WorkflowComplexGatewayBehaviour {
-  private state: ComplexState = { waitingForStart: true, tokens: {}, consumed: [] };
+  private state: ComplexState = {
+    waitingForStart: true,
+    tokens: {},
+    consumed: [],
+  };
   private message: any;
   private running = false;
   private scheduled = false;
   private peers: any[] = [];
+  private readonly flows: WorkflowBpmnFlowIndex;
 
-  constructor(readonly activity: any, private readonly context: any) {}
+  constructor(
+    readonly activity: any,
+    private readonly context: any,
+  ) {
+    this.flows = new WorkflowBpmnFlowIndex(
+      context.getSequenceFlows(activity.parent.id),
+    );
+  }
 
   /**
    * 首次到达时保存入口令牌，恢复时仅重新连接监听器，不重复接收或发送令牌。
@@ -37,19 +51,35 @@ class WorkflowComplexGatewayBehaviour {
     const broker = this.activity.broker;
     if (!Object.keys(this.state.tokens).length) {
       for (const flow of this.activity.inbound) this.state.tokens[flow.id] = 0;
-      for (const inbound of message.content.inbound ?? []) this.receive(inbound.id);
+      for (const inbound of message.content.inbound ?? [])
+        this.receive(inbound.id);
     }
-    this.peers = this.context.getActivities(this.activity.parent.id).filter((peer: any) => peer.id !== this.activity.id);
-    for (const peer of this.peers) peer.broker.subscribeTmp('event', 'activity.#', () => this.schedule(), { noAck: true, consumerTag: `_kt-complex-${this.activity.id}` });
-    broker.subscribeTmp('api', `activity.*.${message.content.executionId}`, (_: string, incoming: any) => {
-      if (['stop', 'discard', 'cancel'].includes(incoming.properties.type)) this.stop();
-    }, { noAck: true, consumerTag: '_kt-complex-api', priority: 300 });
-    broker.getQueue('inbound-q').consume((_: string, inbound: any) => {
-      this.receive(inbound.content.id);
-      (this.state.arrivals ??= []).push(structuredClone(inbound.content));
-      inbound.ack();
-      this.schedule();
-    }, { consumerTag: '_kt-complex-inbound', exclusive: true, prefetch: 1 });
+    this.peers = this.context
+      .getActivities(this.activity.parent.id)
+      .filter((peer: any) => peer.id !== this.activity.id);
+    for (const peer of this.peers)
+      peer.broker.subscribeTmp('event', 'activity.#', () => this.schedule(), {
+        noAck: true,
+        consumerTag: `_kt-complex-${this.activity.id}`,
+      });
+    broker.subscribeTmp(
+      'api',
+      `activity.*.${message.content.executionId}`,
+      (_: string, incoming: any) => {
+        if (['stop', 'discard', 'cancel'].includes(incoming.properties.type))
+          this.stop();
+      },
+      { noAck: true, consumerTag: '_kt-complex-api', priority: 300 },
+    );
+    broker.getQueue('inbound-q').consume(
+      (_: string, inbound: any) => {
+        this.receive(inbound.content.id);
+        (this.state.arrivals ??= []).push(structuredClone(inbound.content));
+        inbound.ack();
+        this.schedule();
+      },
+      { consumerTag: '_kt-complex-inbound', exclusive: true, prefetch: 1 },
+    );
     this.schedule();
   }
 
@@ -66,7 +96,8 @@ class WorkflowComplexGatewayBehaviour {
    * @param snapshot - 引擎持久化的活动执行状态。
    */
   recover(snapshot: any): void {
-    if (snapshot?.complexGateway) this.state = structuredClone(snapshot.complexGateway);
+    if (snapshot?.complexGateway)
+      this.state = structuredClone(snapshot.complexGateway);
   }
 
   /**
@@ -74,7 +105,8 @@ class WorkflowComplexGatewayBehaviour {
    * @param flowId - 当前到达的顺序流标识。
    */
   private receive(flowId: string): void {
-    if (Object.hasOwn(this.state.tokens, flowId)) this.state.tokens[flowId] += 1;
+    if (Object.hasOwn(this.state.tokens, flowId))
+      this.state.tokens[flowId] += 1;
   }
 
   /** 等当前同步令牌传播结束后再判断缺失分支，避免将正在转移的令牌判为不存在。 */
@@ -84,10 +116,14 @@ class WorkflowComplexGatewayBehaviour {
     queueMicrotask(() => {
       this.scheduled = false;
       if (!this.running) return;
-      try { this.advance(); }
-      catch (error) {
+      try {
+        this.advance();
+      } catch (error) {
         this.stop();
-        this.activity.broker.publish('execution', 'execute.error', { ...this.message.content, error });
+        this.activity.broker.publish('execution', 'execute.error', {
+          ...this.message.content,
+          error,
+        });
       }
     });
   }
@@ -97,7 +133,14 @@ class WorkflowComplexGatewayBehaviour {
    * @returns 本阶段条件共用的执行消息。
    */
   private phaseMessage() {
-    return { ...this.message, content: { ...this.message.content, activationCount: { ...this.state.tokens }, waitingForStart: this.state.waitingForStart } };
+    return {
+      ...this.message,
+      content: {
+        ...this.message.content,
+        activationCount: { ...this.state.tokens },
+        waitingForStart: this.state.waitingForStart,
+      },
+    };
   }
 
   /**
@@ -109,25 +152,40 @@ class WorkflowComplexGatewayBehaviour {
       const inbound = this.state.arrivals;
       this.state.arrivals = [];
       // 入口已转交给此活动；同步流传播结束后通知父流程移除对应的在途令牌。
-      this.activity.broker.publish('event', 'activity.enter', { ...this.message.content, inbound });
+      this.activity.broker.publish('event', 'activity.enter', {
+        ...this.message.content,
+        inbound,
+      });
     }
-    for (let cycle = 0; cycle < 10000 && this.running; cycle += 1) {
+    for (
+      let cycle = 0;
+      cycle < WORKFLOW_BPMN_LIMITS.synchronousTransitions && this.running;
+      cycle += 1
+    ) {
       const phase = this.phaseMessage();
       if (this.state.waitingForStart) {
         if (!Object.values(this.state.tokens).some((count) => count > 0)) {
           this.complete();
           return;
         }
-        const active = this.activity.environment.resolveExpression(this.activity.behaviour.activationCondition.body, phase);
-        if (typeof active !== 'boolean') throw new Error('复杂网关激活条件必须返回布尔值');
+        const active = this.activity.environment.resolveExpression(
+          this.activity.behaviour.activationCondition.body,
+          phase,
+        );
+        if (typeof active !== 'boolean')
+          throw new Error('复杂网关激活条件必须返回布尔值');
         if (!active) return;
-        this.state.consumed = Object.keys(this.state.tokens).filter((id) => this.state.tokens[id] > 0);
+        this.state.consumed = Object.keys(this.state.tokens).filter(
+          (id) => this.state.tokens[id] > 0,
+        );
         for (const id of this.state.consumed) this.state.tokens[id] -= 1;
         this.state.waitingForStart = false;
         this.send(phase, true);
       } else {
         if (!this.canReset()) return;
-        for (const id of Object.keys(this.state.tokens)) if (!this.state.consumed.includes(id) && this.state.tokens[id] > 0) this.state.tokens[id] -= 1;
+        for (const id of Object.keys(this.state.tokens))
+          if (!this.state.consumed.includes(id) && this.state.tokens[id] > 0)
+            this.state.tokens[id] -= 1;
         this.state.consumed = [];
         this.state.waitingForStart = true;
         this.send(phase, false);
@@ -142,35 +200,27 @@ class WorkflowComplexGatewayBehaviour {
    */
   private canReset(): boolean {
     const received = new Set(this.state.consumed);
-    for (const [id, count] of Object.entries(this.state.tokens)) if (count > 0) received.add(id);
-    const missing = this.activity.inbound.filter((flow: any) => !received.has(flow.id));
+    for (const [id, count] of Object.entries(this.state.tokens))
+      if (count > 0) received.add(id);
+    const missing = this.activity.inbound.filter(
+      (flow: any) => !received.has(flow.id),
+    );
     if (!missing.length) return true;
     for (const peer of this.peers) {
-      if (!peer.status && !peer.initialized && !peer.broker.getQueue('inbound-q')?.messageCount) continue;
-      const reachable = this.reachable(peer.id);
-      if (missing.some((flow: any) => reachable.has(flow.id)) && ![...received].some((id) => reachable.has(id))) return false;
+      if (
+        !peer.status &&
+        !peer.initialized &&
+        !peer.broker.getQueue('inbound-q')?.messageCount
+      )
+        continue;
+      const reachable = this.flows.incomingBefore(peer.id, this.activity.id);
+      if (
+        missing.some((flow: any) => reachable.has(flow.id)) &&
+        ![...received].some((id) => reachable.has(id))
+      )
+        return false;
     }
     return true;
-  }
-
-  /**
-   * 沿同一实例作用域计算可达入口，遇到当前网关即停止，防止下一轮回环阻塞本轮重置。
-   * @param sourceId - 当前持有令牌的活动标识。
-   * @returns 不跨子流程边界的可达入口集合。
-   */
-  private reachable(sourceId: string): Set<string> {
-    const pending = [sourceId], visited = new Set<string>(), result = new Set<string>();
-    while (pending.length) {
-      const id = pending.pop();
-      if (visited.has(id)) continue;
-      visited.add(id);
-      for (const flow of this.context.getOutboundSequenceFlows(id)) {
-        if (flow.parent?.id !== this.activity.parent.id) continue;
-        if (flow.targetId === this.activity.id) result.add(flow.id);
-        else pending.push(flow.targetId);
-      }
-    }
-    return result;
   }
 
   /**
@@ -179,13 +229,20 @@ class WorkflowComplexGatewayBehaviour {
    * @param requireOutbound - 只有激活阶段强制至少一个出口成立。
    */
   private send(phase: any, requireOutbound: boolean): void {
-    this.activity.broker.publish('execution', 'execute.outbound.take', { ...phase.content, requireOutbound, outbound: undefined });
+    this.activity.broker.publish('execution', 'execute.outbound.take', {
+      ...phase.content,
+      requireOutbound,
+      outbound: undefined,
+    });
   }
 
   /** 将已重置且无剩余令牌的网关标记为结束，并阻止活动离开时再次发送出口。 */
   private complete(): void {
     this.stop();
-    this.activity.broker.publish('execution', 'execute.completed', { ...this.message.content, ignoreOutbound: true });
+    this.activity.broker.publish('execution', 'execute.completed', {
+      ...this.message.content,
+      ignoreOutbound: true,
+    });
   }
 
   /** 停止本实例的入口及同作用域监听，保留持久状态供恢复，不影响其他网关。 */
@@ -193,6 +250,7 @@ class WorkflowComplexGatewayBehaviour {
     this.running = false;
     this.activity.broker.cancel('_kt-complex-inbound');
     this.activity.broker.cancel('_kt-complex-api');
-    for (const peer of this.peers) peer.broker.cancel(`_kt-complex-${this.activity.id}`);
+    for (const peer of this.peers)
+      peer.broker.cancel(`_kt-complex-${this.activity.id}`);
   }
 }

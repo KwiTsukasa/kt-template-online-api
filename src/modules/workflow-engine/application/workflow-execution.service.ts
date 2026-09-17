@@ -1,7 +1,14 @@
-import { TASK_EXECUTION, type TaskExecutionPort } from '@/modules/task-execution/contract/task-execution.port';
+import {
+  TASK_EXECUTION,
+  type TaskExecutionPort,
+} from '@/modules/task-execution/contract/task-execution.port';
 import { WorkflowHumanTaskService } from './workflow-human-task.service';
 import { WorkflowMessageService } from './workflow-message.service';
-import type { WorkflowMessageDelivery, WorkflowMessageIngress } from '../contract/workflow-message.types';
+import { withWorkflowRunLock } from '../infrastructure/workflow-run-lock';
+import type {
+  WorkflowMessageDelivery,
+  WorkflowMessageIngress,
+} from '../contract/workflow-message.types';
 import { parseWorkflowBpmn } from '../domain/workflow-bpmn.policy';
 import { prepareBpmnMessageStart } from '../domain/workflow-message.policy';
 import {
@@ -42,10 +49,11 @@ import {
   WorkflowRun,
 } from '../infrastructure/persistence/workflow-run.entities';
 import { WorkflowDefinitionService } from './workflow-definition.service';
-import type {
-  WorkflowBusinessContext,
-} from '../contract/workflow-process.interface';
-import { isBpmnWorkflow, workflowContract } from '../domain/workflow-document.policy';
+import type { WorkflowBusinessContext } from '../contract/workflow-process.interface';
+import {
+  isBpmnWorkflow,
+  workflowContract,
+} from '../domain/workflow-document.policy';
 import { WorkflowBpmnExecutionService } from './workflow-bpmn-execution.service';
 import { WorkflowBpmnActivity } from '../infrastructure/persistence/workflow-bpmn.entity';
 
@@ -57,7 +65,9 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     @Inject(FORM_DEFINITIONS) private readonly forms: FormDefinitionPort,
     @Optional() private readonly bpmn?: WorkflowBpmnExecutionService,
     @Optional() private readonly human?: WorkflowHumanTaskService,
-    @Optional() @Inject(TASK_EXECUTION) private readonly tasks?: TaskExecutionPort,
+    @Optional()
+    @Inject(TASK_EXECUTION)
+    private readonly tasks?: TaskExecutionPort,
     @Optional() private readonly messages?: WorkflowMessageService,
   ) {}
 
@@ -105,7 +115,12 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @returns 同一实例的最新持久状态。
    * @throws 人工任务服务未装配时拒绝提交。
    */
-  async completeHumanTask(runId: string, executionId: string, actorId: string, values: unknown) {
+  async completeHumanTask(
+    runId: string,
+    executionId: string,
+    actorId: string,
+    values: unknown,
+  ) {
     if (!this.human) throw new Error('人工任务模块尚未装配');
     await this.human.submit(runId, executionId, actorId, values);
     return this.read(runId);
@@ -129,8 +144,7 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     const definition = await this.resolve(reference);
     const contract = await workflowContract(definition);
     let form = null;
-    if (contract.formRef)
-      form = await this.forms.resolve(contract.formRef);
+    if (contract.formRef) form = await this.forms.resolve(contract.formRef);
     return { definition, form };
   }
 
@@ -150,17 +164,23 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @returns 校验后的表单快照及仅由已声明映射生成的业务参数。
    * @throws 缺少绑定表单的填写值、字段校验失败或无表单却提交载荷时拒绝发起。
    */
-  async submission(reference: PublishedReference, submitted?: Record<string, unknown>) {
+  async submission(
+    reference: PublishedReference,
+    submitted?: Record<string, unknown>,
+  ) {
     const contract = await this.contract(reference);
     if (!contract.formRef) {
-      if (submitted !== undefined) throw new BadRequestException('当前工作流未绑定业务表单');
+      if (submitted !== undefined)
+        throw new BadRequestException('当前工作流未绑定业务表单');
       return { formValues: null, values: {} as Record<string, unknown> };
     }
-    if (submitted === undefined) throw new BadRequestException('请填写当前工作流绑定的业务表单');
+    if (submitted === undefined)
+      throw new BadRequestException('请填写当前工作流绑定的业务表单');
     const formValues = await this.forms.validate(contract.formRef, submitted);
     const values: Record<string, unknown> = {};
     for (const [target, source] of Object.entries(contract.formMapping)) {
-      if (Object.hasOwn(formValues, source)) values[target] = formValues[source];
+      if (Object.hasOwn(formValues, source))
+        values[target] = formValues[source];
     }
     return { formValues, values };
   }
@@ -272,7 +292,8 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       formEntries,
     ];
     if (business) requestParts.push(business);
-    if (initialMessage) requestParts.push(initialMessage.ingressKey, initialMessage.ingressHash);
+    if (initialMessage)
+      requestParts.push(initialMessage.ingressKey, initialMessage.ingressHash);
     const requestHash = createHash('sha256')
       .update(JSON.stringify(requestParts))
       .digest('hex');
@@ -308,13 +329,19 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     });
     if (initialMessage) {
       const model = await parseWorkflowBpmn(definition);
-      try { run.bpmnState = await prepareBpmnMessageStart(model, inputValues, initialMessage); }
-      catch (error) { throw new BadRequestException((error as Error).message); }
+      try {
+        run.bpmnState = await prepareBpmnMessageStart(
+          model,
+          inputValues,
+          initialMessage,
+        );
+      } catch (error) {
+        throw new BadRequestException((error as Error).message);
+      }
     }
     try {
       const persist = async (manager: EntityManager) => {
         await manager.insert(WorkflowRun, run);
-
       };
       if (transaction) await persist(transaction);
       else await this.database.transaction(persist);
@@ -342,15 +369,23 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
     const nodes = await this.database
       .getRepository(WorkflowNodeRun)
       .findBy({ runId });
-    const activities = await this.database.getRepository(WorkflowBpmnActivity).findBy({ runId });
+    const activities = await this.database
+      .getRepository(WorkflowBpmnActivity)
+      .findBy({ runId });
     const bpmnNodes = new Map<string, WorkflowNodeRun>();
     for (const activity of activities) {
       const current = bpmnNodes.get(activity.elementId);
-      if (!current || activity.state.visit > current.visit || activity.state.status === 'waiting') bpmnNodes.set(activity.elementId, activity.state);
+      if (
+        !current ||
+        activity.state.visit > current.visit ||
+        activity.state.status === 'waiting'
+      )
+        bpmnNodes.set(activity.elementId, activity.state);
     }
     nodes.push(...bpmnNodes.values());
     let activeActivities = run.bpmnState?.activeActivities ?? [];
-    if (!['pending', 'running', 'waiting'].includes(run.status)) activeActivities = [];
+    if (!['pending', 'running', 'waiting'].includes(run.status))
+      activeActivities = [];
     return {
       runId: run.id,
       workflowId: run.workflowId,
@@ -361,7 +396,14 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       formValues: run.formValues,
       output: run.outputValues || {},
       error: run.errorMessage,
-      activities: activities.map((activity) => ({ executionId: activity.executionId, nodeId: activity.elementId, status: activity.state.status, visit: activity.state.visit, output: activity.state.outputValues, error: activity.state.errorMessage })),
+      activities: activities.map((activity) => ({
+        executionId: activity.executionId,
+        nodeId: activity.elementId,
+        status: activity.state.status,
+        visit: activity.state.visit,
+        output: activity.state.outputValues,
+        error: activity.state.errorMessage,
+      })),
       transitions: run.bpmnState?.transitions ?? [],
       activeActivities,
       nodes: nodes.map((node) => {
@@ -409,19 +451,38 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
       .findOneBy({ runId, nodeId });
     const records: (WorkflowNodeRun | WorkflowNodeVisit)[] = [];
     if (!current) {
-      const query = this.database.getRepository(WorkflowBpmnActivity).createQueryBuilder('activity').where('activity.runId = :runId AND activity.elementId = :nodeId', { runId, nodeId });
-      if (before !== undefined) query.andWhere("JSON_EXTRACT(activity.step_state, '$.visit') < :before", { before });
-      const activities = await query.orderBy("CAST(JSON_EXTRACT(activity.step_state, '$.visit') AS UNSIGNED)", 'DESC').take(51).getMany();
-      if (!activities.length && before === undefined) throw new NotFoundException('流程节点不存在');
+      const query = this.database
+        .getRepository(WorkflowBpmnActivity)
+        .createQueryBuilder('activity')
+        .where('activity.runId = :runId AND activity.elementId = :nodeId', {
+          runId,
+          nodeId,
+        });
+      if (before !== undefined)
+        query.andWhere(
+          "JSON_EXTRACT(activity.step_state, '$.visit') < :before",
+          { before },
+        );
+      const activities = await query
+        .orderBy(
+          "CAST(JSON_EXTRACT(activity.step_state, '$.visit') AS UNSIGNED)",
+          'DESC',
+        )
+        .take(51)
+        .getMany();
+      if (!activities.length && before === undefined)
+        throw new NotFoundException('流程节点不存在');
       records.push(...activities.map((activity) => activity.state));
     } else {
       if (before === undefined || current.visit < before) records.push(current);
-      const archived = await this.database.getRepository(WorkflowNodeVisit).find({
-      where: { runId, nodeId, visit: LessThan(before || current.visit) },
-      order: { visit: 'DESC' },
-      take: 51,
-    });
-    records.push(...archived);
+      const archived = await this.database
+        .getRepository(WorkflowNodeVisit)
+        .find({
+          where: { runId, nodeId, visit: LessThan(before || current.visit) },
+          order: { visit: 'DESC' },
+          take: 51,
+        });
+      records.push(...archived);
     }
     let nextBeforeVisit: number | null = null;
     if (records.length > 50) nextBeforeVisit = records[49].visit;
@@ -488,18 +549,31 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    */
   async pendingActionIds(): Promise<string[]> {
     if (!this.tasks) return [];
-    const activities = await this.database.getRepository(WorkflowBpmnActivity)
+    const activities = await this.database
+      .getRepository(WorkflowBpmnActivity)
       .createQueryBuilder('activity')
       .innerJoin(WorkflowRun, 'run', 'run.id = activity.runId')
-      .where('run.status IN (:...statuses)', { statuses: ['pending', 'running', 'waiting'] })
+      .where('run.status IN (:...statuses)', {
+        statuses: ['pending', 'running', 'waiting'],
+      })
       .andWhere('activity.delivered = false')
-      .andWhere("JSON_UNQUOTE(JSON_EXTRACT(activity.job, '$.step.kind')) = 'action'")
-      .andWhere("JSON_UNQUOTE(JSON_EXTRACT(activity.step_state, '$.status')) = 'waiting'")
-      .orderBy('activity.runId', 'ASC').take(100).getMany();
-    return [...new Set(activities.flatMap((activity) => {
-      if (activity.state.taskRunId) return [activity.state.taskRunId];
-      return [];
-    }))];
+      .andWhere(
+        "JSON_UNQUOTE(JSON_EXTRACT(activity.job, '$.step.kind')) = 'action'",
+      )
+      .andWhere(
+        "JSON_UNQUOTE(JSON_EXTRACT(activity.step_state, '$.status')) = 'waiting'",
+      )
+      .orderBy('activity.runId', 'ASC')
+      .take(100)
+      .getMany();
+    return [
+      ...new Set(
+        activities.flatMap((activity) => {
+          if (activity.state.taskRunId) return [activity.state.taskRunId];
+          return [];
+        }),
+      ),
+    ];
   }
 
   /**
@@ -509,16 +583,41 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    */
   async processAction(actionRunId: string): Promise<void> {
     if (!this.tasks) throw new Error('内置动作能力未装配');
-    const activity = await this.database.getRepository(WorkflowBpmnActivity).createQueryBuilder('activity')
-      .where("JSON_UNQUOTE(JSON_EXTRACT(activity.step_state, '$.taskRunId')) = :actionRunId", { actionRunId }).getOne();
+    const activity = await this.database
+      .getRepository(WorkflowBpmnActivity)
+      .createQueryBuilder('activity')
+      .where(
+        "JSON_UNQUOTE(JSON_EXTRACT(activity.step_state, '$.taskRunId')) = :actionRunId",
+        { actionRunId },
+      )
+      .getOne();
     if (!activity || activity.job.step.kind !== 'action') return;
     await this.tasks.process(actionRunId, async () => {
-      const parent = await this.database.getRepository(WorkflowRun).findOneBy({ id: activity.runId });
-      const current = await this.database.getRepository(WorkflowBpmnActivity).findOneBy({ runId: activity.runId, executionId: activity.executionId });
-      if (!parent || !current || parent.cancelRequested || current.cancelRequested || current.delivered) return false;
-      return ['pending', 'running', 'waiting'].includes(parent.status) && !parent.errorMessage;
+      const parent = await this.database
+        .getRepository(WorkflowRun)
+        .findOneBy({ id: activity.runId });
+      const current = await this.database
+        .getRepository(WorkflowBpmnActivity)
+        .findOneBy({
+          runId: activity.runId,
+          executionId: activity.executionId,
+        });
+      if (
+        !parent ||
+        !current ||
+        parent.cancelRequested ||
+        current.cancelRequested ||
+        current.delivered
+      )
+        return false;
+      return (
+        ['pending', 'running', 'waiting'].includes(parent.status) &&
+        !parent.errorMessage
+      );
     });
-    await this.database.getRepository(WorkflowRun).update({ id: activity.runId }, { nextWakeAt: new Date() });
+    await this.database
+      .getRepository(WorkflowRun)
+      .update({ id: activity.runId }, { nextWakeAt: new Date() });
   }
 
   /**
@@ -527,43 +626,33 @@ export class WorkflowExecutionService implements WorkflowExecutionPort {
    * @throws 数据库状态无法确认时交由队列保留失败并等待恢复。
    */
   async process(runId: string): Promise<void> {
-    const connection = this.database.createQueryRunner();
-    const lock = `kt:workflow:${runId}`;
-    let acquired = false;
-    try {
-      await connection.connect();
-      acquired =
-        Number(
-          (
-            await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [lock])
-          )[0]?.acquired,
-        ) === 1;
-      if (!acquired) return;
-      const manager = connection.manager;
-      const run = await manager.findOneBy(WorkflowRun, { id: runId });
-      if (!run || !['pending', 'running', 'waiting'].includes(run.status))
-        return;
-      const definition = await this.resolve({
-        id: run.workflowId,
-        version: run.workflowVersion,
-      });
-      if (isBpmnWorkflow(definition)) {
-        if (!this.bpmn) throw new Error('BPMN 工作流执行模块尚未装配');
-        await this.bpmn.process(run, definition, manager);
-        return;
-      }
-      await manager.update(WorkflowRun, { id: run.id }, {
-        status: 'failed',
-        errorMessage: '旧自定义图执行器已退役，请重新建立 BPMN 2.0 流程',
-        finishedAt: new Date(),
-      });
-    } finally {
-      try {
-        if (acquired) await connection.query('SELECT RELEASE_LOCK(?)', [lock]);
-      } finally {
-        await connection.release();
-      }
-    }
+    await withWorkflowRunLock(
+      this.database,
+      runId,
+      'background',
+      async (manager) => {
+        const run = await manager.findOneBy(WorkflowRun, { id: runId });
+        if (!run || !['pending', 'running', 'waiting'].includes(run.status))
+          return;
+        const definition = await this.resolve({
+          id: run.workflowId,
+          version: run.workflowVersion,
+        });
+        if (isBpmnWorkflow(definition)) {
+          if (!this.bpmn) throw new Error('BPMN 工作流执行模块尚未装配');
+          await this.bpmn.process(run, definition, manager);
+          return;
+        }
+        await manager.update(
+          WorkflowRun,
+          { id: run.id },
+          {
+            status: 'failed',
+            errorMessage: '旧自定义图执行器已退役，请重新建立 BPMN 2.0 流程',
+            finishedAt: new Date(),
+          },
+        );
+      },
+    );
   }
-
 }

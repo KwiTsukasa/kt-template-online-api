@@ -1,4 +1,8 @@
 import { readFileSync } from 'node:fs';
+import {
+  closeMysqlLockConnection,
+  withMysqlConnectionLock,
+} from '../common/locks/database-lock';
 import { join, resolve } from 'node:path';
 import {
   createConnection,
@@ -226,56 +230,54 @@ export async function runBotAdapterProtocolMigration(): Promise<{
     supportBigNumbers: true,
     user: readRequiredEnvironment('DB_USERNAME'),
   });
-  let lockAcquired = false;
   try {
-    const [lockRows] = await connection.query<RowDataPacket[]>(
-      'SELECT GET_LOCK(?, 60) AS acquired',
-      [MIGRATION_LOCK],
-    );
-    lockAcquired = Number(lockRows[0]?.acquired) === 1;
-    if (!lockAcquired) throw new Error('无法取得 Bot Adapter 数据库迁移锁');
-
-    const legacyCount = await readLegacyContractCount(connection);
-    let migrated = false;
-    if (legacyCount > 0) {
-      await executeMysqlScript(
-        connection,
-        readMigrationFile(PROTOCOL_MIGRATION_FILE),
-      );
-      await executeMysqlScript(
-        connection,
-        readMigrationFile(MENU_MIGRATION_FILE),
-      );
-      migrated = true;
-    }
-    await executeMysqlScript(
+    const result = await withMysqlConnectionLock(
       connection,
-      readMigrationFile(NATMAP_COMMAND_MIGRATION_FILE),
+      MIGRATION_LOCK,
+      60,
+      async () => {
+        const legacyCount = await readLegacyContractCount(connection);
+        let migrated = false;
+        if (legacyCount > 0) {
+          await executeMysqlScript(
+            connection,
+            readMigrationFile(PROTOCOL_MIGRATION_FILE),
+          );
+          await executeMysqlScript(
+            connection,
+            readMigrationFile(MENU_MIGRATION_FILE),
+          );
+          migrated = true;
+        }
+        await executeMysqlScript(
+          connection,
+          readMigrationFile(NATMAP_COMMAND_MIGRATION_FILE),
+        );
+        await executeMysqlScript(
+          connection,
+          readMigrationFile(PERMISSION_USER_SETS_MIGRATION_FILE),
+        );
+        const verification = assertBotAdapterMigrationVerification({
+          ...(await readVerificationResults(
+            connection,
+            readMigrationFile(VERIFICATION_FILE),
+          )),
+          ...(await readVerificationResults(
+            connection,
+            readMigrationFile(NATMAP_COMMAND_VERIFICATION_FILE),
+          )),
+          ...(await readVerificationResults(
+            connection,
+            readMigrationFile(PERMISSION_USER_SETS_VERIFICATION_FILE),
+          )),
+        });
+        return { migrated, verification };
+      },
     );
-    await executeMysqlScript(
-      connection,
-      readMigrationFile(PERMISSION_USER_SETS_MIGRATION_FILE),
-    );
-    const verification = assertBotAdapterMigrationVerification({
-      ...(await readVerificationResults(
-        connection,
-        readMigrationFile(VERIFICATION_FILE),
-      )),
-      ...(await readVerificationResults(
-        connection,
-        readMigrationFile(NATMAP_COMMAND_VERIFICATION_FILE),
-      )),
-      ...(await readVerificationResults(
-        connection,
-        readMigrationFile(PERMISSION_USER_SETS_VERIFICATION_FILE),
-      )),
-    });
-    return { migrated, verification };
+    if (!result.acquired) throw new Error('无法取得 Bot Adapter 数据库迁移锁');
+    return result.value;
   } finally {
-    if (lockAcquired) {
-      await connection.query('SELECT RELEASE_LOCK(?)', [MIGRATION_LOCK]);
-    }
-    await connection.end();
+    await closeMysqlLockConnection(connection);
   }
 }
 

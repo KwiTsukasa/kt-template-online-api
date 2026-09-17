@@ -27,7 +27,7 @@ export class AtomicTaskRun {
   @Column({ name: 'node_id', length: 64, nullable: true }) nodeId:
     | string
     | null;
-  @Column({ length: 16 }) status: AtomicRunStatus;
+  @Column({ type: 'varchar', length: 16 }) status: AtomicRunStatus;
   @Column({ name: 'input_values', type: 'json' }) inputValues: Record<
     string,
     unknown
@@ -54,7 +54,7 @@ export class AtomicTaskAttempt {
   @PrimaryColumn({ type: 'bigint' }) id: string;
   @Column({ name: 'run_id', type: 'bigint' }) runId: string;
   @Column({ name: 'attempt_no', type: 'int' }) attemptNo: number;
-  @Column({ length: 16 }) status: AtomicRunStatus;
+  @Column({ type: 'varchar', length: 16 }) status: AtomicRunStatus;
   @Column({ name: 'runtime_identity', length: 191 }) runtimeIdentity: string;
   @Column({ name: 'handler_key', length: 191 }) handlerKey: string;
   @Column({ name: 'handler_version', type: 'int' }) handlerVersion: number;
@@ -69,7 +69,10 @@ export class AtomicTaskAttempt {
 export class AtomicTaskRunReview {
   @PrimaryColumn({ name: 'run_id', type: 'bigint' }) runId: string;
   @Column({ name: 'reviewed_by', type: 'bigint' }) reviewedBy: string;
-  @Column({ length: 32 }) resolution: 'effect-confirmed' | 'no-effect' | 'compensated';
+  @Column({ length: 32 }) resolution:
+    | 'effect-confirmed'
+    | 'no-effect'
+    | 'compensated';
   @Column({ length: 2048 }) reason: string;
   @KtCreateDateColumn({ name: 'reviewed_at' }) reviewedAt: KtDateTime;
 }

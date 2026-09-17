@@ -59,7 +59,7 @@ export class ScheduleDispatch {
   occurrencePayload: Record<string, unknown>;
   @KtDateTimeColumn({ name: 'occurred_at' }) occurredAt: KtDateTime;
   @Column({ type: 'json' }) definition: ScheduleDefinition;
-  @Column({ length: 16 }) status: ScheduleDispatchStatus;
+  @Column({ type: 'varchar', length: 16 }) status: ScheduleDispatchStatus;
   @Column({ name: 'target_run_id', type: 'bigint', nullable: true })
   targetRunId: string | null;
   @Column({ name: 'error_message', type: 'text', nullable: true })

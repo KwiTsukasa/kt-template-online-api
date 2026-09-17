@@ -44,7 +44,7 @@ export class WorkflowRun {
     select: false,
   })
   activeBusinessSubjectKey: string | null;
-  @Column({ length: 16 }) status: WorkflowRunStatus;
+  @Column({ type: 'varchar', length: 16 }) status: WorkflowRunStatus;
   @Column({ name: 'input_values', type: 'json' }) inputValues: Record<
     string,
     unknown

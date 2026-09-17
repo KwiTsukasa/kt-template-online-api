@@ -15,7 +15,10 @@ export class TriggerRegistration {
   @Column({ name: 'trigger_id', type: 'bigint' }) triggerId: string;
   @Column({ name: 'trigger_version', type: 'int' }) triggerVersion: number;
   @Column({ type: 'json' }) definition: TriggerDefinition;
-  @Column({ length: 16 }) status: 'prepared' | 'active' | 'closed';
+  @Column({ type: 'varchar', length: 16 }) status:
+    | 'prepared'
+    | 'active'
+    | 'closed';
   @Column({ name: 'event_key', type: 'varchar', length: 128, nullable: true })
   eventKey: string | null;
   @Column({ name: 'event_version', type: 'int', nullable: true }) eventVersion:
@@ -45,7 +48,9 @@ export class TriggerOccurrence {
   eventReceiptId: string | null;
   @KtDateTimeColumn({ name: 'occurred_at' }) occurredAt: KtDateTime;
   @Column({ type: 'json' }) payload: Record<string, DataScalar>;
-  @Column({ length: 16 }) status: typeof RUN_STATUS.pending | 'acknowledged';
+  @Column({ type: 'varchar', length: 16 }) status:
+    | typeof RUN_STATUS.pending
+    | 'acknowledged';
   @KtDateTimeColumn({ name: 'acknowledged_at', nullable: true })
   acknowledgedAt: KtDateTime | null;
   @KtCreateDateColumn({ name: 'create_time' }) createTime: KtDateTime;

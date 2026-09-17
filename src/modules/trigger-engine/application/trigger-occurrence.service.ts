@@ -7,7 +7,7 @@ import { automationDigest } from '@/common/automation/content-digest';
 import { RUN_STATUS } from '@/common/automation/constants/run-status';
 import { Injectable } from '@nestjs/common';
 import { isDeepStrictEqual } from 'node:util';
-import { DataSource, LessThanOrEqual, type EntityManager } from 'typeorm';
+import { DataSource, In, LessThanOrEqual, type EntityManager } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
 import {
   validateDataValues,
@@ -145,6 +145,19 @@ export class TriggerOccurrenceService
       .findOneBy({ id: registrationId });
     requireFound(row, '触发注册不存在');
     return this.registrationView(row);
+  }
+
+  /**
+   * 一次读取消费方指定的注册快照，列表投影无需逐行查询或跨模块读取实体。
+   * @param registrationIds - 消费方持有的注册身份；重复身份只查询一次。
+   * @returns 实际存在的公开注册快照，缺失身份由消费方按关联约束处理。
+   */
+  async readRegistrations(registrationIds: readonly string[]): Promise<TriggerRegistrationView[]> {
+    if (!registrationIds.length) return [];
+    const rows = await this.database.getRepository(TriggerRegistration).findBy({
+      id: In([...new Set(registrationIds)]),
+    });
+    return rows.map((row) => this.registrationView(row));
   }
 
   /**

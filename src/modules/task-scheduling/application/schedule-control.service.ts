@@ -1,23 +1,33 @@
 import {
   requireRequest,
   requireConsistent,
+  requireFound,
 } from '@/common/automation/validation';
 import { RUN_STATUS_GROUP } from '@/common/automation/constants/run-status';
 import { Inject, Injectable } from '@nestjs/common';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import { createSnowflakeId } from '@/common/snowflake/snowflake-id';
 import type { PublishedReference } from '@/common/automation/definition.types';
 import {
   TRIGGER_OCCURRENCES,
   type TriggerOccurrencePort,
+  type TriggerRegistrationView,
 } from '@/modules/trigger-engine/contract/trigger-runtime.port';
-import type { SchedulePlanPort } from '../contract/schedule.types';
+import type {
+  ScheduleListState,
+  SchedulePlanPort,
+} from '../contract/schedule.types';
 import {
   ScheduleRegistration,
   ScheduleState,
 } from '../infrastructure/persistence/schedule-plan.entities';
 import { ScheduleLock } from '../infrastructure/schedule-lock';
 import { ScheduleDefinitionService } from './schedule-definition.service';
+
+type ScheduleStateSnapshot = {
+  view: ScheduleListState;
+  registration?: TriggerRegistrationView;
+};
 
 @Injectable()
 export class ScheduleControlService implements SchedulePlanPort {
@@ -36,39 +46,84 @@ export class ScheduleControlService implements SchedulePlanPort {
    */
   async state(scheduleId: string) {
     await this.definitions.definitions.detail(scheduleId);
-    const state = await this.database
-      .getRepository(ScheduleState)
-      .findOneBy({ scheduleId });
-    const result = {
-      scheduleId,
-      revision: state?.revision || 0,
-      enabled: state?.enabled || false,
-      activeVersion: null as number | null,
-      activationStatus: null as string | null,
-      manualTrigger: false,
-      nextRunAt: null as string | null,
-      error: state?.errorMessage || null,
-    };
-    if (!state?.activeBindingId) return result;
-    const binding = await this.database
-      .getRepository(ScheduleRegistration)
-      .findOneBy({ id: state.activeBindingId });
-    if (!binding) return result;
-    const registration = await this.triggers.readRegistration(
-      binding.registrationId,
-    );
-    result.activeVersion = binding.scheduleVersion;
-    result.activationStatus = registration.status;
-    if (
-      state.enabled &&
-      registration.status === 'active' &&
-      registration.nextAt
-    )
-      result.nextRunAt = registration.nextAt.toISOString();
-    result.manualTrigger =
-      (await this.definitions.triggers.resolve(registration.triggerRef)).trigger
-        .type === 'manual';
+    const snapshots = await this.readStateSnapshots([scheduleId]);
+    const snapshot = snapshots.get(scheduleId)!;
+    const result = { ...snapshot.view, manualTrigger: false };
+    if (snapshot.registration)
+      result.manualTrigger = (
+        await this.definitions.triggers.resolve(snapshot.registration.triggerRef)
+      ).trigger.type === 'manual';
     return result;
+  }
+
+  /**
+   * 批量返回已由分页确认存在的计划状态，草稿修订和运行控制修订保持独立。
+   * @param scheduleIds - 当前页真实计划身份。
+   * @returns 每个计划对应的列表状态，不额外加载仅控制页面需要的手动触发定义。
+   */
+  async states(
+    scheduleIds: readonly string[],
+  ): Promise<Map<string, ScheduleListState>> {
+    const snapshots = await this.readStateSnapshots(scheduleIds);
+    return new Map([...snapshots].map(([id, snapshot]) => [id, snapshot.view]));
+  }
+
+  /**
+   * 按身份索引批量连接控制状态、固定绑定和公开触发注册，单项与列表共用同一状态投影。
+   * @param scheduleIds - 已由调用边界确认的计划身份集合。
+   * @returns 含列表投影和可选注册上下文的身份索引；空页不访问数据库。
+   * @throws 已保存的绑定指向缺失触发注册时拒绝把不完整状态显示为正常。
+   */
+  private async readStateSnapshots(scheduleIds: readonly string[]) {
+    const snapshots = new Map<string, ScheduleStateSnapshot>();
+    const ids = [...new Set(scheduleIds)];
+    if (!ids.length) return snapshots;
+    const states = await this.database.getRepository(ScheduleState).findBy({
+      scheduleId: In(ids),
+    });
+    const stateById = new Map(states.map((state) => [state.scheduleId, state]));
+    const bindingIds = states.flatMap((state) => {
+      if (state.activeBindingId) return [state.activeBindingId];
+      return [];
+    });
+    let bindings: ScheduleRegistration[] = [];
+    if (bindingIds.length)
+      bindings = await this.database.getRepository(ScheduleRegistration).findBy({
+        id: In(bindingIds),
+      });
+    const bindingById = new Map(bindings.map((binding) => [binding.id, binding]));
+    const registrations = await this.triggers.readRegistrations(
+      bindings.map((binding) => binding.registrationId),
+    );
+    const registrationById = new Map(
+      registrations.map((registration) => [registration.id, registration]),
+    );
+    for (const scheduleId of ids) {
+      const state = stateById.get(scheduleId);
+      const binding = bindingById.get(state?.activeBindingId ?? '');
+      const registration = registrationById.get(binding?.registrationId ?? '');
+      if (binding) requireFound(registration, '触发注册不存在');
+      let nextRunAt: null | string = null;
+      if (
+        state?.enabled &&
+        registration?.status === 'active' &&
+        registration.nextAt
+      )
+        nextRunAt = registration.nextAt.toISOString();
+      snapshots.set(scheduleId, {
+        registration,
+        view: {
+          scheduleId,
+          revision: state?.revision ?? 0,
+          enabled: state?.enabled ?? false,
+          activeVersion: binding?.scheduleVersion ?? null,
+          activationStatus: registration?.status ?? null,
+          nextRunAt,
+          error: state?.errorMessage || null,
+        },
+      });
+    }
+    return snapshots;
   }
 
   /**

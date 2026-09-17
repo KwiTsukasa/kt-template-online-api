@@ -93,19 +93,54 @@ export class ScheduleDispatchService {
       nextCursor = rows[rows.length - 1].id;
     }
     return {
-      list: rows.map((row) => ({
-        id: row.id,
-        scheduleId: row.scheduleId,
-        scheduleVersion: row.scheduleVersion,
-        occurrenceId: row.occurrenceId,
-        occurredAt: row.occurredAt,
-        status: row.status,
-        target: row.definition.target,
-        targetRunId: row.targetRunId,
-        error: row.errorMessage,
-        finishedAt: row.finishedAt,
-      })),
+      list: rows.map((row) => this.historyView(row)),
       nextCursor,
+    };
+  }
+
+  /**
+   * 在数据库内按计划选出最新派发，列表摘要不加载每行的一百条历史。
+   * @param scheduleIds - 当前页计划身份；重复身份只查询一次。
+   * @returns 以计划身份索引的最近派发投影，没有历史的计划不占用索引项。
+   */
+  async latest(scheduleIds: readonly string[]) {
+    const result = new Map<
+      string,
+      ReturnType<ScheduleDispatchService['historyView']>
+    >();
+    if (!scheduleIds.length) return result;
+    const query = this.database
+      .getRepository(ScheduleDispatch)
+      .createQueryBuilder('dispatch');
+    const latest = query.subQuery()
+      .select('MAX(recent.id)')
+      .from(ScheduleDispatch, 'recent')
+      .where('recent.scheduleId IN (:...scheduleIds)')
+      .groupBy('recent.scheduleId');
+    const rows = await query.where(`dispatch.id IN ${latest.getQuery()}`, {
+      scheduleIds: [...new Set(scheduleIds)],
+    }).getMany();
+    for (const row of rows) result.set(row.scheduleId, this.historyView(row));
+    return result;
+  }
+
+  /**
+   * 将持久派发记录投影为统一的历史与列表摘要，保留实际执行状态和目标身份。
+   * @param row - 由本模块查询的完整派发记录。
+   * @returns 不包含内部发生载荷与固定计划正文的公开运行摘要。
+   */
+  private historyView(row: ScheduleDispatch) {
+    return {
+      id: row.id,
+      scheduleId: row.scheduleId,
+      scheduleVersion: row.scheduleVersion,
+      occurrenceId: row.occurrenceId,
+      occurredAt: row.occurredAt,
+      status: row.status,
+      target: row.definition.target,
+      targetRunId: row.targetRunId,
+      error: row.errorMessage,
+      finishedAt: row.finishedAt,
     };
   }
 

@@ -38,6 +38,28 @@ export class ScheduleController extends DefinitionController<ScheduleDefinition>
   }
 
   /**
+   * 一次返回计划草稿分页和对应运行摘要，使表格重绘不触发单元格状态请求。
+   * @param query - 名称筛选和分页条件，沿用定义仓库的范围校验。
+   * @returns 附带控制状态及最近派发的原始分页，启停权限和历史接口保持独立。
+   */
+  @Get('page')
+  @AutomationAction('List')
+  async page(@Query() query: Record<string, unknown>) {
+    const page = await this.definitions.page(query);
+    const ids = page.list.map((row) => row.id);
+    const [states, latest] = await Promise.all([
+      this.control.states(ids), this.dispatch.latest(ids),
+    ]);
+    return vbenSuccess({
+      ...page,
+      list: page.list.map((row) => ({
+        ...row,
+        runtime: { state: states.get(row.id)!, latest: latest.get(row.id) ?? null },
+      })),
+    });
+  }
+
+  /**
    * 展示计划启停修订、当前固定版本和触发注册实际阶段。
    * @param id - 当前计划资源身份。
    * @returns 与草稿修订独立的计划控制状态。

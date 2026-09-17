@@ -50,3 +50,5 @@ export interface SchedulePlanPort {
   ) => Promise<unknown>;
   disable: (scheduleId: string, expectedRevision: number) => Promise<unknown>;
 }
+
+export type ScheduleListState = Omit<Awaited<ReturnType<SchedulePlanPort['state']>>, 'manualTrigger'>;

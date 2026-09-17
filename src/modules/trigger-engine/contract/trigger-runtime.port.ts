@@ -45,6 +45,7 @@ export interface TriggerOccurrencePort {
   readRegistration: (
     registrationId: string,
   ) => Promise<TriggerRegistrationView>;
+  readRegistrations: (registrationIds: readonly string[]) => Promise<TriggerRegistrationView[]>;
   pending: (registrationId: string) => Promise<TriggerOccurrenceView[]>;
   acknowledge: (occurrenceId: string, registrationId: string) => Promise<void>;
   fire: (

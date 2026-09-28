@@ -669,6 +669,44 @@ describe('MediaGovernanceService', () => {
     });
   });
 
+  it('discards a stopped download but preserves it on revision and workflow conflicts', async () => {
+    const task = await service.create({ mediaType: 'movie', titleHint: '停止下载' });
+    task.stage = 'download';
+    task.runState = 'blocked';
+    expect(service.detail(task.id).semanticProjection.discardAllowed).toBe(true);
+    await expect(service.discardTask(task.id, { expectedRevision: 0 })).rejects.toMatchObject({ status: 409 });
+    const assertDiscard = jest.spyOn(service as any, 'workflowDiscard').mockRejectedValueOnce(new HttpException('工作流仍在运行', 409));
+    await expect(service.discardTask(task.id, { expectedRevision: 1 })).rejects.toMatchObject({ status: 409 });
+    expect(service.detail(task.id).id).toBe(task.id);
+    assertDiscard.mockRestore();
+    await expect(service.discardTask(task.id, { expectedRevision: 1 })).resolves.toMatchObject({ deletedTaskId: task.id });
+  });
+
+  it.each(['queued', 'running', 'succeeded', 'draft'] as const)('protects download state %s', async (state) => {
+    const task = await service.create({ mediaType: 'movie', titleHint: '禁止删除' });
+    task.stage = 'download';
+    task.runState = state;
+    await expect(service.discardTask(task.id, { expectedRevision: 1 })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it.each(['governance', 'acceptance', 'closed'] as const)('protects stage %s', async (stage) => {
+    const task = await service.create({ mediaType: 'movie', titleHint: '结果保护' });
+    task.stage = stage;
+    task.runState = 'blocked';
+    await expect(service.discardTask(task.id, { expectedRevision: 1 })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it.each(['activeRunId', 'payloadSeal', 'sealedPlan', 'sealedPlanSha256', 'closedAt', 'closedMode', 'evidenceSha256', 'localAcceptedAt', 'descriptorTombstonedAt'])('protects stopped downloads with %s', async (field) => {
+    const task = await service.create({ mediaType: 'movie', titleHint: '证据保护' });
+    await service.addMagnetSource(task.id, { contentKind: 'embedded_subtitle_media', expectedRevision: 1, magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567', sourceRole: 'primary_media' });
+    task.stage = 'download';
+    task.runState = 'blocked';
+    if (field === 'evidenceSha256' || field === 'localAcceptedAt') (task.units[0] as any)[field] = 'protected';
+    else if (field === 'descriptorTombstonedAt') task.sources[0].descriptorTombstonedAt = '2026-09-28T00:00:00.000Z';
+    else (task as any)[field] = 'protected';
+    await expect(service.discardTask(task.id, { expectedRevision: 2 })).rejects.toMatchObject({ status: 409 });
+  });
+
   it('refuses to discard a task after execution has started', async () => {
     const task = await service.create({
       mediaType: 'movie',

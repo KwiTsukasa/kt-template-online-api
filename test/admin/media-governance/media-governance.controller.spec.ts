@@ -304,6 +304,18 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
+  it('deletes stopped downloads over real HTTP using a persistence substitute', async () => {
+    const task = await service.create({ mediaType: 'movie', titleHint: '停止下载 HTTP' });
+    task.stage = 'download';
+    task.runState = 'blocked';
+    await request(apiUrl).get(`/media-governance/tasks/${task.id}`).expect(200).expect(({ body }) => {
+      expect(body.data.semanticProjection.discardAllowed).toBe(true);
+    });
+    await request(apiUrl).delete(`/media-governance/tasks/${task.id}`).query({ expectedRevision: 2 }).expect(409);
+    await request(apiUrl).delete(`/media-governance/tasks/${task.id}`).query({ expectedRevision: 1 }).expect(200);
+    await request(apiUrl).get(`/media-governance/tasks/${task.id}`).expect(404);
+  });
+
   it('discards an unexecuted catalog-bound draft over real HTTP', async () => {
     const created = await createLegacyTask({
       mediaType: 'tv',

@@ -888,11 +888,11 @@ export class MediaGovernanceService implements OnModuleInit {
   }
 
   /**
-   * 在版本及流程状态核对通过后删除可丢弃草稿，事务失败时保留内存与持久账本。
+   * 在版本及流程状态核对通过后删除无结果的资料草稿或已停止下载任务，事务失败时保留内存与持久账本。
    * @param taskId - 当前媒体任务身份。
    * @param input - 页面读取的期望任务修订。
    * @returns 被删除任务和已解除的作品条目引用。
-   * @throws 草稿不可丢弃、流程仍有活动令牌或持久化不可用时拒绝删除。
+   * @throws 任务不满足删除准入、流程仍有活动令牌或持久化不可用时拒绝删除。
    */
   async discardTask(
     taskId: string,
@@ -3290,14 +3290,15 @@ export class MediaGovernanceService implements OnModuleInit {
   /**
    * 按实际执行、载荷及验收证据保护任务删除，资料库提供的作品身份不算执行结果。
    * @param task - 待核对的任务状态、密封载荷、来源和单元验收记录。
-   * @returns 首个不能删除的业务原因；尚未执行且无结果的资料草稿返回空值。
+   * @returns 首个不能删除的业务原因；无结果的资料草稿或已停止下载任务返回空值。
    */
   private getDiscardDisabledReason(task: MediaGovernanceTask) {
-    if (
-      task.stage !== 'intake' ||
-      !['blocked', 'draft'].includes(task.runState)
-    ) {
-      return '仅接收资料阶段且尚未产生载荷的任务可以删除。';
+    const discardableIntake =
+      task.stage === 'intake' && ['blocked', 'draft'].includes(task.runState);
+    const stoppedDownload =
+      task.stage === 'download' && task.runState === 'blocked';
+    if (!discardableIntake && !stoppedDownload) {
+      return '仅无治理结果的资料草稿或已停止下载任务可以删除。';
     }
     if (
       task.activeRunId !== null ||

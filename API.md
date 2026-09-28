@@ -33,6 +33,8 @@
 
 媒体刮削校验和下载/治理是两个独立模块。目录身份遵循 `Series -> Work -> Season/Episode -> Task`；调用方不能通过根 Task 创建或猜测作品身份。正式下载/治理依赖可用的执行器，缺少配置时返回失败，不模拟成功。
 
+`DELETE /media-governance/tasks/:taskId?expectedRevision=<revision>` 要求 `Media:Governance:Create` 权限。接收阶段的草稿/受阻任务，以及下载阶段已停止的受阻任务，在没有活动执行、密封载荷/计划、来源清理或治理验收结果时可删除。服务端在同一事务内核对任务版本与工作流已结束；冲突返回 409。成功仅删除任务及关联数据库记录，保留 NAS 上已下载的文件；客户端以 `semanticProjection.discardAllowed` 决定入口，并在确认后提交当前任务版本。
+
 `DELETE /media-governance/series/rss-subscriptions/:subscriptionId?expectedRevision=<revision>` 要求 `Media:Governance:Delete` 权限，删除订阅及其抓取记录，保留已有 Task、来源、媒体文件与剧集绑定。轮询中或版本过期返回 409，订阅不存在返回 404；成功后停止后续轮询并发布目录更新事件。
 
 `GET /codex-remote/coordination` 提供跨任务协调快照，`GET /codex-remote/coordination/events` 提供 SSE。两者要求后台登录及 super 权限；上游不可用应展示不可用状态。文件占用、冲突与过期声明的语义见 [详细合同](../../docs/projects/api/contracts.md)。

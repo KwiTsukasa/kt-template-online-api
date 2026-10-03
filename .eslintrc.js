@@ -24,13 +24,22 @@ module.exports = {
         'test/modules/automation/*.test.mjs',
         'test/modules/automation/*.test.cjs',
         'test/modules/automation/ablation/*.cjs',
+        'test/modules/automation/shared-design-fixture.cjs',
+        'test/modules/automation/shared-design-http-fixture.cjs',
+        'test/modules/automation/shared-design-mysql-fixture.cjs',
       ],
       parserOptions: {
         project: null,
       },
     },
     {
-      files: ['test/modules/automation/*.test.cjs', 'test/modules/automation/ablation/*.cjs'],
+      files: [
+        'test/modules/automation/*.test.cjs',
+        'test/modules/automation/ablation/*.cjs',
+        'test/modules/automation/shared-design-fixture.cjs',
+        'test/modules/automation/shared-design-http-fixture.cjs',
+        'test/modules/automation/shared-design-mysql-fixture.cjs',
+      ],
       rules: {
         '@typescript-eslint/no-require-imports': 'off',
       },
